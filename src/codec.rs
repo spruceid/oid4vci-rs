@@ -1,5 +1,7 @@
+use chrono::prelude::*;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use serde::{Serialize, Serializer};
+use ssi::vc::VCDateTime;
 
 pub fn to_percent_encode<S>(x: &str, s: S) -> Result<S::Ok, S::Error>
 where
@@ -17,4 +19,19 @@ pub fn collect_into_url<T: Serialize>(params: &T) -> String {
         .map(|(k, v)| format!("{}={}", k, v.as_str().unwrap_or(&v.to_string())))
         .collect::<Vec<_>>()
         .join("&")
+}
+
+pub struct ToDateTime;
+
+impl ToDateTime {
+    pub fn from_vcdatetime(
+        vcdatetime: VCDateTime,
+    ) -> Result<DateTime<FixedOffset>, ssi::error::Error> {
+        let datetime: String = vcdatetime.into();
+        DateTime::parse_from_rfc3339(&datetime).map_err(|_| ssi::error::Error::TimeError)
+    }
+
+    pub fn from_str(value: &str) -> Result<DateTime<FixedOffset>, ssi::error::Error> {
+        DateTime::parse_from_rfc3339(value).map_err(|_| ssi::error::Error::TimeError)
+    }
 }

@@ -4,7 +4,7 @@ use serde_json::json;
 use ssi::vc::VCDateTime;
 
 use crate::{
-    encode::*, jwk::*, nonce::generate_nonce, CredentialFormat, CredentialRequest,
+    codec::*, jose::*, nonce::generate_nonce, CredentialFormat, CredentialRequest,
     CredentialResponse, PreAuthzCode, Proof, ProofOfPossession, TokenResponse, TokenType,
 };
 
@@ -13,7 +13,7 @@ pub fn generate_preauthz_code<I>(
     interface: &I,
 ) -> Result<String, ssi::error::Error>
 where
-    I: JWSInterface,
+    I: JOSEInterface,
 {
     let mut claims = serde_json::to_value(params).unwrap();
     let claims = claims.as_object_mut().unwrap();
@@ -21,23 +21,41 @@ where
     claims.insert("nonce".into(), crate::nonce::generate_nonce().into());
 
     let payload = serde_json::to_string(claims)?;
-    interface.encode_sign(&payload)
+    interface.jwt_encode_sign(&payload)
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[non_exhaustive]
 pub struct AccessTokenParams {
     pub credential_type: String,
-    pub format: CredentialFormat,
     pub allow_refresh: bool,
     pub token_type: TokenType,
     pub expires_in: u64,
 }
 
+impl AccessTokenParams {
+    pub fn new(credential_type: &str, token_type: &TokenType, expires_in: u64) -> Self {
+        AccessTokenParams {
+            credential_type: credential_type.to_owned(),
+            allow_refresh: false,
+            token_type: token_type.to_owned(),
+            expires_in,
+        }
+    }
+
+    pub fn with_refresh(credential_type: &str, token_type: &TokenType, expires_in: u64) -> Self {
+        AccessTokenParams {
+            credential_type: credential_type.to_owned(),
+            allow_refresh: true,
+            token_type: token_type.to_owned(),
+            expires_in,
+        }
+    }
+}
+
 pub fn generate_access_token<I>(
     AccessTokenParams {
         credential_type,
-        format,
         allow_refresh,
         token_type,
         expires_in,
@@ -46,19 +64,22 @@ pub fn generate_access_token<I>(
     interface: &I,
 ) -> Result<TokenResponse, ssi::error::Error>
 where
-    I: JWSInterface,
+    I: JOSEInterface,
 {
-    let access_token = interface.encode_sign(&serde_json::to_string(&json!({
+    let now = VCDateTime::from(Utc::now());
+    let exp = VCDateTime::from(Utc::now() + Duration::days(1));
+
+    let access_token = interface.jwt_encode_sign(&serde_json::to_string(&json!({
         "credential_type": credential_type,
-        "format": format,
-        "expires_in": expires_in,
+        "iat": now,
+        "exp": exp,
     }))?)?;
 
     let refresh_token = if allow_refresh {
-        Some(interface.encode_sign(&serde_json::to_string(&json!({
+        Some(interface.jwt_encode_sign(&serde_json::to_string(&json!({
             "credential_type": credential_type,
-            "format": format,
-            "expires_in": expires_in,
+            "iat": now,
+            "exp": exp,
         }))?)?)
     } else {
         None
@@ -92,6 +113,31 @@ pub struct IssuanceRequestParams {
     #[serde(rename = "user_pin_required")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_pin_required: Option<bool>,
+}
+
+impl IssuanceRequestParams {
+    pub fn new(issuer: &str, credential_type: &str, pre_authorized_code: &str) -> Self {
+        Self {
+            issuer: issuer.to_owned(),
+            credential_type: credential_type.to_owned(),
+            pre_authorized_code: pre_authorized_code.to_owned(),
+            user_pin_required: None,
+        }
+    }
+
+    pub fn with_user_pin(
+        issuer: &str,
+        credential_type: &str,
+        pre_authorized_code: &str,
+        user_pin_required: bool,
+    ) -> Self {
+        Self {
+            issuer: issuer.to_owned(),
+            credential_type: credential_type.to_owned(),
+            pre_authorized_code: pre_authorized_code.to_owned(),
+            user_pin_required: Some(user_pin_required),
+        }
+    }
 }
 
 pub fn generate_initiate_issuance_request(
@@ -147,7 +193,7 @@ pub fn generate_proof_of_possession<I>(
     interface: &I,
 ) -> Result<Proof, ssi::error::Error>
 where
-    I: JWSInterface,
+    I: JOSEInterface,
 {
     let claims = {
         let iat = VCDateTime::from(Utc::now());
@@ -163,17 +209,17 @@ where
     };
 
     let payload = serde_json::to_string(&claims)?;
-    let jwt = interface.encode_sign(&payload)?;
+    let jwt = interface.jwt_encode_sign(&payload)?;
 
     Ok(Proof::JWT { jwt })
 }
 
 pub fn generate_credential_response(
-    format: CredentialFormat,
+    format: &CredentialFormat,
     credential: &str,
 ) -> CredentialResponse {
     CredentialResponse {
-        format,
+        format: format.to_owned(),
         credential: credential.into(),
     }
 }

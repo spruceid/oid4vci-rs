@@ -67,6 +67,66 @@ pub struct OIDCError {
     pub uri: Option<String>,
 }
 
+impl From<ssi::error::Error> for OIDCError {
+    fn from(_: ssi::error::Error) -> Self {
+        OIDCError {
+            ty: OIDCErrorType::Token(TokenErrorType::InvalidRequest),
+            description: None,
+            uri: None,
+        }
+    }
+}
+
+impl From<serde_json::Error> for OIDCError {
+    fn from(_: serde_json::Error) -> Self {
+        OIDCError {
+            ty: OIDCErrorType::Token(TokenErrorType::InvalidRequest),
+            description: None,
+            uri: None,
+        }
+    }
+}
+
+impl From<TokenErrorType> for OIDCError {
+    fn from(err: TokenErrorType) -> Self {
+        OIDCError {
+            ty: OIDCErrorType::Token(err),
+            description: None,
+            uri: None,
+        }
+    }
+}
+
+impl TokenErrorType {
+    pub fn to_oidcerror(&self, description: Option<String>, uri: Option<String>) -> OIDCError {
+        OIDCError {
+            ty: OIDCErrorType::Token(self.clone()),
+            description,
+            uri,
+        }
+    }
+}
+
+impl From<CredentialRequestErrorType> for OIDCError {
+    fn from(err: CredentialRequestErrorType) -> Self {
+        OIDCError {
+            ty: OIDCErrorType::CredentialRequest(err),
+            description: None,
+            uri: None,
+        }
+    }
+}
+
+impl CredentialRequestErrorType {
+    pub fn to_oidcerror(&self, description: Option<String>, uri: Option<String>) -> OIDCError {
+        OIDCError {
+            ty: OIDCErrorType::CredentialRequest(self.clone()),
+            description,
+            uri,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,19 +1,30 @@
 #![feature(fn_traits)]
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::HashMap;
 
-mod encode;
+mod codec;
 mod error;
 mod generate;
-mod jwk;
+mod jose;
 mod nonce;
 mod verify;
 
+use ssi::one_or_many::OneOrMany;
+
+pub use error::*;
 pub use generate::*;
-pub use jwk::*;
+pub use jose::*;
 pub use verify::*;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+pub trait Metadata {
+    fn get_audience(&self) -> &str;
+    fn get_credential_types(&self) -> std::slice::Iter<'_, String>;
+    fn get_allowed_formats(&self, credential_type: &str) -> std::slice::Iter<'_, CredentialFormat>;
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Hash, Eq)]
 #[non_exhaustive]
 pub enum CredentialFormat {
     #[serde(rename = "jwt_vc")]
@@ -26,11 +37,19 @@ pub enum CredentialFormat {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[non_exhaustive]
 pub struct PreAuthzCode {
-    pub credential_type: String,
-    pub format: CredentialFormat,
+    pub credential_type: OneOrMany<String>,
+
+    #[serde(rename = "exp")]
+    pub expires_at: ssi::vc::VCDateTime,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_pin_required: Option<bool>,
+
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Hash, Eq)]
 #[non_exhaustive]
 pub enum TokenType {
     #[serde(rename = "bearer")]
