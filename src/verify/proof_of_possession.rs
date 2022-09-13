@@ -80,14 +80,12 @@ where
             // Verification time is not before `iat`
             let iat = ToDateTime::from_vcdatetime(issued_at)?;
             if now < iat {
-                println!("now({:?}) vs iat({:?})", now, iat);
                 return Err(CredentialRequestErrorType::InvalidOrMissingProof.into());
             }
 
             // Verification time is not after `exp`
             let exp = ToDateTime::from_vcdatetime(expires_at)?;
             if now > exp {
-                println!("now({:?}) vs exp({:?})", now, exp);
                 return Err(CredentialRequestErrorType::InvalidOrMissingProof.into());
             }
 
