@@ -23,6 +23,7 @@ where
     let expires_at = preauthz_code.expires_at.clone();
     let exp = ToDateTime::from_vcdatetime(expires_at)?;
     if now > exp {
+        println!("now({:?}) vs exp({:?})", now, exp);
         return Err(TokenErrorType::InvalidRequest.into());
     }
 

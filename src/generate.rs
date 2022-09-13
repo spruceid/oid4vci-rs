@@ -85,9 +85,6 @@ where
         None
     };
 
-    let access_token = serde_json::to_string(&access_token).unwrap();
-    let refresh_token = refresh_token.map(|v| serde_json::to_string(&v).unwrap());
-
     Ok(TokenResponse {
         access_token,
         refresh_token,
