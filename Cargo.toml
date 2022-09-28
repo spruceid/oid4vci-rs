@@ -8,8 +8,9 @@ description = "Core library for Verifiable Credentials and Decentralized Identif
 repository = "https://github.com/spruceid/oidc4vci-rs/"
 
 [dependencies]
-ssi = "0.4"
-did-method-key = "0.1.2"
+ssi = { path = "../ssi" }
+did-method-key = { path = "../ssi/did-key" }
+did-method-jwk = { path = "../ssi/did-jwk" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["preserve_order"] }
 percent-encoding = { version = "2.1" }

@@ -4,14 +4,16 @@ use ssi::{
 };
 
 pub trait JOSEInterface {
-    fn jwt_encode_sign(&self, bytes: &str) -> Result<String, ssi::error::Error>;
-    fn jwt_decode_verify(&self, jwt: &str) -> Result<(Header, Vec<u8>), ssi::error::Error>;
+    type Error;
+
+    fn jwt_encode_sign(&self, bytes: &str) -> Result<String, Self::Error>;
+    fn jwt_decode_verify(&self, jwt: &str) -> Result<(Header, Vec<u8>), Self::Error>;
 
     // TODO: for pre-authz_code user_pin
-    // fn jwe_encrypt(&self, bytes: &str) -> Result<String, ssi::error::Error>;
-    // fn jwe_decrypt(&self, jwe: &str) -> Result<(Header, Vec<u8>), ssi::error::Error>;
+    // fn jwe_encrypt(&self, bytes: &str) -> Result<String, Self::Error>;
+    // fn jwe_decrypt(&self, jwe: &str) -> Result<(Header, Vec<u8>), Self::Error>;
 
-    fn get_public_key(&self) -> Result<JWK, ssi::error::Error>;
+    fn get_public_key(&self) -> Result<JWK, Self::Error>;
 }
 
 pub struct SSI {
@@ -26,30 +28,37 @@ impl SSI {
 }
 
 impl JOSEInterface for SSI {
-    fn jwt_encode_sign(&self, bytes: &str) -> Result<String, ssi::error::Error> {
-        ssi::jws::encode_sign(self.alg, bytes, &self.jwk)
+    type Error = crate::OIDCError;
+
+    fn jwt_encode_sign(&self, bytes: &str) -> Result<String, Self::Error> {
+        ssi::jws::encode_sign(self.alg, bytes, &self.jwk).map_err(|e| e.into())
     }
 
-    fn jwt_decode_verify(&self, jwt: &str) -> Result<(Header, Vec<u8>), ssi::error::Error> {
-        ssi::jws::decode_verify(jwt, &self.jwk)
+    fn jwt_decode_verify(&self, jwt: &str) -> Result<(Header, Vec<u8>), Self::Error> {
+        ssi::jws::decode_verify(jwt, &self.jwk).map_err(|e| e.into())
     }
 
-    fn get_public_key(&self) -> Result<JWK, ssi::error::Error> {
+    fn get_public_key(&self) -> Result<JWK, Self::Error> {
         unimplemented!()
     }
 }
 
-type Signer = dyn Fn(&[u8]) -> Result<Vec<u8>, ssi::error::Error>;
-type Verifier = dyn Fn(Algorithm, &[u8], &[u8]) -> Result<(), ssi::error::Error>;
+type Signer<E> = dyn Fn(&[u8]) -> Result<Vec<u8>, E>;
+type Verifier<E> = dyn Fn(Algorithm, &[u8], &[u8]) -> Result<(), E>;
 
-pub struct JOSEExternal {
+pub struct JOSEExternal<E> {
     header: Header,
-    signer: Box<Signer>,
-    verifier: Box<Verifier>,
+    signer: Box<Signer<E>>,
+    verifier: Box<Verifier<E>>,
 }
 
-impl JOSEInterface for JOSEExternal {
-    fn jwt_encode_sign(&self, bytes: &str) -> Result<String, ssi::error::Error> {
+impl<E> JOSEInterface for JOSEExternal<E>
+where
+    E: From<ssi::jws::Error> + From<ssi::vc::Error>,
+{
+    type Error = E;
+
+    fn jwt_encode_sign(&self, bytes: &str) -> Result<String, Self::Error> {
         let header_b64 = ssi::vc::base64_encode_json(&self.header)?;
         let payload_b64 = base64::encode_config(bytes, base64::URL_SAFE_NO_PAD);
         let signing_input = header_b64 + "." + &payload_b64;
@@ -59,7 +68,7 @@ impl JOSEInterface for JOSEExternal {
         Ok(jwt)
     }
 
-    fn jwt_decode_verify(&self, jwt: &str) -> Result<(Header, Vec<u8>), ssi::error::Error> {
+    fn jwt_decode_verify(&self, jwt: &str) -> Result<(Header, Vec<u8>), Self::Error> {
         let (header_b64, payload_enc, signature_b64) = ssi::jws::split_jws(jwt)?;
         let ssi::jws::DecodedJWS {
             header,
@@ -72,7 +81,7 @@ impl JOSEInterface for JOSEExternal {
         Ok((header, payload))
     }
 
-    fn get_public_key(&self) -> Result<JWK, ssi::error::Error> {
+    fn get_public_key(&self) -> Result<JWK, Self::Error> {
         unimplemented!()
     }
 }

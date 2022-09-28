@@ -14,7 +14,7 @@ pub fn verify_access_token<I>(
     interface: &I,
 ) -> Result<HashMap<String, Value>, OIDCError>
 where
-    I: JOSEInterface,
+    I: JOSEInterface<Error = OIDCError>,
 {
     let (_, access_token) = interface.jwt_decode_verify(token)?;
     let access_token: HashMap<String, Value> = serde_json::from_slice(&access_token)?;

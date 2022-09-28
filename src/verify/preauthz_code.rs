@@ -13,7 +13,7 @@ pub fn verify_preauthz_code<I, M>(
     interface: &I,
 ) -> Result<PreAuthzCode, OIDCError>
 where
-    I: JOSEInterface,
+    I: JOSEInterface<Error = OIDCError>,
     M: Metadata,
 {
     let (_, bytes) = interface.jwt_decode_verify(preauthz_code)?;

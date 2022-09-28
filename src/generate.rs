@@ -8,12 +8,10 @@ use crate::{
     CredentialResponse, PreAuthzCode, Proof, ProofOfPossession, TokenResponse, TokenType,
 };
 
-pub fn generate_preauthz_code<I>(
-    params: PreAuthzCode,
-    interface: &I,
-) -> Result<String, ssi::error::Error>
+pub fn generate_preauthz_code<I, E>(params: PreAuthzCode, interface: &I) -> Result<String, E>
 where
-    I: JOSEInterface,
+    E: From<serde_json::Error>,
+    I: JOSEInterface<Error = E>,
 {
     let mut claims = serde_json::to_value(params).unwrap();
     let claims = claims.as_object_mut().unwrap();
@@ -53,7 +51,7 @@ impl AccessTokenParams {
     }
 }
 
-pub fn generate_access_token<I>(
+pub fn generate_access_token<I, E>(
     AccessTokenParams {
         credential_type,
         allow_refresh,
@@ -62,9 +60,10 @@ pub fn generate_access_token<I>(
         ..
     }: AccessTokenParams,
     interface: &I,
-) -> Result<TokenResponse, ssi::error::Error>
+) -> Result<TokenResponse, E>
 where
-    I: JOSEInterface,
+    E: From<serde_json::Error>,
+    I: JOSEInterface<Error = E>,
 {
     let now = VCDateTime::from(Utc::now());
     let exp = VCDateTime::from(Utc::now() + Duration::days(1));
@@ -184,13 +183,14 @@ pub fn generate_credential_request(
     }
 }
 
-pub fn generate_proof_of_possession<I>(
+pub fn generate_proof_of_possession<I, E>(
     issuer: &str,
     audience: &str,
     interface: &I,
-) -> Result<Proof, ssi::error::Error>
+) -> Result<Proof, E>
 where
-    I: JOSEInterface,
+    E: From<serde_json::Error>,
+    I: JOSEInterface<Error = E>,
 {
     let claims = {
         let iat = VCDateTime::from(Utc::now());

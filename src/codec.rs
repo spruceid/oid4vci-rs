@@ -26,12 +26,12 @@ pub struct ToDateTime;
 impl ToDateTime {
     pub fn from_vcdatetime(
         vcdatetime: VCDateTime,
-    ) -> Result<DateTime<FixedOffset>, ssi::error::Error> {
+    ) -> Result<DateTime<FixedOffset>, ssi::vc::Error> {
         let datetime: String = vcdatetime.into();
-        DateTime::parse_from_rfc3339(&datetime).map_err(|_| ssi::error::Error::TimeError)
+        DateTime::parse_from_rfc3339(&datetime).map_err(|_| ssi::vc::Error::TimeError)
     }
 
-    pub fn from_str(value: &str) -> Result<DateTime<FixedOffset>, ssi::error::Error> {
-        DateTime::parse_from_rfc3339(value).map_err(|_| ssi::error::Error::TimeError)
+    pub fn from_str(value: &str) -> Result<DateTime<FixedOffset>, ssi::vc::Error> {
+        DateTime::parse_from_rfc3339(value).map_err(|_| ssi::vc::Error::TimeError)
     }
 }

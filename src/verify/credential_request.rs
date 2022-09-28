@@ -12,7 +12,7 @@ pub async fn verify_credential_request<I, M>(
     interface: &I,
 ) -> Result<String, OIDCError>
 where
-    I: JOSEInterface,
+    I: JOSEInterface<Error = OIDCError>,
     M: Metadata,
 {
     let access_token = super::verify_access_token(token, interface)?;

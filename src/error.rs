@@ -67,8 +67,28 @@ pub struct OIDCError {
     pub uri: Option<String>,
 }
 
-impl From<ssi::error::Error> for OIDCError {
-    fn from(_: ssi::error::Error) -> Self {
+impl From<ssi::jws::Error> for OIDCError {
+    fn from(_: ssi::jws::Error) -> Self {
+        OIDCError {
+            ty: OIDCErrorType::CredentialRequest(CredentialRequestErrorType::InvalidRequest),
+            description: None,
+            uri: None,
+        }
+    }
+}
+
+impl From<ssi::jwk::Error> for OIDCError {
+    fn from(_: ssi::jwk::Error) -> Self {
+        OIDCError {
+            ty: OIDCErrorType::Token(TokenErrorType::InvalidRequest),
+            description: None,
+            uri: None,
+        }
+    }
+}
+
+impl From<ssi::vc::Error> for OIDCError {
+    fn from(_: ssi::vc::Error) -> Self {
         OIDCError {
             ty: OIDCErrorType::Token(TokenErrorType::InvalidRequest),
             description: None,
