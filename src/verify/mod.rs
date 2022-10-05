@@ -12,6 +12,6 @@ mod access_token;
 mod credential_format;
 mod credential_type;
 
-use access_token::*;
-use credential_format::*;
-use credential_type::*;
+pub use access_token::*;
+pub use credential_format::*;
+pub use credential_type::*;

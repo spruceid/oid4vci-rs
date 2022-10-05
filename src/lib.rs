@@ -1,5 +1,6 @@
 #![feature(fn_traits)]
 
+use chrono::{DateTime, FixedOffset, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -11,7 +12,7 @@ mod jose;
 mod nonce;
 mod verify;
 
-use ssi::one_or_many::OneOrMany;
+use ssi::{one_or_many::OneOrMany, vc::VCDateTime};
 
 pub use error::*;
 pub use generate::*;
@@ -32,6 +33,9 @@ pub enum CredentialFormat {
 
     #[serde(rename = "ldp_vc")]
     LDP,
+
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -43,7 +47,7 @@ pub struct PreAuthzCode {
     pub expires_at: ssi::vc::VCDateTime,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub user_pin_required: Option<bool>,
+    pub pin: Option<String>,
 
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
@@ -80,8 +84,9 @@ pub enum Proof {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[non_exhaustive]
 pub struct CredentialRequest {
-    pub credential_type: String,
-    pub format: CredentialFormat,
+    #[serde(rename = "type")]
+    pub credential_type: Option<String>,
+    pub format: Option<CredentialFormat>,
     pub proof: Proof,
 }
 
@@ -94,6 +99,40 @@ pub struct CredentialResponse {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[non_exhaustive]
+#[serde(untagged)]
+pub enum Timestamp {
+    Numeric(i64),
+    VCDateTime(VCDateTime),
+}
+
+impl From<i64> for Timestamp {
+    fn from(from: i64) -> Self {
+        Self::Numeric(from)
+    }
+}
+
+impl From<VCDateTime> for Timestamp {
+    fn from(from: VCDateTime) -> Self {
+        Self::VCDateTime(from)
+    }
+}
+
+impl TryInto<DateTime<FixedOffset>> for Timestamp {
+    type Error = ssi::vc::Error;
+
+    fn try_into(self) -> Result<DateTime<FixedOffset>, ssi::vc::Error> {
+        match self {
+            Self::Numeric(timestamp) => Ok(DateTime::<FixedOffset>::from_utc(
+                NaiveDateTime::from_timestamp(timestamp, 0),
+                FixedOffset::east(0),
+            )),
+            Self::VCDateTime(vcdt) => crate::codec::ToDateTime::from_vcdatetime(vcdt),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[non_exhaustive]
 pub struct ProofOfPossession {
     #[serde(rename = "iss")]
     pub issuer: String,
@@ -102,10 +141,10 @@ pub struct ProofOfPossession {
     pub audience: String,
 
     #[serde(rename = "iat")]
-    pub issued_at: ssi::vc::VCDateTime,
+    pub issued_at: Timestamp,
 
     #[serde(rename = "exp")]
-    pub expires_at: ssi::vc::VCDateTime,
+    pub expires_at: Timestamp,
 
     #[serde(rename = "jti")]
     pub nonce: String,

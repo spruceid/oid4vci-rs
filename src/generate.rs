@@ -8,11 +8,17 @@ use crate::{
     CredentialResponse, PreAuthzCode, Proof, ProofOfPossession, TokenResponse, TokenType,
 };
 
-pub fn generate_preauthz_code<I, E>(params: PreAuthzCode, interface: &I) -> Result<String, E>
+pub fn generate_preauthz_code<I, E>(mut params: PreAuthzCode, interface: &I) -> Result<String, E>
 where
     E: From<serde_json::Error>,
     I: JOSEInterface<Error = E>,
 {
+    params.pin = if let Some(pin) = params.pin {
+        Some(interface.jwe_encrypt(&pin)?)
+    } else {
+        None
+    };
+
     let mut claims = serde_json::to_value(params).unwrap();
     let claims = claims.as_object_mut().unwrap();
 
@@ -177,8 +183,8 @@ pub fn generate_credential_request(
     proof: Proof,
 ) -> CredentialRequest {
     CredentialRequest {
-        credential_type: ty.into(),
-        format,
+        credential_type: Some(ty.into()),
+        format: Some(format),
         proof,
     }
 }
@@ -200,8 +206,8 @@ where
             issuer: issuer.into(),
             audience: audience.into(),
             nonce: generate_nonce(),
-            issued_at: iat,
-            expires_at: exp,
+            issued_at: iat.into(),
+            expires_at: exp.into(),
         }
     };
 

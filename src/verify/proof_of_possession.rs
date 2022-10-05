@@ -3,7 +3,7 @@ use did_method_jwk::*;
 use did_method_key::*;
 use lazy_static::lazy_static;
 use ssi::{
-    did::{DIDMethods, Resource},
+    did::{DIDMethods, Resource, VerificationMethod},
     did_resolve::{dereference, Content, DereferencingInputMetadata},
     jws::{decode_unverified, Header},
 };
@@ -44,16 +44,19 @@ where
                 .await
                 .1;
 
-                let resource = if let Content::Object(resource) = content {
-                    Ok(resource)
-                } else {
-                    Err(CredentialRequestErrorType::InvalidOrMissingProof)
-                }?;
+                let vm = match content {
+                    Content::Object(Resource::VerificationMethod(vm)) => Ok(vm),
+                    Content::DIDDocument(document) => {
+                        if let VerificationMethod::Map(vm) =
+                            document.verification_method.unwrap().first().unwrap()
+                        {
+                            Ok(vm.to_owned())
+                        } else {
+                            Err(CredentialRequestErrorType::InvalidOrMissingProof)
+                        }
+                    }
 
-                let vm = if let Resource::VerificationMethod(vm) = resource {
-                    Ok(vm)
-                } else {
-                    Err(CredentialRequestErrorType::InvalidOrMissingProof)
+                    _ => Err(CredentialRequestErrorType::InvalidOrMissingProof),
                 }?;
 
                 (
@@ -79,13 +82,13 @@ where
             let now = Utc::now();
 
             // Verification time is not before `iat`
-            let iat = ToDateTime::from_vcdatetime(issued_at)?;
+            let iat = issued_at.try_into()?;
             if now < iat {
                 return Err(CredentialRequestErrorType::InvalidOrMissingProof.into());
             }
 
             // Verification time is not after `exp`
-            let exp = ToDateTime::from_vcdatetime(expires_at)?;
+            let exp = expires_at.try_into()?;
             if now > exp {
                 return Err(CredentialRequestErrorType::InvalidOrMissingProof.into());
             }

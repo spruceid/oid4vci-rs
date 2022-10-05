@@ -9,9 +9,9 @@ pub trait JOSEInterface {
     fn jwt_encode_sign(&self, bytes: &str) -> Result<String, Self::Error>;
     fn jwt_decode_verify(&self, jwt: &str) -> Result<(Header, Vec<u8>), Self::Error>;
 
-    // TODO: for pre-authz_code user_pin
-    // fn jwe_encrypt(&self, bytes: &str) -> Result<String, Self::Error>;
-    // fn jwe_decrypt(&self, jwe: &str) -> Result<(Header, Vec<u8>), Self::Error>;
+    // TODO: replace by actual encryption
+    fn jwe_encrypt(&self, bytes: &str) -> Result<String, Self::Error>;
+    fn jwe_decrypt(&self, jwe: &str) -> Result<String, Self::Error>;
 
     fn get_public_key(&self) -> Result<JWK, Self::Error>;
 }
@@ -38,6 +38,16 @@ impl JOSEInterface for SSI {
         ssi::jws::decode_verify(jwt, &self.jwk).map_err(|e| e.into())
     }
 
+    fn jwe_encrypt(&self, bytes: &str) -> Result<String, Self::Error> {
+        // TODO: replace by actual encryption
+        Ok(bytes.to_string())
+    }
+
+    fn jwe_decrypt(&self, jwe: &str) -> Result<String, Self::Error> {
+        // TODO: replace by actual encryption
+        Ok(jwe.to_string())
+    }
+
     fn get_public_key(&self) -> Result<JWK, Self::Error> {
         unimplemented!()
     }
@@ -46,10 +56,15 @@ impl JOSEInterface for SSI {
 type Signer<E> = dyn Fn(&[u8]) -> Result<Vec<u8>, E>;
 type Verifier<E> = dyn Fn(Algorithm, &[u8], &[u8]) -> Result<(), E>;
 
+type Encrypter<E> = dyn Fn(&str) -> Result<String, E>;
+type Decrypter<E> = dyn Fn(&str) -> Result<String, E>;
+
 pub struct JOSEExternal<E> {
     header: Header,
     signer: Box<Signer<E>>,
     verifier: Box<Verifier<E>>,
+    encrypter: Box<Encrypter<E>>,
+    decrypter: Box<Decrypter<E>>,
 }
 
 impl<E> JOSEInterface for JOSEExternal<E>
@@ -79,6 +94,16 @@ where
         self.verifier
             .call((header.algorithm, &signing_input, &signature))?;
         Ok((header, payload))
+    }
+
+    fn jwe_encrypt(&self, bytes: &str) -> Result<String, Self::Error> {
+        // TODO: replace by actual encryption
+        self.encrypter.call((bytes,))
+    }
+
+    fn jwe_decrypt(&self, jwe: &str) -> Result<String, Self::Error> {
+        // TODO: replace by actual encryption
+        self.decrypter.call((jwe,))
     }
 
     fn get_public_key(&self) -> Result<JWK, Self::Error> {

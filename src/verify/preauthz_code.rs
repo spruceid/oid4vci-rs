@@ -9,6 +9,7 @@ use crate::{
 
 pub fn verify_preauthz_code<I, M>(
     preauthz_code: &str,
+    user_pin: Option<&str>,
     metadata: &M,
     interface: &I,
 ) -> Result<PreAuthzCode, OIDCError>
@@ -16,14 +17,17 @@ where
     I: JOSEInterface<Error = OIDCError>,
     M: Metadata,
 {
-    let (_, bytes) = interface.jwt_decode_verify(preauthz_code)?;
-    let preauthz_code: PreAuthzCode = serde_json::from_slice(&bytes)?;
+    let (_, bytes) = interface
+        .jwt_decode_verify(preauthz_code)
+        .map_err(|_| TokenErrorType::InvalidGrant)?;
+
+    let preauthz_code: PreAuthzCode =
+        serde_json::from_slice(&bytes).map_err(|_| TokenErrorType::InvalidGrant)?;
 
     let now = Utc::now();
     let expires_at = preauthz_code.expires_at.clone();
-    let exp = ToDateTime::from_vcdatetime(expires_at)?;
+    let exp = ToDateTime::from_vcdatetime(expires_at).map_err(|_| TokenErrorType::InvalidGrant)?;
     if now > exp {
-        println!("now({:?}) vs exp({:?})", now, exp);
         return Err(TokenErrorType::InvalidRequest.into());
     }
 
@@ -34,5 +38,17 @@ where
         return Err(TokenErrorType::InvalidRequest.into());
     }
 
-    Ok(preauthz_code)
+    match (&preauthz_code.pin, user_pin) {
+        (Some(enc), Some(rhs)) => {
+            let lhs = interface.jwe_decrypt(enc)?;
+            if lhs != rhs {
+                Err(TokenErrorType::InvalidGrant.into())
+            } else {
+                Ok(preauthz_code)
+            }
+        }
+        (None, Some(_)) => Err(TokenErrorType::InvalidGrant.into()),
+        (Some(_), None) => Err(TokenErrorType::InvalidGrant.into()),
+        (None, None) => Ok(preauthz_code),
+    }
 }

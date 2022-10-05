@@ -2,6 +2,13 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Hash, Eq)]
 #[non_exhaustive]
+pub enum AuthorizationErrorType {
+    #[serde(rename = "invalid_token")]
+    InvalidToken,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Hash, Eq)]
+#[non_exhaustive]
 pub enum TokenErrorType {
     #[serde(rename = "invalid_request")]
     InvalidRequest,
@@ -31,9 +38,6 @@ pub enum CredentialRequestErrorType {
     #[serde(rename = "invalid_request")]
     InvalidRequest,
 
-    #[serde(rename = "invalid_token")]
-    InvalidToken,
-
     #[serde(rename = "unsupported_type")]
     UnsupportedType,
 
@@ -48,8 +52,12 @@ pub enum CredentialRequestErrorType {
 #[non_exhaustive]
 #[serde(untagged)]
 pub enum OIDCErrorType {
+    Authorization(AuthorizationErrorType),
     Token(TokenErrorType),
     CredentialRequest(CredentialRequestErrorType),
+
+    #[serde(rename = "unknown")]
+    Unknown,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Hash, Eq)]
@@ -65,6 +73,16 @@ pub struct OIDCError {
     #[serde(rename = "error_uri")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uri: Option<String>,
+}
+
+impl Default for OIDCError {
+    fn default() -> Self {
+        Self {
+            ty: OIDCErrorType::Unknown,
+            description: None,
+            uri: None,
+        }
+    }
 }
 
 impl From<ssi::jws::Error> for OIDCError {
@@ -103,6 +121,26 @@ impl From<serde_json::Error> for OIDCError {
             ty: OIDCErrorType::Token(TokenErrorType::InvalidRequest),
             description: None,
             uri: None,
+        }
+    }
+}
+
+impl From<AuthorizationErrorType> for OIDCError {
+    fn from(err: AuthorizationErrorType) -> Self {
+        OIDCError {
+            ty: OIDCErrorType::Authorization(err),
+            description: None,
+            uri: None,
+        }
+    }
+}
+
+impl AuthorizationErrorType {
+    pub fn to_oidcerror(&self, description: Option<String>, uri: Option<String>) -> OIDCError {
+        OIDCError {
+            ty: OIDCErrorType::Authorization(self.clone()),
+            description,
+            uri,
         }
     }
 }

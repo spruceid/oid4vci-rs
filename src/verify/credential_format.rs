@@ -5,18 +5,26 @@ use crate::{
 
 pub fn verify_allowed_format<M>(
     credential_type: &str,
-    format: &CredentialFormat,
+    format: &Option<CredentialFormat>,
     metadata: &M,
 ) -> Result<(), OIDCError>
 where
     M: Metadata,
 {
-    if !metadata
-        .get_allowed_formats(credential_type)
-        .any(|ref f| f == &format)
-    {
-        return Err(CredentialRequestErrorType::UnsupportedFormat.into());
-    }
+    match format {
+        None => Err(CredentialRequestErrorType::InvalidRequest.into()),
+        Some(CredentialFormat::Unknown) => {
+            Err(CredentialRequestErrorType::UnsupportedFormat.into())
+        }
+        Some(format) => {
+            if !metadata
+                .get_allowed_formats(credential_type)
+                .any(|f| f == format)
+            {
+                return Err(CredentialRequestErrorType::UnsupportedFormat.into());
+            }
 
-    Ok(())
+            Ok(())
+        }
+    }
 }

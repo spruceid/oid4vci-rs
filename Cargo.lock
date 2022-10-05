@@ -713,16 +713,11 @@ name = "did-method-jwk"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "k256",
  "multibase 0.8.0",
- "p256",
  "serde_jcs",
  "serde_json",
- "simple_asn1 0.5.4",
- "ssi-crypto",
  "ssi-dids",
  "ssi-jwk",
- "thiserror",
 ]
 
 [[package]]

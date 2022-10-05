@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::{
     codec::*,
-    error::{CredentialRequestErrorType, OIDCError, TokenErrorType},
+    error::{AuthorizationErrorType, OIDCError, TokenErrorType},
     jose::*,
 };
 
@@ -38,11 +38,11 @@ where
     let now = Utc::now();
 
     if now < iat {
-        return Err(CredentialRequestErrorType::InvalidToken.into());
+        return Err(AuthorizationErrorType::InvalidToken.into());
     }
 
     if now > exp {
-        return Err(CredentialRequestErrorType::InvalidToken.into());
+        return Err(AuthorizationErrorType::InvalidToken.into());
     }
 
     Ok(access_token)
