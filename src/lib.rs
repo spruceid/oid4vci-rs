@@ -1,6 +1,6 @@
 #![feature(fn_traits)]
 
-use chrono::{DateTime, FixedOffset, NaiveDateTime, Utc};
+use chrono::{DateTime, FixedOffset, NaiveDateTime};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;

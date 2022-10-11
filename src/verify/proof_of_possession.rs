@@ -9,7 +9,6 @@ use ssi::{
 };
 
 use crate::{
-    codec::*,
     error::{CredentialRequestErrorType, OIDCError},
     jose::*,
     Metadata, Proof, ProofOfPossession,
