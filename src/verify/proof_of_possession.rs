@@ -1,6 +1,7 @@
 use chrono::prelude::*;
-use did_method_jwk::*;
 use did_method_key::*;
+use did_jwk::*;
+use did_web::*;
 use lazy_static::lazy_static;
 use ssi::{
     did::{DIDMethods, Resource, VerificationMethod},
@@ -19,6 +20,7 @@ lazy_static! {
         let mut methods = DIDMethods::default();
         methods.insert(&DIDKey);
         methods.insert(&DIDJWK);
+        methods.insert(&DIDWeb);
         methods
     };
 }
