@@ -1,4 +1,4 @@
-use chrono::{DateTime, FixedOffset, NaiveDateTime};
+use chrono::{DateTime, FixedOffset, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -10,7 +10,10 @@ mod jose;
 mod nonce;
 mod verify;
 
-use ssi::{one_or_many::OneOrMany, vc::VCDateTime};
+use ssi::{
+    one_or_many::OneOrMany,
+    vc::{NumericDate, VCDateTime},
+};
 
 pub use error::*;
 pub use generate::*;
@@ -99,12 +102,25 @@ pub struct CredentialResponse {
 #[non_exhaustive]
 #[serde(untagged)]
 pub enum Timestamp {
-    Numeric(i64),
+    Numeric(NumericDate),
     VCDateTime(VCDateTime),
 }
 
-impl From<i64> for Timestamp {
-    fn from(from: i64) -> Self {
+impl From<Timestamp> for NumericDate {
+    fn from(value: Timestamp) -> Self {
+        match value {
+            Timestamp::Numeric(timestamp) => timestamp,
+            Timestamp::VCDateTime(vcdt) => {
+                let date_time: DateTime<FixedOffset> = vcdt.into();
+                let date_time: DateTime<Utc> = date_time.into();
+                date_time.try_into().unwrap()
+            }
+        }
+    }
+}
+
+impl From<NumericDate> for Timestamp {
+    fn from(from: NumericDate) -> Self {
         Self::Numeric(from)
     }
 }
@@ -116,15 +132,15 @@ impl From<VCDateTime> for Timestamp {
 }
 
 impl TryInto<DateTime<FixedOffset>> for Timestamp {
-    type Error = ssi::vc::Error;
+    type Error = crate::OIDCError;
 
-    fn try_into(self) -> Result<DateTime<FixedOffset>, ssi::vc::Error> {
+    fn try_into(self) -> Result<DateTime<FixedOffset>, crate::OIDCError> {
         match self {
-            Self::Numeric(timestamp) => Ok(DateTime::<FixedOffset>::from_utc(
-                NaiveDateTime::from_timestamp(timestamp, 0),
-                FixedOffset::east(0),
-            )),
-            Self::VCDateTime(vcdt) => crate::codec::ToDateTime::from_vcdatetime(vcdt),
+            Self::Numeric(timestamp) => {
+                let date_time: DateTime<Utc> = timestamp.into();
+                Ok(date_time.into())
+            }
+            Self::VCDateTime(vcdt) => Ok(crate::codec::ToDateTime::from_vcdatetime(vcdt)?),
         }
     }
 }

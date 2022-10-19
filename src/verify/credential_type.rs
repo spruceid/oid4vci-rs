@@ -11,6 +11,8 @@ pub fn verify_credential_type(
 ) -> Result<(), OIDCError> {
     let allowed_credential_types: OneOrMany<String> = serde_json::from_value(
         access_token
+            .get("op_state")
+            .ok_or(TokenErrorType::InvalidRequest)?
             .get("credential_type")
             .ok_or(TokenErrorType::InvalidRequest)?
             .to_owned(),

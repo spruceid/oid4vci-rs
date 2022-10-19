@@ -1,7 +1,7 @@
 use chrono::{prelude::*, Duration};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use ssi::vc::VCDateTime;
+use ssi::vc::{NumericDate, VCDateTime};
 
 use crate::{
     codec::*, jose::*, nonce::generate_nonce, CredentialFormat, CredentialRequest,
@@ -31,25 +31,29 @@ where
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[non_exhaustive]
 pub struct AccessTokenParams {
-    pub credential_type: String,
+    pub credential_type: Vec<String>,
     pub allow_refresh: bool,
     pub token_type: TokenType,
     pub expires_in: u64,
 }
 
 impl AccessTokenParams {
-    pub fn new(credential_type: &str, token_type: &TokenType, expires_in: u64) -> Self {
+    pub fn new(credential_type: Vec<String>, token_type: &TokenType, expires_in: u64) -> Self {
         AccessTokenParams {
-            credential_type: credential_type.to_owned(),
+            credential_type,
             allow_refresh: false,
             token_type: token_type.to_owned(),
             expires_in,
         }
     }
 
-    pub fn with_refresh(credential_type: &str, token_type: &TokenType, expires_in: u64) -> Self {
+    pub fn with_refresh(
+        credential_type: Vec<String>,
+        token_type: &TokenType,
+        expires_in: u64,
+    ) -> Self {
         AccessTokenParams {
-            credential_type: credential_type.to_owned(),
+            credential_type,
             allow_refresh: true,
             token_type: token_type.to_owned(),
             expires_in,
@@ -71,18 +75,25 @@ where
     E: From<serde_json::Error>,
     I: JOSEInterface<Error = E>,
 {
-    let now = VCDateTime::from(Utc::now());
-    let exp = VCDateTime::from(Utc::now() + Duration::days(1));
+    let now: crate::Timestamp = VCDateTime::from(Utc::now()).into();
+    let exp: crate::Timestamp = VCDateTime::from(Utc::now() + Duration::days(1)).into();
+
+    let now: NumericDate = now.into();
+    let exp: NumericDate = exp.into();
 
     let access_token = interface.jwt_encode_sign(&serde_json::to_string(&json!({
-        "credential_type": credential_type,
+        "op_state": {
+            "credential_type": credential_type,
+        },
         "iat": now,
         "exp": exp,
     }))?)?;
 
     let refresh_token = if allow_refresh {
         Some(interface.jwt_encode_sign(&serde_json::to_string(&json!({
-            "credential_type": credential_type,
+            "op_state": {
+                "credential_type": credential_type,
+            },
             "iat": now,
             "exp": exp,
         }))?)?)
