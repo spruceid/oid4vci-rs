@@ -95,7 +95,7 @@ pub struct CredentialRequest {
 #[non_exhaustive]
 pub struct CredentialResponse {
     pub format: CredentialFormat,
-    pub credential: String,
+    pub credential: Value,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

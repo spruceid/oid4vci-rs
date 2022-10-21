@@ -75,6 +75,28 @@ pub struct OIDCError {
     pub uri: Option<String>,
 }
 
+impl OIDCError {
+    pub fn with_desc(mut self, description: &str) -> Self {
+        self.description = Some(description.to_owned());
+        self
+    }
+
+    pub fn with_uri(mut self, uri: &str) -> Self {
+        self.uri = Some(uri.to_owned());
+        self
+    }
+
+    pub fn without_desc(mut self) -> Self {
+        self.description = None;
+        self
+    }
+
+    pub fn without_uri(mut self) -> Self {
+        self.uri = None;
+        self
+    }
+}
+
 impl Default for OIDCError {
     fn default() -> Self {
         Self {

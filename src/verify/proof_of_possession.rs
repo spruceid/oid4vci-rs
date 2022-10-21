@@ -1,6 +1,6 @@
 use chrono::prelude::*;
-use did_method_key::*;
 use did_jwk::*;
+use did_method_key::*;
 use did_web::*;
 use lazy_static::lazy_static;
 use ssi::{
@@ -34,7 +34,8 @@ where
             let header: Header = decode_unverified(jwt)?.0;
             let did_url = header
                 .key_id
-                .ok_or(CredentialRequestErrorType::InvalidOrMissingProof)?;
+                .ok_or(CredentialRequestErrorType::InvalidOrMissingProof.into())
+                .map_err(|e: OIDCError| e.with_desc("jwt header must contain key_id"))?;
 
             let (controller, jwk) = {
                 let content = dereference(
@@ -45,6 +46,7 @@ where
                 .await
                 .1;
 
+                let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
                 let vm = match content {
                     Content::Object(Resource::VerificationMethod(vm)) => Ok(vm),
                     Content::DIDDocument(document) => {
@@ -53,17 +55,20 @@ where
                         {
                             Ok(vm.to_owned())
                         } else {
-                            Err(CredentialRequestErrorType::InvalidOrMissingProof)
+                            Err(err.with_desc("could not find any verification method"))
                         }
                     }
 
-                    _ => Err(CredentialRequestErrorType::InvalidOrMissingProof),
+                    _ => Err(err.with_desc("could not find specified verirication method")),
                 }?;
 
                 (
                     vm.controller.clone(),
                     vm.get_jwk()
-                        .map_err(|_| CredentialRequestErrorType::InvalidOrMissingProof)?,
+                        .map_err(|_| CredentialRequestErrorType::InvalidOrMissingProof.into())
+                        .map_err(|e: OIDCError| {
+                            e.with_desc("verification method does not contain a jwk")
+                        })?,
                 )
             };
 
@@ -85,13 +90,15 @@ where
             // Verification time is not before `iat`
             let iat = issued_at.try_into()?;
             if now < iat {
-                return Err(CredentialRequestErrorType::InvalidOrMissingProof.into());
+                let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
+                return Err(err.with_desc("proof of possesion is not yet valid"));
             }
 
             // Verification time is not after `exp`
             let exp = expires_at.try_into()?;
             if now > exp {
-                return Err(CredentialRequestErrorType::InvalidOrMissingProof.into());
+                let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
+                return Err(err.with_desc("proof of possesion is expired"));
             }
 
             // TODO: match issuer to something
@@ -100,8 +107,13 @@ where
             // }
 
             // Audience is set to what is provided by Metadata
-            if audience != metadata.get_audience() {
-                return Err(CredentialRequestErrorType::InvalidOrMissingProof.into());
+            let expected_audience = metadata.get_audience();
+            if audience != expected_audience {
+                let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
+                return Err(err.with_desc(&format!(
+                    "audience does not match this issuer, must be '{}'",
+                    expected_audience
+                )));
             }
 
             Ok(controller)

@@ -12,16 +12,21 @@ where
     M: Metadata,
 {
     match format {
-        None => Err(CredentialRequestErrorType::InvalidRequest.into()),
+        None => {
+            let err: OIDCError = CredentialRequestErrorType::InvalidRequest.into();
+            Err(err.with_desc("format must be present"))
+        }
         Some(CredentialFormat::Unknown) => {
-            Err(CredentialRequestErrorType::UnsupportedFormat.into())
+            let err: OIDCError = CredentialRequestErrorType::UnsupportedFormat.into();
+            Err(err.with_desc("unknown format"))
         }
         Some(format) => {
             if !metadata
                 .get_allowed_formats(credential_type)
                 .any(|f| f == format)
             {
-                return Err(CredentialRequestErrorType::UnsupportedFormat.into());
+                let err: OIDCError = CredentialRequestErrorType::UnsupportedFormat.into();
+                return Err(err.with_desc("unsupported format"));
             }
 
             Ok(())

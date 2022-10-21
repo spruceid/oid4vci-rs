@@ -1,6 +1,6 @@
 use chrono::{prelude::*, Duration};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use ssi::vc::{NumericDate, VCDateTime};
 
 use crate::{
@@ -230,11 +230,11 @@ where
 
 pub fn generate_credential_response(
     format: &CredentialFormat,
-    credential: &str,
+    credential: Value,
 ) -> CredentialResponse {
     CredentialResponse {
         format: format.to_owned(),
-        credential: credential.into(),
+        credential,
     }
 }
 
