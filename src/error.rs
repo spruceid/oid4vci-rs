@@ -108,30 +108,30 @@ impl Default for OIDCError {
 }
 
 impl From<ssi::jws::Error> for OIDCError {
-    fn from(_: ssi::jws::Error) -> Self {
+    fn from(e: ssi::jws::Error) -> Self {
         OIDCError {
             ty: OIDCErrorType::CredentialRequest(CredentialRequestErrorType::InvalidRequest),
-            description: None,
+            description: Some(format!("[ssi::jws] {}", e)),
             uri: None,
         }
     }
 }
 
 impl From<ssi::jwk::Error> for OIDCError {
-    fn from(_: ssi::jwk::Error) -> Self {
+    fn from(e: ssi::jwk::Error) -> Self {
         OIDCError {
             ty: OIDCErrorType::Token(TokenErrorType::InvalidRequest),
-            description: None,
+            description: Some(format!("[ssi::jwk] {}", e)),
             uri: None,
         }
     }
 }
 
 impl From<ssi::vc::Error> for OIDCError {
-    fn from(_: ssi::vc::Error) -> Self {
+    fn from(e: ssi::vc::Error) -> Self {
         OIDCError {
             ty: OIDCErrorType::Token(TokenErrorType::InvalidRequest),
-            description: None,
+            description: Some(format!("[ssi::vc] {}", e)),
             uri: None,
         }
     }
