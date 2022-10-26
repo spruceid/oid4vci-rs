@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::{prelude::*, Duration};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -32,15 +34,22 @@ where
 #[non_exhaustive]
 pub struct AccessTokenParams {
     pub credential_type: Vec<String>,
+    pub op_state: HashMap<String, Value>,
     pub allow_refresh: bool,
     pub token_type: TokenType,
     pub expires_in: u64,
 }
 
 impl AccessTokenParams {
-    pub fn new(credential_type: Vec<String>, token_type: &TokenType, expires_in: u64) -> Self {
+    pub fn new(
+        credential_type: Vec<String>,
+        op_state: Option<HashMap<String, Value>>,
+        token_type: &TokenType,
+        expires_in: u64,
+    ) -> Self {
         AccessTokenParams {
             credential_type,
+            op_state: op_state.unwrap_or_else(|| HashMap::new()),
             allow_refresh: false,
             token_type: token_type.to_owned(),
             expires_in,
@@ -49,11 +58,13 @@ impl AccessTokenParams {
 
     pub fn with_refresh(
         credential_type: Vec<String>,
+        op_state: Option<HashMap<String, Value>>,
         token_type: &TokenType,
         expires_in: u64,
     ) -> Self {
         AccessTokenParams {
             credential_type,
+            op_state: op_state.unwrap_or_else(|| HashMap::new()),
             allow_refresh: true,
             token_type: token_type.to_owned(),
             expires_in,
@@ -64,6 +75,7 @@ impl AccessTokenParams {
 pub fn generate_access_token<I, E>(
     AccessTokenParams {
         credential_type,
+        mut op_state,
         allow_refresh,
         token_type,
         expires_in,
@@ -81,19 +93,17 @@ where
     let now: NumericDate = now.into();
     let exp: NumericDate = exp.into();
 
+    op_state.insert("credential_type".to_string(), credential_type.into());
+
     let access_token = interface.jwt_encode_sign(&serde_json::to_string(&json!({
-        "op_state": {
-            "credential_type": credential_type,
-        },
+        "op_state": op_state,
         "iat": now,
         "exp": exp,
     }))?)?;
 
     let refresh_token = if allow_refresh {
         Some(interface.jwt_encode_sign(&serde_json::to_string(&json!({
-            "op_state": {
-                "credential_type": credential_type,
-            },
+            "op_state": op_state,
             "iat": now,
             "exp": exp,
         }))?)?)
