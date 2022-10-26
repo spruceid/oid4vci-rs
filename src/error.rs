@@ -107,6 +107,7 @@ impl Default for OIDCError {
     }
 }
 
+#[cfg(debug_assertions)]
 impl From<ssi::jws::Error> for OIDCError {
     fn from(e: ssi::jws::Error) -> Self {
         OIDCError {
@@ -117,6 +118,18 @@ impl From<ssi::jws::Error> for OIDCError {
     }
 }
 
+#[cfg(not(debug_assertions))]
+impl From<ssi::jws::Error> for OIDCError {
+    fn from(e: ssi::jws::Error) -> Self {
+        OIDCError {
+            ty: OIDCErrorType::CredentialRequest(CredentialRequestErrorType::InvalidRequest),
+            description: None,
+            uri: None,
+        }
+    }
+}
+
+#[cfg(debug_assertions)]
 impl From<ssi::jwk::Error> for OIDCError {
     fn from(e: ssi::jwk::Error) -> Self {
         OIDCError {
@@ -127,11 +140,34 @@ impl From<ssi::jwk::Error> for OIDCError {
     }
 }
 
+#[cfg(not(debug_assertions))]
+impl From<ssi::jwk::Error> for OIDCError {
+    fn from(e: ssi::jwk::Error) -> Self {
+        OIDCError {
+            ty: OIDCErrorType::Token(TokenErrorType::InvalidRequest),
+            description: None,
+            uri: None,
+        }
+    }
+}
+
+#[cfg(debug_assertions)]
 impl From<ssi::vc::Error> for OIDCError {
     fn from(e: ssi::vc::Error) -> Self {
         OIDCError {
             ty: OIDCErrorType::Token(TokenErrorType::InvalidRequest),
             description: Some(format!("[ssi::vc] {}", e)),
+            uri: None,
+        }
+    }
+}
+
+#[cfg(not(debug_assertions))]
+impl From<ssi::vc::Error> for OIDCError {
+    fn from(e: ssi::vc::Error) -> Self {
+        OIDCError {
+            ty: OIDCErrorType::Token(TokenErrorType::InvalidRequest),
+            description: None,
             uri: None,
         }
     }
