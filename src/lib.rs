@@ -1,5 +1,5 @@
 use chrono::{DateTime, FixedOffset, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{ser::Serializer, Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -98,12 +98,23 @@ pub struct CredentialResponse {
     pub credential: Value,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 #[non_exhaustive]
 #[serde(untagged)]
 pub enum Timestamp {
     Numeric(NumericDate),
     VCDateTime(VCDateTime),
+}
+
+impl Serialize for Timestamp {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let value: NumericDate = self.to_owned().into();
+        let whole_seconds = value.as_seconds().floor() as i64;
+        whole_seconds.serialize(serializer)
+    }
 }
 
 impl From<Timestamp> for NumericDate {
