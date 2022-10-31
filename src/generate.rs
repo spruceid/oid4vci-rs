@@ -49,7 +49,7 @@ impl AccessTokenParams {
     ) -> Self {
         AccessTokenParams {
             credential_type,
-            op_state: op_state.unwrap_or_else(|| HashMap::new()),
+            op_state: op_state.unwrap_or_default(),
             allow_refresh: false,
             token_type: token_type.to_owned(),
             expires_in,
@@ -64,7 +64,7 @@ impl AccessTokenParams {
     ) -> Self {
         AccessTokenParams {
             credential_type,
-            op_state: op_state.unwrap_or_else(|| HashMap::new()),
+            op_state: op_state.unwrap_or_default(),
             allow_refresh: true,
             token_type: token_type.to_owned(),
             expires_in,

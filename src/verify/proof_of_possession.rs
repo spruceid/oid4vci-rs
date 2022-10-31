@@ -72,7 +72,7 @@ where
                 )
             };
 
-            let interface = SSI::new(jwk, header.algorithm);
+            let interface = SSI::new(jwk, header.algorithm, "");
 
             let ProofOfPossession {
                 // issuer,
