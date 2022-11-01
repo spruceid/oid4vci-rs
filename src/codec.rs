@@ -30,8 +30,4 @@ impl ToDateTime {
         let datetime: String = vcdatetime.into();
         DateTime::parse_from_rfc3339(&datetime).map_err(|_| ssi::vc::Error::TimeError)
     }
-
-    pub fn from_str(value: &str) -> Result<DateTime<FixedOffset>, ssi::vc::Error> {
-        DateTime::parse_from_rfc3339(value).map_err(|_| ssi::vc::Error::TimeError)
-    }
 }

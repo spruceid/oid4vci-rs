@@ -12,10 +12,10 @@ pub fn verify_credential_type(
     let allowed_credential_types: OneOrMany<String> = serde_json::from_value(
         access_token
             .get("op_state")
-            .ok_or(TokenErrorType::InvalidRequest.into())
+            .ok_or_else(|| TokenErrorType::InvalidRequest.into())
             .map_err(|e: OIDCError| e.with_desc("op_state must be present in access_token"))?
             .get("credential_type")
-            .ok_or(TokenErrorType::InvalidRequest.into())
+            .ok_or_else(|| TokenErrorType::InvalidRequest.into())
             .map_err(|e: OIDCError| e.with_desc("credential_type must be present in op_state"))?
             .to_owned(),
     )?;

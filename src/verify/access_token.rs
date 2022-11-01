@@ -21,10 +21,10 @@ where
 
     let iat = access_token
         .get("iat")
-        .ok_or(TokenErrorType::InvalidRequest.into())
+        .ok_or_else(|| TokenErrorType::InvalidRequest.into())
         .map_err(|e: OIDCError| e.with_desc("iat must be present"))?
         .as_f64()
-        .ok_or(TokenErrorType::InvalidRequest.into())
+        .ok_or_else(|| TokenErrorType::InvalidRequest.into())
         .map_err(|e: OIDCError| e.with_desc("iat must be in numeric date format"))?;
 
     let iat = NumericDate::try_from_seconds(iat)
@@ -33,10 +33,10 @@ where
 
     let exp = access_token
         .get("exp")
-        .ok_or(TokenErrorType::InvalidRequest.into())
+        .ok_or_else(|| TokenErrorType::InvalidRequest.into())
         .map_err(|e: OIDCError| e.with_desc("exp must be present"))?
         .as_f64()
-        .ok_or(TokenErrorType::InvalidRequest.into())
+        .ok_or_else(|| TokenErrorType::InvalidRequest.into())
         .map_err(|e: OIDCError| e.with_desc("exp must be in numeric date format"))?;
 
     let exp = NumericDate::try_from_seconds(exp)

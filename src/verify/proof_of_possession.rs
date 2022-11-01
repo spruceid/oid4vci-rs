@@ -34,7 +34,7 @@ where
             let header: Header = decode_unverified(jwt)?.0;
             let did_url = header
                 .key_id
-                .ok_or(CredentialRequestErrorType::InvalidOrMissingProof.into())
+                .ok_or_else(|| CredentialRequestErrorType::InvalidOrMissingProof.into())
                 .map_err(|e: OIDCError| e.with_desc("jwt header must contain key_id"))?;
 
             let (controller, jwk) = {
