@@ -15,6 +15,7 @@ use ssi::{
     vc::{NumericDate, VCDateTime},
 };
 
+pub use codec::*;
 pub use error::*;
 pub use generate::*;
 pub use jose::*;
