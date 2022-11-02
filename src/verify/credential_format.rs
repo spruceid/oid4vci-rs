@@ -1,32 +1,43 @@
 use crate::{
     error::{CredentialRequestErrorType, OIDCError},
-    CredentialFormat, Metadata,
+    MaybeUnknownCredentialFormat, Metadata,
 };
 
-pub fn verify_allowed_format<M>(
+macro_rules! unsupported_format {
+    () => {{
+        let err: OIDCError = CredentialRequestErrorType::UnsupportedFormat.into();
+        Err(err.with_desc("unsupported format"))
+    }};
+}
+
+pub fn verify_allowed_format<M, F>(
     credential_type: &str,
-    format: &Option<CredentialFormat>,
+    format: &Option<MaybeUnknownCredentialFormat>,
     metadata: &M,
+    external_verifier: Option<F>,
 ) -> Result<(), OIDCError>
 where
     M: Metadata,
+    F: FnOnce(&str) -> bool,
 {
     match format {
         None => {
             let err: OIDCError = CredentialRequestErrorType::InvalidRequest.into();
             Err(err.with_desc("format must be present"))
         }
-        Some(CredentialFormat::Unknown) => {
-            let err: OIDCError = CredentialRequestErrorType::UnsupportedFormat.into();
-            Err(err.with_desc("unknown format"))
-        }
-        Some(format) => {
+        Some(MaybeUnknownCredentialFormat::Unknown(format)) => match external_verifier {
+            Some(f) => match f(format) {
+                true => Ok(()),
+                false => unsupported_format!(),
+            },
+            None => unsupported_format!(),
+        },
+        Some(MaybeUnknownCredentialFormat::Known(format)) => {
             if !metadata
                 .get_allowed_formats(credential_type)
                 .any(|f| f == format)
             {
-                let err: OIDCError = CredentialRequestErrorType::UnsupportedFormat.into();
-                return Err(err.with_desc("unsupported format"));
+                return unsupported_format!();
             }
 
             Ok(())

@@ -27,6 +27,13 @@ pub trait Metadata {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Hash, Eq)]
+#[serde(untagged)]
+pub enum MaybeUnknownCredentialFormat {
+    Known(CredentialFormat),
+    Unknown(String),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Hash, Eq)]
 #[non_exhaustive]
 pub enum CredentialFormat {
     #[serde(rename = "jwt_vc")]
@@ -34,9 +41,12 @@ pub enum CredentialFormat {
 
     #[serde(rename = "ldp_vc")]
     LDP,
+}
 
-    #[serde(other)]
-    Unknown,
+impl From<CredentialFormat> for MaybeUnknownCredentialFormat {
+    fn from(value: CredentialFormat) -> Self {
+        Self::Known(value)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -87,14 +97,14 @@ pub enum Proof {
 pub struct CredentialRequest {
     #[serde(rename = "type")]
     pub credential_type: Option<String>,
-    pub format: Option<CredentialFormat>,
+    pub format: Option<MaybeUnknownCredentialFormat>,
     pub proof: Proof,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[non_exhaustive]
 pub struct CredentialResponse {
-    pub format: CredentialFormat,
+    pub format: MaybeUnknownCredentialFormat,
     pub credential: Value,
 }
 

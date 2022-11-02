@@ -7,7 +7,8 @@ use ssi::vc::{NumericDate, VCDateTime};
 
 use crate::{
     codec::*, jose::*, nonce::generate_nonce, CredentialFormat, CredentialRequest,
-    CredentialResponse, PreAuthzCode, Proof, ProofOfPossession, TokenResponse, TokenType,
+    CredentialResponse, MaybeUnknownCredentialFormat, PreAuthzCode, Proof, ProofOfPossession,
+    TokenResponse, TokenType,
 };
 
 pub fn generate_preauthz_code<I, E>(mut params: PreAuthzCode, interface: &I) -> Result<String, E>
@@ -205,7 +206,7 @@ pub fn generate_credential_request(
 ) -> CredentialRequest {
     CredentialRequest {
         credential_type: Some(ty.into()),
-        format: Some(format),
+        format: Some(format.into()),
         proof,
     }
 }
@@ -240,7 +241,7 @@ where
 }
 
 pub fn generate_credential_response(
-    format: &CredentialFormat,
+    format: &MaybeUnknownCredentialFormat,
     credential: Value,
 ) -> CredentialResponse {
     CredentialResponse {
