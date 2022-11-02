@@ -165,8 +165,13 @@ pub struct ProofOfPossession {
     #[serde(rename = "aud")]
     pub audience: String,
 
+    #[serde(rename = "nbf")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub not_before: Option<Timestamp>,
+
     #[serde(rename = "iat")]
-    pub issued_at: Timestamp,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub issued_at: Option<Timestamp>,
 
     #[serde(rename = "exp")]
     pub expires_at: Timestamp,

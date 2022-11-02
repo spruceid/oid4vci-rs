@@ -220,14 +220,15 @@ where
     I: JOSEInterface<Error = E>,
 {
     let claims = {
-        let iat = VCDateTime::from(Utc::now());
+        let now = VCDateTime::from(Utc::now());
         let exp = VCDateTime::from(Utc::now() + Duration::minutes(5));
 
         ProofOfPossession {
             issuer: issuer.into(),
             audience: audience.into(),
             nonce: generate_nonce(),
-            issued_at: iat.into(),
+            not_before: Some(now.clone().into()),
+            issued_at: Some(now.into()),
             expires_at: exp.into(),
         }
     };

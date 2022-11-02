@@ -77,7 +77,7 @@ where
             let ProofOfPossession {
                 // issuer,
                 audience,
-                issued_at,
+                not_before,
                 expires_at,
                 ..
             } = {
@@ -87,11 +87,13 @@ where
 
             let now = Utc::now();
 
-            // Verification time is not before `iat`
-            let iat = issued_at.try_into()?;
-            if now < iat {
-                let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
-                return Err(err.with_desc("proof of possesion is not yet valid"));
+            // Verification time is not before `nbf`
+            if let Some(not_before) = not_before {
+                let nbf = not_before.try_into()?;
+                if now < nbf {
+                    let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
+                    return Err(err.with_desc("proof of possesion is not yet valid"));
+                }
             }
 
             // Verification time is not after `exp`
