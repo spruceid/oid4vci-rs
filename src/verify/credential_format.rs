@@ -18,7 +18,7 @@ pub fn verify_allowed_format<M, F>(
 ) -> Result<(), OIDCError>
 where
     M: Metadata,
-    F: FnOnce(&str) -> bool,
+    F: FnOnce(&str, &str) -> bool,
 {
     match format {
         None => {
@@ -26,7 +26,7 @@ where
             Err(err.with_desc("format must be present"))
         }
         Some(MaybeUnknownCredentialFormat::Unknown(format)) => match external_verifier {
-            Some(f) => match f(format) {
+            Some(f) => match f(credential_type, format) {
                 true => Ok(()),
                 false => unsupported_format!(),
             },
