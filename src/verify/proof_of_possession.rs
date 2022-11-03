@@ -4,9 +4,10 @@ use did_method_key::*;
 use did_web::*;
 use lazy_static::lazy_static;
 use ssi::{
-    did::{DIDMethods, Resource, VerificationMethod},
+    did::{DIDMethods, Resource, Source, VerificationMethod},
     did_resolve::{dereference, Content, DereferencingInputMetadata},
     jws::{decode_unverified, Header},
+    vc::{get_verification_methods_for_purpose, ProofPurpose},
 };
 
 use crate::{
@@ -25,6 +26,65 @@ lazy_static! {
     };
 }
 
+async fn get_jwk(header: &Header) -> Result<(String, ssi::jwk::JWK), OIDCError> {
+    if header.key_id.is_some() {
+        let did_url = header.key_id.to_owned().unwrap();
+        let content = dereference(
+            DID_METHODS.to_resolver(),
+            &did_url,
+            &DereferencingInputMetadata::default(),
+        )
+        .await
+        .1;
+
+        let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
+        let vm = match content {
+            Content::Object(Resource::VerificationMethod(vm)) => Ok(vm),
+            Content::DIDDocument(document) => {
+                if let VerificationMethod::Map(vm) =
+                    document.verification_method.unwrap().first().unwrap()
+                {
+                    Ok(vm.to_owned())
+                } else {
+                    Err(err.with_desc("could not find any verification method"))
+                }
+            }
+
+            _ => Err(err.with_desc("could not find specified verirication method")),
+        }?;
+
+        Ok((
+            vm.controller.clone(),
+            vm.get_jwk()
+                .map_err(|_| CredentialRequestErrorType::InvalidOrMissingProof.into())
+                .map_err(|e: OIDCError| {
+                    e.with_desc("verification method does not contain a jwk")
+                })?,
+        ))
+    } else if header.jwk.is_some() {
+        let jwk = header.jwk.to_owned().unwrap();
+
+        let did_method = DID_METHODS.get("jwk").unwrap();
+        let did_resolver = did_method.to_resolver();
+        let issuer = did_method.generate(&Source::Key(&jwk)).unwrap();
+        let verification_method = get_verification_methods_for_purpose(
+            &issuer,
+            did_resolver,
+            ProofPurpose::AssertionMethod,
+        )
+        .await
+        .unwrap()
+        .first()
+        .unwrap()
+        .to_owned();
+
+        Ok((verification_method, jwk))
+    } else {
+        let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
+        Err(err.with_desc("jwt header must contain either `key_id` or `jwk`"))
+    }
+}
+
 pub async fn verify_proof_of_possession<M>(proof: &Proof, metadata: &M) -> Result<String, OIDCError>
 where
     M: Metadata,
@@ -32,45 +92,7 @@ where
     match proof {
         Proof::JWT { jwt, .. } => {
             let header: Header = decode_unverified(jwt)?.0;
-            let did_url = header
-                .key_id
-                .ok_or_else(|| CredentialRequestErrorType::InvalidOrMissingProof.into())
-                .map_err(|e: OIDCError| e.with_desc("jwt header must contain key_id"))?;
-
-            let (controller, jwk) = {
-                let content = dereference(
-                    DID_METHODS.to_resolver(),
-                    &did_url,
-                    &DereferencingInputMetadata::default(),
-                )
-                .await
-                .1;
-
-                let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
-                let vm = match content {
-                    Content::Object(Resource::VerificationMethod(vm)) => Ok(vm),
-                    Content::DIDDocument(document) => {
-                        if let VerificationMethod::Map(vm) =
-                            document.verification_method.unwrap().first().unwrap()
-                        {
-                            Ok(vm.to_owned())
-                        } else {
-                            Err(err.with_desc("could not find any verification method"))
-                        }
-                    }
-
-                    _ => Err(err.with_desc("could not find specified verirication method")),
-                }?;
-
-                (
-                    vm.controller.clone(),
-                    vm.get_jwk()
-                        .map_err(|_| CredentialRequestErrorType::InvalidOrMissingProof.into())
-                        .map_err(|e: OIDCError| {
-                            e.with_desc("verification method does not contain a jwk")
-                        })?,
-                )
-            };
+            let (controller, jwk) = get_jwk(&header).await?;
 
             let interface = SSI::new(jwk, header.algorithm, "");
 
