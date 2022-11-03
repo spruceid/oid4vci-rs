@@ -34,7 +34,9 @@ where
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[non_exhaustive]
 pub struct AccessTokenParams {
-    pub credential_type: Vec<String>,
+    // TODO: enable credential_type: Vec<String>,
+    // (de)serialize either a single string or Vec of String's
+    pub credential_type: String,
     pub op_state: HashMap<String, Value>,
     pub allow_refresh: bool,
     pub token_type: TokenType,
@@ -43,7 +45,7 @@ pub struct AccessTokenParams {
 
 impl AccessTokenParams {
     pub fn new(
-        credential_type: Vec<String>,
+        credential_type: String,
         op_state: Option<HashMap<String, Value>>,
         token_type: &TokenType,
         expires_in: u64,
@@ -58,7 +60,7 @@ impl AccessTokenParams {
     }
 
     pub fn with_refresh(
-        credential_type: Vec<String>,
+        credential_type: String,
         op_state: Option<HashMap<String, Value>>,
         token_type: &TokenType,
         expires_in: u64,
