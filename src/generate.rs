@@ -34,9 +34,7 @@ where
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[non_exhaustive]
 pub struct AccessTokenParams {
-    // TODO: enable credential_type: Vec<String>,
-    // (de)serialize either a single string or Vec of String's
-    pub credential_type: String,
+    pub credential_type: ssi::vc::OneOrMany<String>,
     pub op_state: HashMap<String, Value>,
     pub allow_refresh: bool,
     pub token_type: TokenType,
@@ -45,7 +43,7 @@ pub struct AccessTokenParams {
 
 impl AccessTokenParams {
     pub fn new(
-        credential_type: String,
+        credential_type: ssi::vc::OneOrMany<String>,
         op_state: Option<HashMap<String, Value>>,
         token_type: &TokenType,
         expires_in: u64,
@@ -60,7 +58,7 @@ impl AccessTokenParams {
     }
 
     pub fn with_refresh(
-        credential_type: String,
+        credential_type: ssi::vc::OneOrMany<String>,
         op_state: Option<HashMap<String, Value>>,
         token_type: &TokenType,
         expires_in: u64,
@@ -72,6 +70,16 @@ impl AccessTokenParams {
             token_type: token_type.to_owned(),
             expires_in,
         }
+    }
+}
+
+// TODO: move to ssi::vc::OneOrMany impl block
+fn credential_type_to_value(credential_type: ssi::vc::OneOrMany<String>) -> serde_json::Value {
+    use ssi::vc::OneOrMany::*;
+
+    match credential_type {
+        One(v) => serde_json::Value::String(v),
+        Many(v) => serde_json::Value::Array(v.into_iter().map(serde_json::Value::String).collect()),
     }
 }
 
@@ -90,13 +98,23 @@ where
     E: From<serde_json::Error>,
     I: JOSEInterface<Error = E>,
 {
-    let now: crate::Timestamp = VCDateTime::from(Utc::now()).into();
-    let exp: crate::Timestamp = VCDateTime::from(Utc::now() + Duration::days(1)).into();
+    use chrono::DurationRound;
+
+    let now = Utc::now();
+    let now = now.duration_trunc(Duration::seconds(1)).unwrap();
+    let now: crate::Timestamp = VCDateTime::from(now).into();
+
+    let exp = Utc::now() + Duration::days(1);
+    let exp = exp.duration_trunc(Duration::seconds(1)).unwrap();
+    let exp: crate::Timestamp = VCDateTime::from(exp).into();
 
     let now: NumericDate = now.into();
     let exp: NumericDate = exp.into();
 
-    op_state.insert("credential_type".to_string(), credential_type.into());
+    op_state.insert(
+        "credential_type".to_string(),
+        credential_type_to_value(credential_type),
+    );
 
     let access_token = interface.jwt_encode_sign(&serde_json::to_string(&json!({
         "op_state": op_state,
