@@ -10,15 +10,25 @@ macro_rules! unsupported_format {
     }};
 }
 
+pub trait ExternalFormatVerifier {
+    fn verify(&self, credential_type: &str, format: &str) -> bool;
+}
+
+impl ExternalFormatVerifier for () {
+    fn verify(&self, _: &str, _: &str) -> bool {
+        false
+    }
+}
+
 pub fn verify_allowed_format<M, F>(
     credential_type: &str,
     format: &Option<MaybeUnknownCredentialFormat>,
     metadata: &M,
-    external_verifier: Option<F>,
+    external_verifier: Option<&F>,
 ) -> Result<(), OIDCError>
 where
     M: Metadata,
-    F: FnOnce(&str, &str) -> bool,
+    F: ExternalFormatVerifier,
 {
     match format {
         None => {
@@ -26,7 +36,7 @@ where
             Err(err.with_desc("format must be present"))
         }
         Some(MaybeUnknownCredentialFormat::Unknown(format)) => match external_verifier {
-            Some(f) => match f(credential_type, format) {
+            Some(verifier) => match verifier.verify(credential_type, format) {
                 true => Ok(()),
                 false => unsupported_format!(),
             },

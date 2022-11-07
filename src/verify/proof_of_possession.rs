@@ -29,13 +29,12 @@ lazy_static! {
 async fn get_jwk(header: &Header) -> Result<(String, ssi::jwk::JWK), OIDCError> {
     if header.key_id.is_some() {
         let did_url = header.key_id.to_owned().unwrap();
-        let content = dereference(
+        let (_, content, _) = dereference(
             DID_METHODS.to_resolver(),
             &did_url,
             &DereferencingInputMetadata::default(),
         )
-        .await
-        .1;
+        .await;
 
         let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
         let vm = match content {
@@ -50,7 +49,7 @@ async fn get_jwk(header: &Header) -> Result<(String, ssi::jwk::JWK), OIDCError> 
                 }
             }
 
-            _ => Err(err.with_desc("could not find specified verirication method")),
+            _ => Err(err.with_desc("could not find specified verification method")),
         }?;
 
         Ok((

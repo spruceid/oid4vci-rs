@@ -1,6 +1,4 @@
-use crate::{error::OIDCError, jose::*, CredentialRequest, Metadata};
-
-pub type ExternalFormatVerifier = fn(&str, &str) -> bool;
+use crate::{error::OIDCError, jose::*, CredentialRequest, ExternalFormatVerifier, Metadata};
 
 pub async fn verify_credential_request<I, M, F>(
     CredentialRequest {
@@ -12,12 +10,12 @@ pub async fn verify_credential_request<I, M, F>(
     token: &str,
     metadata: &M,
     interface: &I,
-    external_format_verifier: Option<F>,
+    external_format_verifier: Option<&F>,
 ) -> Result<String, OIDCError>
 where
     I: JOSEInterface<Error = OIDCError>,
     M: Metadata,
-    F: FnOnce(&str, &str) -> bool,
+    F: ExternalFormatVerifier,
 {
     let access_token = super::verify_access_token(token, interface)?;
 
