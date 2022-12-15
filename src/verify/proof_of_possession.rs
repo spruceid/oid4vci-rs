@@ -19,9 +19,9 @@ use crate::{
 lazy_static! {
     static ref DID_METHODS: DIDMethods<'static> = {
         let mut methods = DIDMethods::default();
-        methods.insert(&DIDKey);
-        methods.insert(&DIDJWK);
-        methods.insert(&DIDWeb);
+        methods.insert(Box::new(DIDKey));
+        methods.insert(Box::new(DIDJWK));
+        methods.insert(Box::new(DIDWeb));
         methods
     };
 }
