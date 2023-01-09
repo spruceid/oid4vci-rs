@@ -15,6 +15,7 @@ pub trait JOSEInterface {
     fn get_public_key(&self) -> Result<JWK, Self::Error>;
 }
 
+#[derive(Clone)]
 pub struct SSI {
     pub jwk: JWK,
     pub alg: Algorithm,
