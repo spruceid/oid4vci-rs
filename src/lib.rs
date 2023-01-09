@@ -53,7 +53,7 @@ impl From<CredentialFormat> for MaybeUnknownCredentialFormat {
 impl From<&str> for MaybeUnknownCredentialFormat {
     fn from(value: &str) -> Self {
         serde_json::from_str::<CredentialFormat>(&format!("\"{}\"", value))
-            .map(|v| Self::Known(v))
+            .map(Self::Known)
             .unwrap_or_else(|_| Self::Unknown(value.into()))
     }
 }
