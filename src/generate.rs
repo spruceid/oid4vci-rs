@@ -4,11 +4,12 @@ use chrono::{prelude::*, Duration};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use ssi::vc::{NumericDate, VCDateTime};
+use url::Url;
 
 use crate::{
-    codec::*, jose::*, nonce::generate_nonce, CredentialFormat, CredentialRequest,
-    CredentialResponse, MaybeUnknownCredentialFormat, PreAuthzCode, Proof, ProofOfPossession,
-    TokenResponse, TokenType,
+    codec::*, jose::*, CredentialFormat, CredentialRequest, CredentialResponse,
+    MaybeUnknownCredentialFormat, OIDCError, PreAuthzCode, Proof, ProofOfPossession,
+    ProofOfPossessionParams, TokenResponse, TokenType,
 };
 
 pub fn generate_preauthz_code<I, E>(mut params: PreAuthzCode, interface: &I) -> Result<String, E>
@@ -231,32 +232,23 @@ pub fn generate_credential_request(
     }
 }
 
+#[deprecated = "Use ProofOfPossession::generate and ProofOfPossession::to_jwt"]
 pub fn generate_proof_of_possession<I, E>(
     issuer: &str,
     audience: &str,
-    interface: &I,
-) -> Result<Proof, E>
-where
-    E: From<serde_json::Error>,
-    I: JOSEInterface<Error = E>,
-{
-    let claims = {
-        let now = VCDateTime::from(Utc::now());
-        let exp = VCDateTime::from(Utc::now() + Duration::minutes(5));
-
-        ProofOfPossession {
-            issuer: issuer.into(),
-            audience: audience.into(),
-            nonce: generate_nonce(),
-            not_before: Some(now.clone().into()),
-            issued_at: Some(now.into()),
-            expires_at: exp.into(),
-        }
-    };
-
-    let payload = serde_json::to_string(&claims)?;
-    let jwt = interface.jwt_encode_sign(&payload)?;
-
+    interface: &SSI,
+) -> Result<Proof, OIDCError> {
+    let jwk = interface.jwk.clone();
+    let pop = ProofOfPossession::generate(
+        &ProofOfPossessionParams {
+            audience: Url::parse(audience).unwrap(),
+            issuer: issuer.to_string(),
+            nonce: None,
+            controller: crate::ProofOfPossessionController { vm: None, jwk },
+        },
+        Duration::minutes(5),
+    )?;
+    let jwt = pop.to_jwt()?;
     Ok(Proof::JWT { jwt })
 }
 
@@ -273,12 +265,6 @@ pub fn generate_credential_response(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_generate_preauthz_code() {}
-
-    #[test]
-    fn test_generate_access_token() {}
 
     #[test]
     fn test_generate_initiate_issuance_request() {
@@ -364,13 +350,4 @@ mod tests {
                 &pre-authorized_code=SplxlOBeZQQYbYS6WxSbIA"
         );
     }
-
-    #[test]
-    fn test_generate_credential_request() {}
-
-    #[test]
-    fn test_generate_proof_of_possession() {}
-
-    #[test]
-    fn test_generate_credential_response() {}
 }

@@ -24,6 +24,7 @@ where
     let credential_type = credential_type.to_owned().unwrap();
     super::verify_allowed_format(&credential_type, format, metadata, external_format_verifier)?;
 
+    #[allow(deprecated)]
     let did = super::verify_proof_of_possession(proof, metadata).await?;
 
     Ok(did)

@@ -21,3 +21,7 @@ chrono = { version = "0.4", features = ["serde"] }
 base64 = "0.12"
 lazy_static = "1.4"
 josekit = "0.8"
+url = { version = "2.3.1", features = ["serde"] }
+
+[dev-dependencies]
+tokio = { version = "1.24.2", features = ["macros"] }

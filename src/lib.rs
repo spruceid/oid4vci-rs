@@ -8,6 +8,7 @@ mod error;
 mod generate;
 mod jose;
 mod nonce;
+pub mod proof_of_possession;
 mod verify;
 
 use ssi::{
@@ -19,6 +20,7 @@ pub use codec::*;
 pub use error::*;
 pub use generate::*;
 pub use jose::*;
+pub use proof_of_possession::*;
 pub use verify::*;
 
 pub trait Metadata {
@@ -173,28 +175,4 @@ impl TryInto<DateTime<FixedOffset>> for Timestamp {
             Self::VCDateTime(vcdt) => Ok(crate::codec::ToDateTime::from_vcdatetime(vcdt)?),
         }
     }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[non_exhaustive]
-pub struct ProofOfPossession {
-    #[serde(rename = "iss")]
-    pub issuer: String,
-
-    #[serde(rename = "aud")]
-    pub audience: String,
-
-    #[serde(rename = "nbf")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub not_before: Option<Timestamp>,
-
-    #[serde(rename = "iat")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub issued_at: Option<Timestamp>,
-
-    #[serde(rename = "exp")]
-    pub expires_at: Timestamp,
-
-    #[serde(rename = "jti")]
-    pub nonce: String,
 }
