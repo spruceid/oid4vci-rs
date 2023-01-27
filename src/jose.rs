@@ -9,7 +9,9 @@ pub trait JOSEInterface {
     fn jwt_encode_sign(&self, bytes: &str) -> Result<String, Self::Error>;
     fn jwt_decode_verify(&self, jwt: &str) -> Result<(Header, Vec<u8>), Self::Error>;
 
+    #[cfg(feature = "encryption")]
     fn jwe_encrypt(&self, bytes: &str) -> Result<String, Self::Error>;
+    #[cfg(feature = "encryption")]
     fn jwe_decrypt(&self, jwe: &str) -> Result<String, Self::Error>;
 
     fn get_public_key(&self) -> Result<JWK, Self::Error>;
@@ -44,6 +46,7 @@ impl JOSEInterface for SSI {
         ssi::jws::decode_verify(jwt, &self.jwk).map_err(|e| e.into())
     }
 
+    #[cfg(feature = "encryption")]
     fn jwe_encrypt(&self, bytes: &str) -> Result<String, Self::Error> {
         use josekit::{
             jwe::{JweHeader, PBES2_HS512_A256KW},
@@ -63,6 +66,7 @@ impl JOSEInterface for SSI {
         Ok(jwt)
     }
 
+    #[cfg(feature = "encryption")]
     fn jwe_decrypt(&self, jwe: &str) -> Result<String, Self::Error> {
         use josekit::{
             jwe::{JweHeader, PBES2_HS512_A256KW},

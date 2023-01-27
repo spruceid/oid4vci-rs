@@ -7,6 +7,7 @@ use crate::{
     Metadata, PreAuthzCode,
 };
 
+#[cfg(feature = "encryption")]
 pub fn verify_preauthz_code<I, M>(
     preauthz_code: &str,
     user_pin: Option<&str>,

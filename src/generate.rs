@@ -12,6 +12,7 @@ use crate::{
     ProofOfPossessionParams, TokenResponse, TokenType,
 };
 
+#[cfg(feature = "encryption")]
 pub fn generate_preauthz_code<I, E>(mut params: PreAuthzCode, interface: &I) -> Result<String, E>
 where
     E: From<serde_json::Error>,

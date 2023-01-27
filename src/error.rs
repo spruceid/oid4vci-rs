@@ -107,6 +107,7 @@ impl Default for OIDCError {
     }
 }
 
+#[cfg(feature = "encryption")]
 #[cfg(debug_assertions)]
 impl From<josekit::JoseError> for OIDCError {
     fn from(e: josekit::JoseError) -> Self {
@@ -118,7 +119,8 @@ impl From<josekit::JoseError> for OIDCError {
     }
 }
 
-#[cfg(not(debug_assertions))]
+#[cfg(feature = "encryption")]
+#[cfg(not(debug_assertions))] // TODO not the right way of doing it
 impl From<josekit::JoseError> for OIDCError {
     fn from(_: josekit::JoseError) -> Self {
         OIDCError {
