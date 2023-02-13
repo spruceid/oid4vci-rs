@@ -111,7 +111,7 @@ impl ProofOfPossession {
 
         if header.type_ != Some(JWS_TYPE.to_string()) {
             let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
-            return Err(err.with_desc(&format!("invalid JWS header type, must be {}", JWS_TYPE)));
+            return Err(err.with_desc(&format!("invalid JWS header type, must be {JWS_TYPE}")));
         }
         if header.algorithm == Algorithm::None {
             let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
@@ -174,8 +174,7 @@ impl ProofOfPossession {
         if self.body.audience != *expected_audience {
             let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
             return Err(err.with_desc(&format!(
-                "audience does not match, must be '{}'",
-                expected_audience
+                "audience does not match, must be '{expected_audience}'"
             )));
         }
 
@@ -188,7 +187,7 @@ impl ProofOfPossession {
         if let Some(did) = &params.controller_did {
             if Some(did) != self.controller.vm.as_ref() {
                 let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
-                return Err(err.with_desc(&format!("DID does not match, must be {}", did)));
+                return Err(err.with_desc(&format!("DID does not match, must be {did}")));
             }
         }
 

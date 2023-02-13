@@ -197,12 +197,12 @@ pub fn generate_initiate_issuance_request(
 
     let base_url = base_url.unwrap_or("");
     let base_url = if !base_url.is_empty() && !base_url.ends_with('/') && !base_url.contains('/') {
-        format!("{}/", base_url)
+        format!("{base_url}/")
     } else {
         base_url.into()
     };
 
-    format!("{}://{}?{}", protocol, base_url, params)
+    format!("{protocol}://{base_url}?{params}")
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

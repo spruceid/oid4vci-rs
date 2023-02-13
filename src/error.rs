@@ -113,7 +113,7 @@ impl From<josekit::JoseError> for OIDCError {
     fn from(e: josekit::JoseError) -> Self {
         OIDCError {
             ty: OIDCErrorType::Token(TokenErrorType::InvalidRequest),
-            description: Some(format!("[josekit] {}", e)),
+            description: Some(format!("[josekit] {e}")),
             uri: None,
         }
     }
@@ -136,7 +136,7 @@ impl From<ssi::jws::Error> for OIDCError {
     fn from(e: ssi::jws::Error) -> Self {
         OIDCError {
             ty: OIDCErrorType::CredentialRequest(CredentialRequestErrorType::InvalidRequest),
-            description: Some(format!("[ssi::jws] {}", e)),
+            description: Some(format!("[ssi::jws] {e}")),
             uri: None,
         }
     }
@@ -158,7 +158,7 @@ impl From<ssi::jwk::Error> for OIDCError {
     fn from(e: ssi::jwk::Error) -> Self {
         OIDCError {
             ty: OIDCErrorType::Token(TokenErrorType::InvalidRequest),
-            description: Some(format!("[ssi::jwk] {}", e)),
+            description: Some(format!("[ssi::jwk] {e}")),
             uri: None,
         }
     }
@@ -180,7 +180,7 @@ impl From<ssi::vc::Error> for OIDCError {
     fn from(e: ssi::vc::Error) -> Self {
         OIDCError {
             ty: OIDCErrorType::Token(TokenErrorType::InvalidRequest),
-            description: Some(format!("[ssi::vc] {}", e)),
+            description: Some(format!("[ssi::vc] {e}")),
             uri: None,
         }
     }
