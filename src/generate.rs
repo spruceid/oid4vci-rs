@@ -95,6 +95,7 @@ pub fn generate_access_token<I, E>(
         ..
     }: AccessTokenParams,
     interface: &I,
+    authorization_pending: bool,
 ) -> Result<TokenResponse, E>
 where
     E: From<serde_json::Error>,
@@ -139,6 +140,7 @@ where
         refresh_token,
         token_type,
         expires_in,
+        authorization_pending: Some(authorization_pending),
     })
 }
 

@@ -93,6 +93,8 @@ pub struct TokenResponse {
     pub token_type: TokenType,
 
     pub expires_in: u64,
+
+    pub authorization_pending: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
