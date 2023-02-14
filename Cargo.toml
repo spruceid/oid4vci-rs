@@ -26,6 +26,7 @@ base64 = "0.12"
 lazy_static = "1.4"
 josekit = { version = "0.8", optional = true }
 url = { version = "2.3.1", features = ["serde"] }
+rocket = { version = "0.5.0-rc.2", features = ["json"] }
 
 [dev-dependencies]
 tokio = { version = "1.24.2", features = ["macros"] }

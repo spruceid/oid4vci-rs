@@ -1,4 +1,5 @@
 use chrono::{DateTime, FixedOffset, Utc};
+use rocket::form::FromForm;
 use serde::{ser::Serializer, Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -54,7 +55,7 @@ impl From<CredentialFormat> for MaybeUnknownCredentialFormat {
 
 impl From<&str> for MaybeUnknownCredentialFormat {
     fn from(value: &str) -> Self {
-        serde_json::from_str::<CredentialFormat>(&format!("\"{}\"", value))
+        serde_json::from_str::<CredentialFormat>(&format!("\"{value}\""))
             .map(Self::Known)
             .unwrap_or_else(|_| Self::Unknown(value.into()))
     }
@@ -93,6 +94,19 @@ pub struct TokenResponse {
     pub token_type: TokenType,
 
     pub expires_in: u64,
+
+    pub authorization_pending: Option<bool>,
+}
+
+#[derive(Debug, FromForm, Deserialize, Serialize)]
+pub struct TokenQueryParams {
+    pub grant_type: String,
+
+    #[field(name = "pre-authorized_code")]
+    #[serde(rename = "pre-authorized_code")]
+    pub pre_authz_code: String,
+
+    pub pin: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
