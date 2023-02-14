@@ -107,8 +107,6 @@ pub struct TokenQueryParams {
     pub pre_authz_code: String,
 
     pub pin: Option<String>,
-
-    pub authorization_pending: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
