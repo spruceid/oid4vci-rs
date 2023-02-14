@@ -1,4 +1,5 @@
 use chrono::{DateTime, FixedOffset, Utc};
+use rocket::form::FromForm;
 use serde::{ser::Serializer, Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -95,6 +96,19 @@ pub struct TokenResponse {
     pub expires_in: u64,
 
     pub authorization_pending: Option<bool>,
+}
+
+#[derive(Debug, FromForm, Deserialize, Serialize)]
+pub struct TokenQueryParams {
+    pub grant_type: String,
+
+    #[field(name = "pre-authorized_code")]
+    #[serde(rename = "pre-authorized_code")]
+    pub pre_authz_code: String,
+
+    pub pin: Option<String>,
+
+    pub authorization_pending: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
