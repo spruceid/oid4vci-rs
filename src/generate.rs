@@ -76,7 +76,7 @@ impl AccessTokenParams {
 }
 
 // TODO: move to ssi::vc::OneOrMany impl block
-fn credential_type_to_value(credential_type: ssi::vc::OneOrMany<String>) -> serde_json::Value {
+pub fn credential_type_to_value(credential_type: ssi::vc::OneOrMany<String>) -> serde_json::Value {
     use ssi::vc::OneOrMany::*;
 
     match credential_type {
@@ -85,6 +85,7 @@ fn credential_type_to_value(credential_type: ssi::vc::OneOrMany<String>) -> serd
     }
 }
 
+#[deprecated = "Use token::request"]
 pub fn generate_access_token<I, E>(
     AccessTokenParams {
         credential_type,
