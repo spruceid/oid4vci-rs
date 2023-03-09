@@ -13,7 +13,7 @@ default = ["encryption"]
 encryption = ["josekit"]
 
 [dependencies]
-ssi = "0.5.0"
+ssi = "0.6.0"
 did-method-key = "0.2.0"
 did-jwk = "0.1.0"
 did-web = "0.2.0" # TODO use traits
