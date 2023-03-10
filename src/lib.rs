@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use chrono::{DateTime, FixedOffset, Utc};
 use rocket::form::FromForm;
 use serde::{ser::Serializer, Deserialize, Serialize};
@@ -88,7 +90,6 @@ pub enum TokenType {
 
 #[deprecated = "Use token::Response"]
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[non_exhaustive]
 pub struct TokenResponse {
     pub access_token: String,
 

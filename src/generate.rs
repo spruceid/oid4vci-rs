@@ -9,7 +9,7 @@ use url::Url;
 use crate::{
     codec::*, jose::*, CredentialFormat, CredentialRequest, CredentialResponse,
     MaybeUnknownCredentialFormat, OIDCError, PreAuthzCode, Proof, ProofOfPossession,
-    ProofOfPossessionParams, TokenResponse, TokenType,
+    ProofOfPossessionParams, TokenType,
 };
 
 #[cfg(feature = "encryption")]
@@ -86,6 +86,7 @@ pub fn credential_type_to_value(credential_type: ssi::vc::OneOrMany<String>) -> 
 }
 
 #[deprecated = "Use token::request"]
+#[allow(deprecated)]
 pub fn generate_access_token<I, E>(
     AccessTokenParams {
         credential_type,
@@ -96,7 +97,7 @@ pub fn generate_access_token<I, E>(
         ..
     }: AccessTokenParams,
     interface: &I,
-) -> Result<TokenResponse, E>
+) -> Result<crate::TokenResponse, E>
 where
     E: From<serde_json::Error>,
     I: JOSEInterface<Error = E>,
@@ -135,7 +136,7 @@ where
         None
     };
 
-    Ok(TokenResponse {
+    Ok(crate::TokenResponse {
         access_token,
         refresh_token,
         token_type,
