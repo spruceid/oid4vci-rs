@@ -1,6 +1,12 @@
-use crate::{error::OIDCError, jose::*, TokenResponse};
+use crate::{error::OIDCError, jose::*};
 
-pub fn verify_token_response<I>(token: &str, interface: &I) -> Result<TokenResponse, OIDCError>
+// This is wrong, a Token Response is plain json. But I don't see it used anywhere.
+#[deprecated = "Deserialize token::Response instead"]
+#[allow(deprecated)]
+pub fn verify_token_response<I>(
+    token: &str,
+    interface: &I,
+) -> Result<crate::TokenResponse, OIDCError>
 where
     I: JOSEInterface<Error = OIDCError>,
 {

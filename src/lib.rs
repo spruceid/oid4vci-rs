@@ -1,8 +1,12 @@
+#![allow(deprecated)]
+
 use chrono::{DateTime, FixedOffset, Utc};
 use rocket::form::FromForm;
 use serde::{ser::Serializer, Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+
+pub use openidconnect;
 
 mod codec;
 mod error;
@@ -10,6 +14,7 @@ mod generate;
 mod jose;
 mod nonce;
 pub mod proof_of_possession;
+pub mod token;
 mod verify;
 
 use ssi::{
@@ -83,8 +88,8 @@ pub enum TokenType {
     Bearer,
 }
 
+#[deprecated = "Use token::Response"]
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[non_exhaustive]
 pub struct TokenResponse {
     pub access_token: String,
 
@@ -110,7 +115,6 @@ pub struct TokenQueryParams {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[non_exhaustive]
 #[serde(tag = "proof_type")]
 pub enum Proof {
     #[serde(rename = "jwt")]

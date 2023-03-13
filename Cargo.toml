@@ -13,20 +13,22 @@ default = ["encryption"]
 encryption = ["josekit"]
 
 [dependencies]
-ssi = "0.5.0"
+ssi = "0.6.0"
 did-method-key = "0.2.0"
 did-jwk = "0.1.0"
 did-web = "0.2.0" # TODO use traits
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["preserve_order"] }
-percent-encoding = { version = "2.1" }
+percent-encoding = "2.2"
 rand = { version = "0.8" }
 chrono = { version = "0.4", features = ["serde"] }
-base64 = "0.12"
+base64 = "0.21"
 lazy_static = "1.4"
 josekit = { version = "0.8", optional = true }
 url = { version = "2.3.1", features = ["serde"] }
 rocket = { version = "0.5.0-rc.2", features = ["json"] }
+openidconnect = "3.0.0-alpha.1"
+async-signature = "0.3.0"
 
 [dev-dependencies]
-tokio = { version = "1.24.2", features = ["macros"] }
+tokio = { version = "1.25.0", features = ["macros"] }
