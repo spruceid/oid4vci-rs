@@ -28,8 +28,7 @@ pub enum Request {
         refresh_token: String,
         #[serde(alias = "pin")]
         user_pin: Option<String>,
-    }
-
+    },
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
