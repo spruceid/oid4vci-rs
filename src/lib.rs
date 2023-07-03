@@ -81,14 +81,6 @@ pub struct PreAuthzCode {
     pub extra: HashMap<String, Value>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct RefreshToken {
-    pub case_id: String,
-    pub app_install_id: String,
-    pub ibm_access_token: String,
-    pub device_jwk: String,
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Hash, Eq)]
 #[non_exhaustive]
 pub enum TokenType {
