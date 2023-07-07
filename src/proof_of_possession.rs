@@ -88,12 +88,12 @@ impl ProofOfPossession {
         let (h_kid, h_jwk) = match (self.controller.vm.clone(), jwk.key_id.clone()) {
             (Some(did), _) => (Some(did), None),
             (None, Some(kid)) => (Some(kid), None),
-            (None, None) => (None, Some(jwk)),
+            (None, None) => (None, Some(jwk.to_public())),
         };
         let header = Header {
             algorithm: alg,
             key_id: h_kid,
-            jwk: h_jwk.cloned(),
+            jwk: h_jwk,
             type_: Some(JWS_TYPE.to_string()),
             ..Default::default()
         };
