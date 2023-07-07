@@ -22,6 +22,13 @@ pub enum Request {
         #[serde(alias = "pin")]
         user_pin: Option<String>,
     },
+    #[serde(rename = "urn:ietf:params:oauth:grant-type:refresh_token")]
+    RefreshToken {
+        client_id: Option<ClientId>,
+        refresh_token: String,
+        #[serde(alias = "pin")]
+        user_pin: Option<String>,
+    },
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
