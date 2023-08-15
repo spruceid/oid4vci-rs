@@ -234,35 +234,46 @@ async fn get_jwk_from_kid(
 
 #[cfg(test)]
 mod test {
-    use chrono::{DateTime, FixedOffset};
     use did_jwk::DIDJWK;
     use serde_json::json;
     use ssi::did::{DIDMethod, Source};
 
     use super::*;
 
-    #[tokio::test]
-    async fn basic() {
+    fn generate_pop(expires_in: Duration) -> (ProofOfPossession, String) {
         let jwk = serde_json::from_value(json!({"kty":"OKP","crv":"Ed25519","x":"h3GzIK3pU8oTspVBKstiPSHR3VH_USS2FA0NrAOZ51s","d":"pfYMFvJ-LlMO4-EBBsrjpfAVz5UEYNVgbTphLPZypbE"})).unwrap();
         let did = DIDJWK.generate(&Source::Key(&jwk)).unwrap();
 
-        let pop = ProofOfPossession::generate(
-            &ProofOfPossessionParams {
-                issuer: "test".to_string(),
-                audience: Url::parse("http://localhost:300").unwrap(),
-                nonce: None,
-                controller: ProofOfPossessionController {
-                    jwk,
-                    vm: Some(did.clone()),
+        (
+            ProofOfPossession::generate(
+                &ProofOfPossessionParams {
+                    issuer: "test".to_string(),
+                    audience: Url::parse("http://localhost:300").unwrap(),
+                    nonce: None,
+                    controller: ProofOfPossessionController {
+                        jwk,
+                        vm: Some(did.clone()),
+                    },
                 },
-            },
-            Duration::minutes(5),
+                expires_in,
+            )
+            .unwrap(),
+            did,
         )
-        .unwrap()
-        .to_jwt()
-        .unwrap();
+    }
 
-        let pop = ProofOfPossession::from_jwt(&pop, &DIDJWK).await.unwrap();
+    #[tokio::test]
+    async fn basic() {
+        let expires_in = Duration::minutes(5);
+
+        let (pop, did) = generate_pop(expires_in);
+
+        let pop_jwt = pop.to_jwt().unwrap();
+
+        let pop = ProofOfPossession::from_jwt(&pop_jwt, &DIDJWK)
+            .await
+            .unwrap();
+
         pop.verify(&ProofOfPossessionVerificationParams {
             nonce: pop.body.nonce.clone(),
             audience: pop.body.audience.clone(),
@@ -278,37 +289,20 @@ mod test {
 
     #[tokio::test]
     async fn nbf_tolerance() {
-        let jwk = serde_json::from_value(json!({"kty":"OKP","crv":"Ed25519","x":"h3GzIK3pU8oTspVBKstiPSHR3VH_USS2FA0NrAOZ51s","d":"pfYMFvJ-LlMO4-EBBsrjpfAVz5UEYNVgbTphLPZypbE"})).unwrap();
-        let did = DIDJWK.generate(&Source::Key(&jwk)).unwrap();
+        let expires_in = Duration::minutes(5);
 
-        let mut pop = ProofOfPossession::generate(
-            &ProofOfPossessionParams {
-                issuer: "test".to_string(),
-                audience: Url::parse("http://localhost:300").unwrap(),
-                nonce: None,
-                controller: ProofOfPossessionController {
-                    jwk,
-                    vm: Some(did.clone()),
-                },
-            },
-            Duration::minutes(5),
-        )
-        .unwrap();
+        let (mut pop, did) = generate_pop(expires_in);
 
-        let nbf = pop
-            .body
-            .not_before
-            .as_ref()
-            .map(|nbf| nbf.clone().try_into())
-            .transpose()
-            .unwrap()
-            .map(|nbf: DateTime<FixedOffset>| nbf + Duration::minutes(5))
+        // Not to be used before now + 5 minutes.
+        let nbf = Some(Utc::now())
+            .map(|nbf| nbf + Duration::minutes(5))
             .map(VCDateTime::from)
             .map(Timestamp::from);
 
         pop.body.not_before = nbf;
 
         let pop_jwt = pop.to_jwt().unwrap();
+
         let pop = ProofOfPossession::from_jwt(&pop_jwt, &DIDJWK)
             .await
             .unwrap();
@@ -336,24 +330,13 @@ mod test {
 
     #[tokio::test]
     async fn exp_tolerance() {
-        let jwk = serde_json::from_value(json!({"kty":"OKP","crv":"Ed25519","x":"h3GzIK3pU8oTspVBKstiPSHR3VH_USS2FA0NrAOZ51s","d":"pfYMFvJ-LlMO4-EBBsrjpfAVz5UEYNVgbTphLPZypbE"})).unwrap();
-        let did = DIDJWK.generate(&Source::Key(&jwk)).unwrap();
+        // Expires immediately.
+        let expires_in = Duration::minutes(0);
 
-        let pop = ProofOfPossession::generate(
-            &ProofOfPossessionParams {
-                issuer: "test".to_string(),
-                audience: Url::parse("http://localhost:300").unwrap(),
-                nonce: None,
-                controller: ProofOfPossessionController {
-                    jwk,
-                    vm: Some(did.clone()),
-                },
-            },
-            Duration::zero(),
-        )
-        .unwrap();
+        let (pop, did) = generate_pop(expires_in);
 
         let pop_jwt = pop.to_jwt().unwrap();
+
         let pop = ProofOfPossession::from_jwt(&pop_jwt, &DIDJWK)
             .await
             .unwrap();
