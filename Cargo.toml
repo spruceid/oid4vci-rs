@@ -16,7 +16,7 @@ encryption = ["josekit"]
 ssi = "0.6.0"
 did-method-key = "0.2.0"
 did-jwk = "0.1.0"
-did-web = "0.2.0" # TODO use traits
+did-web = "0.2.0"                                               # TODO use traits
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["preserve_order"] }
 percent-encoding = "2.2"

@@ -57,6 +57,10 @@ pub struct ProofOfPossessionVerificationParams {
     pub nonce: String,
     pub controller_did: Option<String>,
     pub controller_jwk: Option<JWK>,
+    /// Slack in nbf validation to deal with clock synchronisation issues.
+    pub nbf_tolerance: Option<Duration>,
+    /// Slack in exp validation to deal with clock synchronisation issues.
+    pub exp_tolerance: Option<Duration>,
 }
 
 impl ProofOfPossession {
@@ -148,18 +152,21 @@ impl ProofOfPossession {
     ) -> Result<(), OIDCError> {
         let now = Utc::now();
 
+        let nbf_tolerance = params.nbf_tolerance.unwrap_or_else(Duration::zero);
+        let exp_tolerance = params.exp_tolerance.unwrap_or_else(Duration::zero);
+
         if let Some(not_before) = self.body.not_before.clone() {
             let nbf = not_before.try_into()?;
-            if now < nbf {
+            if (now + nbf_tolerance) < nbf {
                 let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
-                return Err(err.with_desc("proof of possesion is not yet valid"));
+                return Err(err.with_desc("proof of possession is not yet valid"));
             }
         }
 
         let exp = self.body.expires_at.clone().try_into()?;
-        if now > exp {
+        if (now - exp_tolerance) > exp {
             let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
-            return Err(err.with_desc("proof of possesion is expired"));
+            return Err(err.with_desc("proof of possession has expired"));
         }
 
         if self.body.issuer != params.issuer {
@@ -233,36 +240,125 @@ mod test {
 
     use super::*;
 
-    #[tokio::test]
-    async fn basic() {
+    fn generate_pop(expires_in: Duration) -> (ProofOfPossession, String) {
         let jwk = serde_json::from_value(json!({"kty":"OKP","crv":"Ed25519","x":"h3GzIK3pU8oTspVBKstiPSHR3VH_USS2FA0NrAOZ51s","d":"pfYMFvJ-LlMO4-EBBsrjpfAVz5UEYNVgbTphLPZypbE"})).unwrap();
         let did = DIDJWK.generate(&Source::Key(&jwk)).unwrap();
 
-        let pop = ProofOfPossession::generate(
-            &ProofOfPossessionParams {
-                issuer: "test".to_string(),
-                audience: Url::parse("http://localhost:300").unwrap(),
-                nonce: None,
-                controller: ProofOfPossessionController {
-                    jwk,
-                    vm: Some(did.clone()),
+        (
+            ProofOfPossession::generate(
+                &ProofOfPossessionParams {
+                    issuer: "test".to_string(),
+                    audience: Url::parse("http://localhost:300").unwrap(),
+                    nonce: None,
+                    controller: ProofOfPossessionController {
+                        jwk,
+                        vm: Some(did.clone()),
+                    },
                 },
-            },
-            Duration::minutes(5),
+                expires_in,
+            )
+            .unwrap(),
+            did,
         )
-        .unwrap()
-        .to_jwt()
-        .unwrap();
+    }
 
-        let pop = ProofOfPossession::from_jwt(&pop, &DIDJWK).await.unwrap();
+    #[tokio::test]
+    async fn basic() {
+        let expires_in = Duration::minutes(5);
+
+        let (pop, did) = generate_pop(expires_in);
+
+        let pop_jwt = pop.to_jwt().unwrap();
+
+        let pop = ProofOfPossession::from_jwt(&pop_jwt, &DIDJWK)
+            .await
+            .unwrap();
+
         pop.verify(&ProofOfPossessionVerificationParams {
             nonce: pop.body.nonce.clone(),
             audience: pop.body.audience.clone(),
             issuer: "test".to_string(),
             controller_did: Some(did),
             controller_jwk: None,
+            nbf_tolerance: None,
+            exp_tolerance: None,
         })
         .await
         .unwrap();
+    }
+
+    #[tokio::test]
+    async fn nbf_tolerance() {
+        let expires_in = Duration::minutes(5);
+
+        let (mut pop, did) = generate_pop(expires_in);
+
+        // Not to be used before now + 5 minutes.
+        let nbf = Some(Utc::now())
+            .map(|nbf| nbf + Duration::minutes(5))
+            .map(VCDateTime::from)
+            .map(Timestamp::from);
+
+        pop.body.not_before = nbf;
+
+        let pop_jwt = pop.to_jwt().unwrap();
+
+        let pop = ProofOfPossession::from_jwt(&pop_jwt, &DIDJWK)
+            .await
+            .unwrap();
+
+        let mut verification_params = ProofOfPossessionVerificationParams {
+            nonce: pop.body.nonce.clone(),
+            audience: pop.body.audience.clone(),
+            issuer: "test".to_string(),
+            controller_did: Some(did),
+            controller_jwk: None,
+            nbf_tolerance: None,
+            exp_tolerance: None,
+        };
+
+        pop.verify(&verification_params)
+            .await
+            .expect_err("should have failed due to nbf");
+
+        verification_params.nbf_tolerance = Some(Duration::minutes(5));
+
+        pop.verify(&verification_params)
+            .await
+            .expect("should have passed with nbf tolerance");
+    }
+
+    #[tokio::test]
+    async fn exp_tolerance() {
+        // Expires immediately.
+        let expires_in = Duration::minutes(0);
+
+        let (pop, did) = generate_pop(expires_in);
+
+        let pop_jwt = pop.to_jwt().unwrap();
+
+        let pop = ProofOfPossession::from_jwt(&pop_jwt, &DIDJWK)
+            .await
+            .unwrap();
+
+        let mut verification_params = ProofOfPossessionVerificationParams {
+            nonce: pop.body.nonce.clone(),
+            audience: pop.body.audience.clone(),
+            issuer: "test".to_string(),
+            controller_did: Some(did),
+            controller_jwk: None,
+            nbf_tolerance: None,
+            exp_tolerance: None,
+        };
+
+        pop.verify(&verification_params)
+            .await
+            .expect_err("should have failed due to exp");
+
+        verification_params.exp_tolerance = Some(Duration::minutes(5));
+
+        pop.verify(&verification_params)
+            .await
+            .expect("should have passed with exp tolerance");
     }
 }
