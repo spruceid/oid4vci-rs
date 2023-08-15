@@ -36,6 +36,8 @@ where
                 nonce: pop.body.nonce.clone(),
                 controller_did: None,
                 controller_jwk: None,
+                exp_tolerance: None,
+                nbf_tolerance: None,
             })
             .await?;
 
