@@ -52,7 +52,7 @@ pub struct ProofOfPossessionParams {
 }
 
 pub struct ProofOfPossessionVerificationParams {
-    pub audience: Url,
+    pub audience: Vec<Url>,
     pub issuer: String,
     pub nonce: String,
     pub controller_did: Option<String>,
