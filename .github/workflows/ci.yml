@@ -7,10 +7,14 @@ env:
   RUSTFLAGS: "-Dwarnings"
 
 jobs:
-  build:
+  main:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        cache-on-failure: "true"
     - name: Build
       run: cargo build
     - name: Test

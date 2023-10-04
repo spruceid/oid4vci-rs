@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use openidconnect::{
     core::{CoreErrorResponseType, CoreTokenType},
-    ClientId, RedirectUrl, StandardErrorResponse, StandardTokenResponse,
+    ClientId, Nonce, RedirectUrl, StandardErrorResponse, StandardTokenResponse,
 };
 use serde::{Deserialize, Serialize};
 
@@ -34,7 +34,7 @@ pub enum Request {
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct ExtraResponseTokenFields {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub c_nonce: Option<String>,
+    pub c_nonce: Option<Nonce>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub c_nonce_expires_in: Option<Duration>,
     #[serde(skip_serializing_if = "Option::is_none")]

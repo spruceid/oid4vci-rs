@@ -1,4 +1,4 @@
-use chrono::{Duration, Utc};
+use openidconnect::Nonce;
 use serde::{Deserialize, Serialize};
 use ssi::{
     did::{Resource, VerificationMethod},
@@ -6,13 +6,28 @@ use ssi::{
     jwk::{Algorithm, JWK},
     jws::{self, Header},
     jwt,
-    vc::VCDateTime,
 };
+use time::{Duration, OffsetDateTime};
 use url::Url;
 
-use crate::{nonce::generate_nonce, CredentialRequestErrorType, OIDCError, Proof, Timestamp};
-
 const JWS_TYPE: &str = "openid4vci-proof+jwt";
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub enum KeyProofType {
+    #[serde(rename = "jwt")]
+    Jwt,
+    #[serde(rename = "cwt")]
+    Cwt,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(tag = "proof_type")]
+pub enum Proof {
+    #[serde(rename = "jwt")]
+    JWT { jwt: String },
+    #[serde(rename = "cwt")]
+    CWT { cwt: String },
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ProofOfPossessionBody {
@@ -21,15 +36,21 @@ pub struct ProofOfPossessionBody {
     #[serde(rename = "aud")]
     pub audience: Url,
     #[serde(rename = "nbf")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub not_before: Option<Timestamp>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        with = "time::serde::timestamp::option"
+    )]
+    pub not_before: Option<OffsetDateTime>,
     #[serde(rename = "iat")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub issued_at: Option<Timestamp>,
-    #[serde(rename = "exp")]
-    pub expires_at: Timestamp,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        with = "time::serde::timestamp::option"
+    )]
+    pub issued_at: Option<OffsetDateTime>,
+    #[serde(rename = "exp", with = "time::serde::timestamp")]
+    pub expires_at: OffsetDateTime,
     #[serde(rename = "jti")]
-    pub nonce: String,
+    pub nonce: Nonce,
 }
 
 #[derive(Debug, Clone)]
@@ -47,14 +68,14 @@ pub struct ProofOfPossessionController {
 pub struct ProofOfPossessionParams {
     pub audience: Url,
     pub issuer: String,
-    pub nonce: Option<String>,
+    pub nonce: Option<Nonce>,
     pub controller: ProofOfPossessionController,
 }
 
 pub struct ProofOfPossessionVerificationParams {
     pub audience: Url,
     pub issuer: String,
-    pub nonce: String,
+    pub nonce: Nonce,
     pub controller_did: Option<String>,
     pub controller_jwk: Option<JWK>,
     /// Slack in nbf validation to deal with clock synchronisation issues.
@@ -63,30 +84,75 @@ pub struct ProofOfPossessionVerificationParams {
     pub exp_tolerance: Option<Duration>,
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum VerificationError {
+    #[error("proof of possession is not yet valid")]
+    NotYetValid,
+    #[error("proof of possession is expired")]
+    Expired,
+    #[error("proof of possession issuer does not match, expected `{expected}`, found `{actual}`")]
+    InvalidIssuer { actual: String, expected: String },
+    #[error(
+        "proof of possession audience does not match, expected `{expected}`, found `{actual}`"
+    )]
+    InvalidAudience { actual: String, expected: String },
+    #[error("proof of possession JWK does not match")]
+    InvalidJWK,
+    #[error("proof of possession DID does not match, expected `{expected}`, found `{actual}`")]
+    InvalidDID { actual: String, expected: String },
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum ConversionError {
+    #[error(transparent)]
+    SerializationError(#[from] serde_json::Error),
+    #[error(transparent)]
+    SigningError(#[from] ssi::jws::Error),
+    #[error("Unable to select JWT algorithm, please specify in JWK")]
+    MissingJWKAlg,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum ParsingError {
+    #[error(transparent)]
+    InvalidJWS(#[from] ssi::jws::Error),
+    #[error("JWS type header is invalid, expected `{expected}`, found `{actual}`")]
+    InvalidJWSType { actual: String, expected: String },
+    #[error("JWS does not specify an algorithm")]
+    MissingJWSAlg,
+    #[error("Missing key parameter, exactly one of the following parameters needs to be present: (kid, jwk, x5c)")]
+    MissingKeyParameters,
+    #[error("Too many key parameters specified, exactly one of the following parameters needs to be present: (kid, jwk, x5c)")]
+    TooManyKeyParameters,
+    #[error("Could not retrieve JWK from KID: {0}")]
+    KIDDereferenceError(String),
+    #[error(transparent)]
+    DIDDereferenceError(#[from] ssi::did::Error),
+}
+
 impl ProofOfPossession {
-    pub fn generate(params: &ProofOfPossessionParams, expiry: Duration) -> Result<Self, OIDCError> {
-        let now = VCDateTime::from(Utc::now());
-        let exp = VCDateTime::from(Utc::now() + expiry);
-        Ok(Self {
+    pub fn generate(params: &ProofOfPossessionParams, expiry: Duration) -> Self {
+        let now = OffsetDateTime::now_utc();
+        let exp = now + expiry;
+        Self {
             body: ProofOfPossessionBody {
                 issuer: params.issuer.clone(),
                 audience: params.audience.clone(),
-                not_before: Some(now.clone().into()),
-                issued_at: Some(now.into()),
-                expires_at: exp.into(),
-                nonce: params.nonce.clone().unwrap_or_else(generate_nonce),
+                not_before: Some(now),
+                issued_at: Some(now),
+                expires_at: exp,
+                nonce: params.nonce.clone().unwrap_or_else(Nonce::new_random),
             },
             controller: params.controller.clone(),
-        })
+        }
     }
 
-    pub fn to_jwt(&self) -> Result<String, OIDCError> {
+    pub fn to_jwt(&self) -> Result<String, ConversionError> {
         let jwk = &self.controller.jwk;
         let alg = if let Some(a) = jwk.get_algorithm() {
             a
         } else {
-            return Err(OIDCError::default()
-                .with_desc("Unable to select JWT algorithm, please specify in JWK."));
+            return Err(ConversionError::MissingJWKAlg);
         };
         let payload = serde_json::to_string(&self.body)?;
         let (h_kid, h_jwk) = match (self.controller.vm.clone(), jwk.key_id.clone()) {
@@ -101,25 +167,30 @@ impl ProofOfPossession {
             type_: Some(JWS_TYPE.to_string()),
             ..Default::default()
         };
-        jws::encode_sign_custom_header(&payload, jwk, &header).map_err(|e| e.into())
+        Ok(jws::encode_sign_custom_header(&payload, jwk, &header)?)
     }
 
-    pub async fn from_proof(proof: &Proof, resolver: &dyn DIDResolver) -> Result<Self, OIDCError> {
+    pub async fn from_proof(
+        proof: &Proof,
+        resolver: &dyn DIDResolver,
+    ) -> Result<Self, ParsingError> {
         match proof {
             Proof::JWT { jwt } => Self::from_jwt(jwt, resolver).await,
+            Proof::CWT { .. } => todo!(),
         }
     }
 
-    pub async fn from_jwt(jwt: &str, resolver: &dyn DIDResolver) -> Result<Self, OIDCError> {
+    pub async fn from_jwt(jwt: &str, resolver: &dyn DIDResolver) -> Result<Self, ParsingError> {
         let header: Header = jws::decode_unverified(jwt)?.0;
 
         if header.type_ != Some(JWS_TYPE.to_string()) {
-            let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
-            return Err(err.with_desc(&format!("invalid JWS header type, must be {JWS_TYPE}")));
+            return Err(ParsingError::InvalidJWSType {
+                actual: format!("{:?}", header.type_),
+                expected: JWS_TYPE.to_string(),
+            });
         }
         if header.algorithm == Algorithm::None {
-            let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
-            return Err(err.with_desc("algorithm cannot be none"));
+            return Err(ParsingError::MissingJWSAlg);
         }
         let (controller, jwk) = match (header.key_id, header.jwk, header.x509_certificate_chain) {
             (Some(kid), None, None) => get_jwk_from_kid(&kid, resolver)
@@ -129,12 +200,8 @@ impl ProofOfPossession {
             (None, None, Some(_x5c)) => {
                 unimplemented!();
             }
-            _ => {
-                let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
-                return Err(err.with_desc(
-                    "exactly one of the following parameters needs to be present: (kid, jwk, x5c)",
-                ));
-            }
+            (None, None, None) => return Err(ParsingError::MissingKeyParameters),
+            _ => return Err(ParsingError::TooManyKeyParameters),
         };
         let body = jwt::decode_verify(jwt, &jwk)?;
         Ok(Self {
@@ -149,52 +216,47 @@ impl ProofOfPossession {
     pub async fn verify(
         &self,
         params: &ProofOfPossessionVerificationParams,
-    ) -> Result<(), OIDCError> {
-        let now = Utc::now();
+    ) -> Result<(), VerificationError> {
+        let now = OffsetDateTime::now_utc();
 
-        let nbf_tolerance = params.nbf_tolerance.unwrap_or_else(Duration::zero);
-        let exp_tolerance = params.exp_tolerance.unwrap_or_else(Duration::zero);
+        let nbf_tolerance = params.nbf_tolerance.unwrap_or_default();
+        let exp_tolerance = params.exp_tolerance.unwrap_or_default();
 
-        if let Some(not_before) = self.body.not_before.clone() {
-            let nbf = not_before.try_into()?;
-            if (now + nbf_tolerance) < nbf {
-                let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
-                return Err(err.with_desc("proof of possession is not yet valid"));
+        if let Some(not_before) = self.body.not_before {
+            if (now + nbf_tolerance) < not_before {
+                return Err(VerificationError::NotYetValid);
             }
         }
 
-        let exp = self.body.expires_at.clone().try_into()?;
-        if (now - exp_tolerance) > exp {
-            let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
-            return Err(err.with_desc("proof of possession has expired"));
+        if (now - exp_tolerance) > self.body.expires_at {
+            return Err(VerificationError::Expired);
         }
 
         if self.body.issuer != params.issuer {
-            let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
-            return Err(err.with_desc(&format!(
-                "issuer does not match, must be '{}'",
-                params.issuer
-            )));
+            return Err(VerificationError::InvalidIssuer {
+                expected: params.issuer.clone(),
+                actual: self.body.issuer.clone(),
+            });
         }
 
-        let expected_audience = &params.audience;
-        if self.body.audience != *expected_audience {
-            let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
-            return Err(err.with_desc(&format!(
-                "audience does not match, must be '{expected_audience}'"
-            )));
+        if self.body.audience != params.audience {
+            return Err(VerificationError::InvalidAudience {
+                expected: params.audience.to_string(),
+                actual: self.body.audience.to_string(),
+            });
         }
 
         if let Some(jwk) = &params.controller_jwk {
             if jwk != &self.controller.jwk {
-                let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
-                return Err(err.with_desc("JWK does not match"));
+                return Err(VerificationError::InvalidJWK);
             }
         }
         if let Some(did) = &params.controller_did {
             if Some(did) != self.controller.vm.as_ref() {
-                let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
-                return Err(err.with_desc(&format!("DID does not match, must be {did}")));
+                return Err(VerificationError::InvalidDID {
+                    expected: did.clone(),
+                    actual: format!("{:?}", self.controller.vm),
+                });
             }
         }
 
@@ -205,10 +267,9 @@ impl ProofOfPossession {
 async fn get_jwk_from_kid(
     kid: &str,
     resolver: &dyn DIDResolver,
-) -> Result<(String, JWK), OIDCError> {
+) -> Result<(String, JWK), ParsingError> {
     let (_, content, _) = dereference(resolver, kid, &DereferencingInputMetadata::default()).await;
 
-    let err: OIDCError = CredentialRequestErrorType::InvalidOrMissingProof.into();
     let vm = match content {
         Content::Object(Resource::VerificationMethod(vm)) => Ok(vm),
         Content::DIDDocument(document) => {
@@ -217,19 +278,18 @@ async fn get_jwk_from_kid(
             {
                 Ok(vm.to_owned())
             } else {
-                Err(err.with_desc("could not find any verification method"))
+                Err(ParsingError::KIDDereferenceError(
+                    "could not find any verification method".into(),
+                ))
             }
         }
 
-        _ => Err(err.with_desc("could not find specified verification method")),
+        _ => Err(ParsingError::KIDDereferenceError(
+            "could not find specified verification method".into(),
+        )),
     }?;
 
-    Ok((
-        vm.controller.clone(),
-        vm.get_jwk()
-            .map_err(|_| CredentialRequestErrorType::InvalidOrMissingProof.into())
-            .map_err(|e: OIDCError| e.with_desc("verification method does not contain a jwk"))?,
-    ))
+    Ok((vm.controller.clone(), vm.get_jwk()?))
 }
 
 #[cfg(test)]
@@ -256,8 +316,7 @@ mod test {
                     },
                 },
                 expires_in,
-            )
-            .unwrap(),
+            ),
             did,
         )
     }
@@ -294,10 +353,7 @@ mod test {
         let (mut pop, did) = generate_pop(expires_in);
 
         // Not to be used before now + 5 minutes.
-        let nbf = Some(Utc::now())
-            .map(|nbf| nbf + Duration::minutes(5))
-            .map(VCDateTime::from)
-            .map(Timestamp::from);
+        let nbf = Some(OffsetDateTime::now_utc() + Duration::minutes(5));
 
         pop.body.not_before = nbf;
 

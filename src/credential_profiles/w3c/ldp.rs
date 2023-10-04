@@ -1,0 +1,215 @@
+use serde::{Deserialize, Serialize};
+use ssi::{ldp::ProofSuiteType, vc::Credential};
+
+use crate::{
+    credential_profiles::{
+        AuthorizationDetaislProfile, CredentialMetadataProfile, CredentialOfferProfile,
+        CredentialRequestProfile, CredentialResponseProfile,
+    },
+    field_getters, field_getters_setters, field_setters,
+};
+
+use super::{CredentialDefinition, CredentialOfferDefinition};
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct Metadata {
+    cryptographic_suites_supported: Option<Vec<ProofSuiteType>>,
+    #[serde(rename = "@context")]
+    context: Vec<serde_json::Value>,
+    credentials_definition: CredentialDefinitionLD,
+    order: Option<Vec<String>>,
+}
+
+impl Metadata {
+    pub fn new(
+        context: Vec<serde_json::Value>,
+        credentials_definition: CredentialDefinitionLD,
+    ) -> Self {
+        Self {
+            cryptographic_suites_supported: None,
+            context,
+            credentials_definition,
+            order: None,
+        }
+    }
+
+    field_getters_setters![
+        pub self [self] ["LD VC metadata value"] {
+            set_cryptographic_suites_supported -> cryptographic_suites_supported[Option<Vec<ProofSuiteType>>],
+            set_context -> context[Vec<serde_json::Value>],
+            set_credentials_definition -> credentials_definition[CredentialDefinitionLD],
+            set_order -> order[Option<Vec<String>>],
+        }
+    ];
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct CredentialDefinitionLD {
+    #[serde(flatten)]
+    credential_definition: CredentialDefinition,
+    #[serde(rename = "@context")]
+    context: Vec<serde_json::Value>,
+}
+
+impl CredentialDefinitionLD {
+    pub fn new(
+        credential_definition: CredentialDefinition,
+        context: Vec<serde_json::Value>,
+    ) -> Self {
+        Self {
+            credential_definition,
+            context,
+        }
+    }
+}
+impl CredentialMetadataProfile for Metadata {}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct Offer {
+    credential_definition: CredentialOfferDefinitionLD,
+}
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct CredentialOfferDefinitionLD {
+    #[serde(rename = "@context")]
+    context: Vec<serde_json::Value>,
+    #[serde(flatten)]
+    credential_offer_definite: CredentialOfferDefinition,
+}
+impl CredentialOfferProfile for Offer {}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct AuthorizationDetails {
+    credential_definition: CredentialDefinitionLD,
+}
+impl AuthorizationDetaislProfile for AuthorizationDetails {}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct Request {
+    credential_definition: CredentialDefinitionLD,
+}
+impl CredentialRequestProfile for Request {}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct Response {
+    credential: Credential,
+}
+impl CredentialResponseProfile for Response {}
+
+#[cfg(test)]
+mod test {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn example_metadata() {
+        let _: Metadata = serde_json::from_value(json!({
+            "@context": [
+                "https://www.w3.org/2018/credentials/v1",
+                "https://www.w3.org/2018/credentials/examples/v1"
+            ],
+            "type": [
+                "VerifiableCredential",
+                "UniversityDegreeCredential"
+            ],
+            "credentials_definition": {
+                "@context": [
+                    "https://www.w3.org/2018/credentials/v1",
+                    "https://www.w3.org/2018/credentials/examples/v1"
+                ],
+                "type": [
+                    "VerifiableCredential",
+                    "UniversityDegreeCredential"
+                ],
+                "credentialSubject": {
+                    "given_name": {
+                        "display": [
+                            {
+                                "name": "Given Name",
+                                "locale": "en-US"
+                            }
+                        ]
+                    },
+                    "family_name": {
+                        "display": [
+                            {
+                                "name": "Surname",
+                                "locale": "en-US"
+                            }
+                        ]
+                    },
+                    "degree": {},
+                    "gpa": {
+                        "display": [
+                            {
+                                "name": "GPA"
+                            }
+                        ]
+                    }
+                }
+            },
+        }))
+        .unwrap();
+    }
+
+    #[test]
+    fn example_offer() {
+        let _: Offer = serde_json::from_value(json!({
+            "credential_definition": {
+                "@context": [
+                    "https://www.w3.org/2018/credentials/v1",
+                    "https://www.w3.org/2018/credentials/examples/v1"
+                ],
+                "type": [
+                    "VerifiableCredential",
+                    "UniversityDegreeCredential"
+                ]
+            }
+        }))
+        .unwrap();
+    }
+
+    #[test]
+    fn example_authorization() {
+        let _: AuthorizationDetails = serde_json::from_value(json!({
+            "credential_definition": {
+                "@context": [
+                    "https://www.w3.org/2018/credentials/v1",
+                    "https://www.w3.org/2018/credentials/examples/v1"
+                ],
+                "type": [
+                    "VerifiableCredential",
+                    "UniversityDegreeCredential"
+                ],
+                "credentialSubject": {
+                    "given_name": {},
+                    "family_name": {},
+                    "degree": {}
+                }
+            }
+        }))
+        .unwrap();
+    }
+
+    #[test]
+    fn example_request() {
+        let _: Request = serde_json::from_value(json!({
+           "credential_definition": {
+              "@context": [
+                 "https://www.w3.org/2018/credentials/v1",
+                 "https://www.w3.org/2018/credentials/examples/v1"
+              ],
+              "type": [
+                 "VerifiableCredential",
+                 "UniversityDegreeCredential"
+              ],
+              "credentialSubject": {
+                 "degree": {
+                    "type": {}
+                 }
+              }
+           },
+        }))
+        .unwrap();
+    }
+}
