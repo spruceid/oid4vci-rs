@@ -1,7 +1,7 @@
 use openidconnect::Nonce;
 use serde::{Deserialize, Serialize};
 use ssi::{
-    did::{Resource, VerificationMethod},
+    did::{Resource, VerificationMethod, DIDURL},
     did_resolve::{dereference, Content, DIDResolver, DereferencingInputMetadata},
     jwk::{Algorithm, JWK},
     jws::{self, Header},
@@ -61,7 +61,7 @@ pub struct ProofOfPossession {
 
 #[derive(Debug, Clone)]
 pub struct ProofOfPossessionController {
-    pub vm: Option<String>,
+    pub vm: Option<DIDURL>,
     pub jwk: JWK,
 }
 
@@ -156,7 +156,7 @@ impl ProofOfPossession {
         };
         let payload = serde_json::to_string(&self.body)?;
         let (h_kid, h_jwk) = match (self.controller.vm.clone(), jwk.key_id.clone()) {
-            (Some(did), _) => (Some(did), None),
+            (Some(vm), _) => (Some(vm.did), None),
             (None, Some(kid)) => (Some(kid), None),
             (None, None) => (None, Some(jwk.to_public())),
         };
@@ -193,9 +193,12 @@ impl ProofOfPossession {
             return Err(ParsingError::MissingJWSAlg);
         }
         let (controller, jwk) = match (header.key_id, header.jwk, header.x509_certificate_chain) {
-            (Some(kid), None, None) => get_jwk_from_kid(&kid, resolver)
-                .await
-                .map(|r| (Some(r.0), r.1))?,
+            (Some(kid), None, None) => {
+                let vm = kid.parse()?;
+                get_jwk_from_kid(&kid, resolver)
+                    .await
+                    .map(|r| (Some(vm), r))?
+            }
             (None, Some(jwk), None) => (None, jwk),
             (None, None, Some(_x5c)) => {
                 unimplemented!();
@@ -252,7 +255,7 @@ impl ProofOfPossession {
             }
         }
         if let Some(did) = &params.controller_did {
-            if Some(did) != self.controller.vm.as_ref() {
+            if self.controller.vm.is_none() {
                 return Err(VerificationError::InvalidDID {
                     expected: did.clone(),
                     actual: format!("{:?}", self.controller.vm),
@@ -264,10 +267,7 @@ impl ProofOfPossession {
     }
 }
 
-async fn get_jwk_from_kid(
-    kid: &str,
-    resolver: &dyn DIDResolver,
-) -> Result<(String, JWK), ParsingError> {
+async fn get_jwk_from_kid(kid: &str, resolver: &dyn DIDResolver) -> Result<JWK, ParsingError> {
     let (_, content, _) = dereference(resolver, kid, &DereferencingInputMetadata::default()).await;
 
     let vm = match content {
@@ -289,7 +289,7 @@ async fn get_jwk_from_kid(
         )),
     }?;
 
-    Ok((vm.controller.clone(), vm.get_jwk()?))
+    Ok(vm.get_jwk()?)
 }
 
 #[cfg(test)]
@@ -312,7 +312,7 @@ mod test {
                     nonce: None,
                     controller: ProofOfPossessionController {
                         jwk,
-                        vm: Some(did.clone()),
+                        vm: Some(did.parse().unwrap()),
                     },
                 },
                 expires_in,

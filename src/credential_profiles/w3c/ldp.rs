@@ -32,7 +32,6 @@ impl Metadata {
             order: None,
         }
     }
-
     field_getters_setters![
         pub self [self] ["LD VC metadata value"] {
             set_cryptographic_suites_supported -> cryptographic_suites_supported[Option<Vec<ProofSuiteType>>],
@@ -61,8 +60,20 @@ impl CredentialDefinitionLD {
             context,
         }
     }
+    field_getters_setters![
+        pub self [self] ["LD VC credential definition value"] {
+            set_credential_definition -> credential_definition[CredentialDefinition],
+            set_context -> context[Vec<serde_json::Value>],
+        }
+    ];
 }
-impl CredentialMetadataProfile for Metadata {}
+impl CredentialMetadataProfile for Metadata {
+    type Request = Request;
+
+    fn to_request(&self) -> Self::Request {
+        Request::new(self.credentials_definition().clone())
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Offer {
@@ -87,11 +98,29 @@ impl AuthorizationDetaislProfile for AuthorizationDetails {}
 pub struct Request {
     credential_definition: CredentialDefinitionLD,
 }
-impl CredentialRequestProfile for Request {}
+
+impl Request {
+    pub fn new(credential_definition: CredentialDefinitionLD) -> Self {
+        Self {
+            credential_definition,
+        }
+    }
+}
+impl CredentialRequestProfile for Request {
+    type Response = Response;
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Response {
     credential: Credential,
+}
+
+impl Response {
+    field_getters_setters![
+        pub self [self] ["LD VC credential response value"] {
+            set_credential -> credential[Credential],
+        }
+    ];
 }
 impl CredentialResponseProfile for Response {}
 

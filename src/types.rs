@@ -89,9 +89,9 @@ macro_rules! new_type {
                 &self.0
             }
         }
-        impl Into<$type> for $name {
-            fn into(self) -> $type {
-                self.0
+        impl From<$name> for $type {
+            fn from(s: $name) -> $type {
+                s.0
             }
         }
     }
@@ -277,4 +277,14 @@ new_type![
     ///
     #[derive(Deserialize, Serialize, Eq, Hash)]
     TextColor(String)
+];
+
+new_type![
+    #[derive(Deserialize, Eq, Hash, Ord, PartialOrd, Serialize)]
+    JsonWebTokenContentType(String)
+];
+
+new_type![
+    #[derive(Deserialize, Eq, Hash, Ord, PartialOrd, Serialize)]
+    JsonWebTokenType(String)
 ];

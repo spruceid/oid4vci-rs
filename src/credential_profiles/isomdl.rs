@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use isomdl::definitions::device_request::DocType;
 use serde::{Deserialize, Serialize};
 
+use crate::{field_getters, field_getters_setters, field_setters};
+
 use super::{
     w3c::CredentialSubjectClaims, AuthorizationDetaislProfile, CredentialMetadataProfile,
     CredentialOfferProfile, CredentialRequestProfile, CredentialResponseProfile,
@@ -17,7 +19,30 @@ pub struct Metadata {
     claims: Option<HashMap<Namespace, CredentialSubjectClaims>>,
     order: Option<Vec<String>>,
 }
-impl CredentialMetadataProfile for Metadata {}
+
+impl Metadata {
+    pub fn new(doctype: DocType) -> Self {
+        Self {
+            doctype,
+            claims: None,
+            order: None,
+        }
+    }
+    field_getters_setters![
+        pub self [self] ["ISO mDL metadata value"] {
+            set_doctype -> doctype[DocType],
+            set_claims -> claims[Option<HashMap<Namespace, CredentialSubjectClaims>>],
+            set_order -> order[Option<Vec<String>>],
+        }
+    ];
+}
+impl CredentialMetadataProfile for Metadata {
+    type Request = Request;
+
+    fn to_request(&self) -> Self::Request {
+        Request::new(self.doctype().clone()).set_claims(self.claims().cloned())
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Offer {
@@ -37,7 +62,24 @@ pub struct Request {
     doctype: DocType,
     claims: Option<HashMap<Namespace, CredentialSubjectClaims>>,
 }
-impl CredentialRequestProfile for Request {}
+
+impl Request {
+    pub fn new(doctype: DocType) -> Self {
+        Self {
+            doctype,
+            claims: None,
+        }
+    }
+    field_getters_setters![
+        pub self [self] ["ISO mDL request value"] {
+            set_doctype -> doctype[DocType],
+            set_claims -> claims[Option<HashMap<Namespace, CredentialSubjectClaims>>],
+        }
+    ];
+}
+impl CredentialRequestProfile for Request {
+    type Response = Response;
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Response {

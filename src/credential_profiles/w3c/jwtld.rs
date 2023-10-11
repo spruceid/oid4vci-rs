@@ -7,7 +7,13 @@ use crate::credential_profiles::{
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Metadata {}
-impl CredentialMetadataProfile for Metadata {}
+impl CredentialMetadataProfile for Metadata {
+    type Request = Request;
+
+    fn to_request(&self) -> Self::Request {
+        Request::new()
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Offer {}
@@ -17,9 +23,17 @@ impl CredentialOfferProfile for Offer {}
 pub struct AuthorizationDetails {}
 impl AuthorizationDetaislProfile for AuthorizationDetails {}
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct Request {}
-impl CredentialRequestProfile for Request {}
+
+impl Request {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+impl CredentialRequestProfile for Request {
+    type Response = Response;
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Response {}

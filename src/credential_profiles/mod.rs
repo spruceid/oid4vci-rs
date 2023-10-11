@@ -5,11 +5,31 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 pub mod isomdl;
 pub mod w3c;
 
-pub trait CredentialMetadataProfile: Debug + DeserializeOwned + Serialize {}
+pub trait Profile {
+    type Metadata: CredentialMetadataProfile;
+    type Offer: CredentialOfferProfile;
+    type Authorization: AuthorizationDetaislProfile;
+    type Credential: CredentialRequestProfile;
+}
+pub trait CredentialMetadataProfile: Clone + Debug + DeserializeOwned + Serialize {
+    type Request: CredentialRequestProfile;
+
+    fn to_request(&self) -> Self::Request;
+}
 pub trait CredentialOfferProfile: Debug + DeserializeOwned + Serialize {}
 pub trait AuthorizationDetaislProfile: Debug + DeserializeOwned + Serialize {}
-pub trait CredentialRequestProfile: Debug + DeserializeOwned + Serialize {}
+pub trait CredentialRequestProfile: Debug + DeserializeOwned + Serialize {
+    type Response: CredentialResponseProfile;
+}
 pub trait CredentialResponseProfile: Debug + DeserializeOwned + Serialize {}
+
+pub struct CoreProfiles {}
+impl Profile for CoreProfiles {
+    type Metadata = CoreProfilesMetadata;
+    type Offer = CoreProfilesOffer;
+    type Authorization = CoreProfilesAuthorizationDetails;
+    type Credential = CoreProfilesRequest;
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "format")]
@@ -23,7 +43,18 @@ pub enum CoreProfilesMetadata {
     #[serde(rename = "mso_mdoc")]
     ISOmDL(isomdl::Metadata),
 }
-impl CredentialMetadataProfile for CoreProfilesMetadata {}
+impl CredentialMetadataProfile for CoreProfilesMetadata {
+    type Request = CoreProfilesRequest;
+
+    fn to_request(&self) -> Self::Request {
+        match self {
+            CoreProfilesMetadata::JWTVC(m) => Self::Request::JWTVC(m.to_request()),
+            CoreProfilesMetadata::JWTLDVC(m) => Self::Request::JWTLDVC(m.to_request()),
+            CoreProfilesMetadata::LDVC(m) => Self::Request::LDVC(m.to_request()),
+            CoreProfilesMetadata::ISOmDL(m) => Self::Request::ISOmDL(m.to_request()),
+        }
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "format")]
@@ -65,7 +96,9 @@ pub enum CoreProfilesRequest {
     #[serde(rename = "mso_mdoc")]
     ISOmDL(isomdl::Request),
 }
-impl CredentialRequestProfile for CoreProfilesRequest {}
+impl CredentialRequestProfile for CoreProfilesRequest {
+    type Response = CoreProfilesResponse;
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "format")]

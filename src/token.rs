@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use oauth2::AuthorizationCode;
 use openidconnect::{
     core::{CoreErrorResponseType, CoreTokenType},
     ClientId, Nonce, RedirectUrl, StandardErrorResponse, StandardTokenResponse,
@@ -10,7 +11,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case", tag = "grant_type")]
 pub enum Request {
     AuthorizationCode {
-        code: String,
+        code: AuthorizationCode,
         redirect_uri: RedirectUrl,
         client_id: ClientId,
     },

@@ -26,20 +26,38 @@ impl Metadata {
             order: None,
         }
     }
-
     field_getters_setters![
-        pub self [self] ["LD VC metadata value"] {
+        pub self [self] ["JWT VC metadata value"] {
             set_cryptographic_suites_supported -> cryptographic_suites_supported[Option<Vec<jwk::Algorithm>>],
             set_credential_definition -> credential_definition[CredentialDefinition],
             set_order -> order[Option<Vec<String>>],
         }
     ];
 }
-impl CredentialMetadataProfile for Metadata {}
+impl CredentialMetadataProfile for Metadata {
+    type Request = Request;
+
+    fn to_request(&self) -> Self::Request {
+        Request::new(self.credential_definition().clone())
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Offer {
     credential_definition: CredentialOfferDefinition,
+}
+
+impl Offer {
+    pub fn new(credential_definition: CredentialOfferDefinition) -> Self {
+        Self {
+            credential_definition,
+        }
+    }
+    field_getters_setters![
+        pub self [self] ["JWT VC offer value"] {
+            set_credential_definition -> credential_definition[CredentialOfferDefinition],
+        }
+    ];
 }
 impl CredentialOfferProfile for Offer {}
 
@@ -54,6 +72,11 @@ impl AuthorizationDetails {
             credential_definition,
         }
     }
+    field_getters_setters![
+        pub self [self] ["JWT VC authorization value"] {
+            set_credential_definition -> credential_definition[CredentialDefinition],
+        }
+    ];
 }
 impl AuthorizationDetaislProfile for AuthorizationDetails {}
 
@@ -61,11 +84,37 @@ impl AuthorizationDetaislProfile for AuthorizationDetails {}
 pub struct Request {
     credential_definition: CredentialDefinition,
 }
-impl CredentialRequestProfile for Request {}
+
+impl Request {
+    pub fn new(credential_definition: CredentialDefinition) -> Self {
+        Self {
+            credential_definition,
+        }
+    }
+    field_getters_setters![
+        pub self [self] ["JWT VC request value"] {
+            set_credential_definition -> credential_definition[CredentialDefinition],
+        }
+    ];
+}
+impl CredentialRequestProfile for Request {
+    type Response = Response;
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Response {
     credential: String,
+}
+
+impl Response {
+    pub fn new(credential: String) -> Self {
+        Self { credential }
+    }
+    field_getters_setters![
+        pub self [self] ["JWT VC response value"] {
+            set_credential -> credential[String],
+        }
+    ];
 }
 impl CredentialResponseProfile for Response {}
 
