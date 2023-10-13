@@ -21,7 +21,6 @@ use crate::{
     authorization::AuthorizationRequest,
     credential,
     credential_profiles::{AuthorizationDetaislProfile, Profile},
-    field_getters, field_getters_setters, field_setters,
     metadata::{
         AuthorizationMetadata, CredentialMetadata, CredentialUrl, IssuerMetadata,
         IssuerMetadataDisplay,

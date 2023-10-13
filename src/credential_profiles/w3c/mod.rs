@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{field_getters, field_getters_setters, field_setters, metadata::IssuerMetadataDisplay};
+use crate::metadata::IssuerMetadataDisplay;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]

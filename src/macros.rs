@@ -1,4 +1,3 @@
-#[macro_export]
 macro_rules! field_getters {
     (@case [$doc:expr] $vis:vis $self:ident [$zero:expr] $field:ident Option < bool >) => {
         #[doc = $doc]
@@ -141,7 +140,6 @@ macro_rules! field_getters {
     };
 }
 
-#[macro_export]
 macro_rules! field_setters {
     (@case [$doc:expr] $vis:vis $self:ident [$zero:expr] $setter:ident $field:ident $type:ty [$doc_field:expr]) => {
         field_setters![
@@ -172,7 +170,6 @@ macro_rules! field_setters {
     };
 }
 
-#[macro_export]
 macro_rules! field_getters_setters {
     (
         @single $vis:vis $self:ident [$zero:expr] [$doc:expr]

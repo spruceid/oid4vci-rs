@@ -21,7 +21,6 @@ use serde_with::{serde_as, skip_serializing_none};
 
 use crate::{
     credential_profiles::CredentialMetadataProfile,
-    field_getters, field_getters_setters, field_setters,
     http_utils::{check_content_type, MIME_TYPE_JSON},
     proof_of_possession::KeyProofType,
 };

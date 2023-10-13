@@ -1,12 +1,9 @@
 use serde::{Deserialize, Serialize};
 use ssi::{ldp::ProofSuiteType, vc::Credential};
 
-use crate::{
-    credential_profiles::{
-        AuthorizationDetaislProfile, CredentialMetadataProfile, CredentialOfferProfile,
-        CredentialRequestProfile, CredentialResponseProfile,
-    },
-    field_getters, field_getters_setters, field_setters,
+use crate::credential_profiles::{
+    AuthorizationDetaislProfile, CredentialMetadataProfile, CredentialOfferProfile,
+    CredentialRequestProfile, CredentialResponseProfile,
 };
 
 use super::{CredentialDefinition, CredentialOfferDefinition};

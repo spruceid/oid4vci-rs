@@ -3,8 +3,6 @@ use std::collections::HashMap;
 use isomdl::definitions::device_request::DocType;
 use serde::{Deserialize, Serialize};
 
-use crate::{field_getters, field_getters_setters, field_setters};
-
 use super::{
     w3c::CredentialSubjectClaims, AuthorizationDetaislProfile, CredentialMetadataProfile,
     CredentialOfferProfile, CredentialRequestProfile, CredentialResponseProfile,

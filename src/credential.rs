@@ -16,7 +16,6 @@ use ssi::jwk::JWK;
 
 use crate::{
     credential_profiles::{CredentialRequestProfile, CredentialResponseProfile},
-    field_getters, field_getters_setters, field_setters,
     http_utils::{auth_bearer, content_type_has_essence, MIME_TYPE_JSON},
     metadata::CredentialUrl,
     proof_of_possession::Proof,
