@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use ssi::jwk;
 
-use crate::credential_profiles::{
+use crate::profiles::{
     AuthorizationDetaislProfile, CredentialMetadataProfile, CredentialOfferProfile,
     CredentialRequestProfile, CredentialResponseProfile,
 };

@@ -20,8 +20,8 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
 use crate::{
-    credential_profiles::CredentialMetadataProfile,
     http_utils::{check_content_type, MIME_TYPE_JSON},
+    profiles::CredentialMetadataProfile,
     proof_of_possession::KeyProofType,
 };
 
@@ -403,7 +403,7 @@ impl AuthorizationMetadata {
 mod test {
     use serde_json::json;
 
-    use crate::credential_profiles::CoreProfilesMetadata;
+    use crate::core::profiles::CoreProfilesMetadata;
 
     use super::*;
 

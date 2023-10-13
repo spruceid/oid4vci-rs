@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::credential_profiles::{
+use crate::profiles::{
     AuthorizationDetaislProfile, CredentialMetadataProfile, CredentialOfferProfile,
     CredentialRequestProfile, CredentialResponseProfile,
 };

@@ -1,9 +1,13 @@
+pub mod profiles;
+
 pub mod metadata {
     use openidconnect::core::{
         CoreJsonWebKeyType, CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm,
     };
 
-    use crate::{credential_profiles::CoreProfilesMetadata, metadata};
+    use crate::metadata;
+
+    use super::profiles::CoreProfilesMetadata;
 
     pub type IssuerMetadata = metadata::IssuerMetadata<
         CoreProfilesMetadata,
@@ -18,7 +22,9 @@ pub mod credential {
         CoreJsonWebKeyType, CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm,
     };
 
-    use crate::{credential, credential_profiles::CoreProfilesRequest};
+    use crate::credential;
+
+    use super::profiles::CoreProfilesRequest;
 
     pub type Request = credential::Request<
         CoreProfilesRequest,
@@ -35,7 +41,9 @@ pub mod credential {
 }
 
 pub mod authorization {
-    use crate::{authorization, credential_profiles::CoreProfilesAuthorizationDetails};
+    use crate::authorization;
+
+    use super::profiles::CoreProfilesAuthorizationDetails;
 
     pub type AuthorizationDetail =
         authorization::AuthorizationDetail<CoreProfilesAuthorizationDetails>;
@@ -46,7 +54,9 @@ pub mod client {
         CoreJsonWebKeyType, CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm,
     };
 
-    use crate::{client, credential_profiles::CoreProfiles};
+    use crate::client;
+
+    use super::profiles::CoreProfiles;
 
     pub type Client = client::Client<
         CoreProfiles,

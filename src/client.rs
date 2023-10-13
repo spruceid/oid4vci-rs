@@ -20,11 +20,11 @@ use serde::{Deserialize, Serialize};
 use crate::{
     authorization::AuthorizationRequest,
     credential,
-    credential_profiles::{AuthorizationDetaislProfile, Profile},
     metadata::{
         AuthorizationMetadata, CredentialMetadata, CredentialUrl, IssuerMetadata,
         IssuerMetadataDisplay,
     },
+    profiles::{AuthorizationDetaislProfile, Profile},
     token,
     types::{BatchCredentialUrl, DeferredCredentialUrl},
 };

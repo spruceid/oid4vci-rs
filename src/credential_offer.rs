@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 use url::Url;
 
-use crate::credential_profiles::CredentialOfferProfile;
+use crate::profiles::CredentialOfferProfile;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
@@ -70,7 +70,7 @@ pub struct PreAuthorizationCodeGrant {
 mod test {
     use serde_json::json;
 
-    use crate::credential_profiles::CoreProfilesOffer;
+    use crate::core::profiles::CoreProfilesOffer;
 
     use super::*;
 

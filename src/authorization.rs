@@ -3,7 +3,7 @@ use openidconnect::{CsrfToken, IssuerUrl};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::credential_profiles::AuthorizationDetaislProfile;
+use crate::profiles::AuthorizationDetaislProfile;
 
 pub struct AuthorizationRequest<'a, AD>
 where
@@ -97,7 +97,7 @@ mod test {
     use serde_json::json;
 
     use crate::{
-        credential_profiles::{w3c, CoreProfilesAuthorizationDetails},
+        core::profiles::{w3c, CoreProfilesAuthorizationDetails},
         metadata::CredentialUrl,
     };
 

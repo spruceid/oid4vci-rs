@@ -15,9 +15,9 @@ use serde::{Deserialize, Serialize};
 use ssi::jwk::JWK;
 
 use crate::{
-    credential_profiles::{CredentialRequestProfile, CredentialResponseProfile},
     http_utils::{auth_bearer, content_type_has_essence, MIME_TYPE_JSON},
     metadata::CredentialUrl,
+    profiles::{CredentialRequestProfile, CredentialResponseProfile},
     proof_of_possession::Proof,
 };
 
@@ -304,7 +304,7 @@ pub struct DeferredRequest {
 mod test {
     use serde_json::json;
 
-    use crate::credential_profiles::CoreProfilesResponse;
+    use crate::core::profiles::CoreProfilesResponse;
 
     use super::*;
 
