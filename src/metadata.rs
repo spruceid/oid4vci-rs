@@ -99,6 +99,23 @@ where
         }
     ];
 
+    pub fn discover<HC, RE>(
+        issuer_url: &IssuerUrl,
+        http_client: HC,
+    ) -> Result<Self, DiscoveryError<RE>>
+    where
+        HC: Fn(HttpRequest) -> Result<HttpResponse, RE>,
+        RE: std::error::Error + 'static,
+    {
+        let discovery_url = issuer_url
+            .join(METADATA_URL_SUFFIX)
+            .map_err(DiscoveryError::UrlParse)?;
+
+        http_client(Self::discovery_request(discovery_url))
+            .map_err(DiscoveryError::Request)
+            .and_then(|http_response| Self::discovery_response(issuer_url, http_response))
+    }
+
     pub async fn discover_async<F, HC, RE>(
         issuer_url: IssuerUrl,
         http_client: HC,
