@@ -328,6 +328,30 @@ impl AuthorizationMetadata {
             .set_token_endpoint(Some(token_endpoint)),
         )
     }
+    pub fn discover<HC, RE, CM, JT, JE, JA>(
+        issuer_metadata: &IssuerMetadata<CM, JT, JE, JA>,
+        http_client: HC,
+    ) -> Result<Self, DiscoveryError<RE>>
+    where
+        HC: Fn(HttpRequest) -> Result<HttpResponse, RE>,
+        RE: std::error::Error + 'static,
+        CM: CredentialMetadataProfile,
+        JT: JsonWebKeyType,
+        JE: JweContentEncryptionAlgorithm<JT>,
+        JA: JweKeyManagementAlgorithm + Clone,
+    {
+        let issuer_url = issuer_metadata
+            .authorization_server
+            .clone()
+            .unwrap_or(issuer_metadata.credential_issuer.clone());
+        let discovery_url = issuer_url
+            .join(AUTHORIZATION_METADATA_URL_SUFFIX)
+            .map_err(DiscoveryError::UrlParse)?;
+
+        http_client(Self::discovery_request(discovery_url))
+            .map_err(DiscoveryError::Request)
+            .and_then(|http_response| Self::discovery_response(&issuer_url, http_response))
+    }
 
     pub async fn discover_async<F, HC, RE, CM, JT, JE, JA>(
         issuer_metadata: &IssuerMetadata<CM, JT, JE, JA>,
