@@ -13,7 +13,7 @@ use openidconnect::{
         CoreSubjectIdentifierType, CoreTokenType,
     },
     registration::ClientMetadata,
-    JsonWebKeyType, JweContentEncryptionAlgorithm, JweKeyManagementAlgorithm,
+    IssuerUrl, JsonWebKeyType, JweContentEncryptionAlgorithm, JweKeyManagementAlgorithm,
 };
 use serde::{Deserialize, Serialize};
 
@@ -44,6 +44,7 @@ where
         StandardRevocableToken,
         BasicRevocationErrorResponse,
     >,
+    issuer: IssuerUrl,
     credential_endpoint: CredentialUrl,
     batch_credential_endpoint: Option<BatchCredentialUrl>,
     deferred_credential_endpoint: Option<DeferredCredentialUrl>,
@@ -64,6 +65,7 @@ where
 {
     pub fn new(
         client_id: ClientId,
+        issuer: IssuerUrl,
         credential_endpoint: CredentialUrl,
         auth_url: AuthUrl,
         token_url: TokenUrl,
@@ -73,6 +75,7 @@ where
             .set_redirect_uri(redirect_uri);
         Self {
             inner,
+            issuer,
             credential_endpoint,
             batch_credential_endpoint: None,
             deferred_credential_endpoint: None,
@@ -87,6 +90,7 @@ where
 
     field_getters_setters![
         pub self [self] ["issuer metadata value"] {
+            set_issuer -> issuer[IssuerUrl],
             set_credential_endpoint -> credential_endpoint[CredentialUrl],
             set_batch_credential_endpoint -> batch_credential_endpoint[Option<BatchCredentialUrl>],
             set_deferred_credential_endpoint -> deferred_credential_endpoint[Option<DeferredCredentialUrl>],
@@ -106,6 +110,7 @@ where
     ) -> Self {
         Self::new(
             client_id,
+            issuer_metadata.credential_issuer().clone(),
             issuer_metadata.credential_endpoint().clone(),
             authorization_metadata.authorization_endpoint().clone(),
             authorization_metadata.token_endpoint().clone(),

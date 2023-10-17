@@ -176,6 +176,7 @@ mod test {
 
         let client = crate::core::client::Client::new(
             ClientId::new("s6BhdRkqt3".to_string()),
+            IssuerUrl::new("https://server.example.com".into()).unwrap(),
             CredentialUrl::new("https://server.example.com/credential".into()).unwrap(),
             AuthUrl::new("https://server.example.com/authorize".into()).unwrap(),
             TokenUrl::new("https://server.example.com/token".into()).unwrap(),
