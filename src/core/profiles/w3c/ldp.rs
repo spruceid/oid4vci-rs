@@ -76,6 +76,20 @@ impl CredentialMetadataProfile for Metadata {
 pub struct Offer {
     credential_definition: CredentialOfferDefinitionLD,
 }
+
+impl Offer {
+    pub fn new(credential_definition: CredentialOfferDefinitionLD) -> Self {
+        Self {
+            credential_definition,
+        }
+    }
+
+    field_getters_setters![
+        pub self [self] ["LD VC credential offer value"] {
+            set_credential_definition -> credential_definition[CredentialOfferDefinitionLD],
+        }
+    ];
+}
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CredentialOfferDefinitionLD {
     #[serde(rename = "@context")]
@@ -83,11 +97,44 @@ pub struct CredentialOfferDefinitionLD {
     #[serde(flatten)]
     credential_offer_definite: CredentialOfferDefinition,
 }
+
+impl CredentialOfferDefinitionLD {
+    pub fn new(
+        context: Vec<serde_json::Value>,
+        credential_offer_definite: CredentialOfferDefinition,
+    ) -> Self {
+        Self {
+            context,
+            credential_offer_definite,
+        }
+    }
+
+    field_getters_setters![
+        pub self [self] ["LD VC credential offer definition value"] {
+            set_context -> context[Vec<serde_json::Value>],
+            set_credential_offer_definite -> credential_offer_definite[CredentialOfferDefinition],
+        }
+    ];
+}
 impl CredentialOfferProfile for Offer {}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AuthorizationDetails {
     credential_definition: CredentialDefinitionLD,
+}
+
+impl AuthorizationDetails {
+    pub fn new(credential_definition: CredentialDefinitionLD) -> Self {
+        Self {
+            credential_definition,
+        }
+    }
+
+    field_getters_setters![
+        pub self [self] ["LD VC authorization details value"] {
+            set_credential_definition -> credential_definition[CredentialDefinitionLD],
+        }
+    ];
 }
 impl AuthorizationDetaislProfile for AuthorizationDetails {}
 
@@ -102,6 +149,12 @@ impl Request {
             credential_definition,
         }
     }
+
+    field_getters_setters![
+        pub self [self] ["LD VC credential request value"] {
+            set_credential_definition -> credential_definition[CredentialDefinitionLD],
+        }
+    ];
 }
 impl CredentialRequestProfile for Request {
     type Response = Response;
@@ -113,6 +166,10 @@ pub struct Response {
 }
 
 impl Response {
+    pub fn new(credential: Credential) -> Self {
+        Self { credential }
+    }
+
     field_getters_setters![
         pub self [self] ["LD VC credential response value"] {
             set_credential -> credential[Credential],

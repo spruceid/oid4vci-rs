@@ -46,12 +46,38 @@ impl CredentialMetadataProfile for Metadata {
 pub struct Offer {
     doctype: DocType,
 }
+
+impl Offer {
+    pub fn new(doctype: DocType) -> Self {
+        Self { doctype }
+    }
+    field_getters_setters![
+        pub self [self] ["ISO mDL credential offer value"] {
+            set_doctype -> doctype[DocType],
+        }
+    ];
+}
 impl CredentialOfferProfile for Offer {}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AuthorizationDetails {
     doctype: DocType,
     claims: Option<HashMap<Namespace, CredentialSubjectClaims>>,
+}
+
+impl AuthorizationDetails {
+    pub fn new(
+        doctype: DocType,
+        claims: Option<HashMap<Namespace, CredentialSubjectClaims>>,
+    ) -> Self {
+        Self { doctype, claims }
+    }
+    field_getters_setters![
+        pub self [self] ["ISO mDL authorization details value"] {
+            set_doctype -> doctype[DocType],
+            set_claims -> claims[Option<HashMap<Namespace, CredentialSubjectClaims>>],
+        }
+    ];
 }
 impl AuthorizationDetaislProfile for AuthorizationDetails {}
 
@@ -82,6 +108,17 @@ impl CredentialRequestProfile for Request {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Response {
     credential: String,
+}
+
+impl Response {
+    pub fn new(credential: String) -> Self {
+        Self { credential }
+    }
+    field_getters_setters![
+        pub self [self] ["ISO mDL response value"] {
+            set_credential -> credential[String],
+        }
+    ];
 }
 impl CredentialResponseProfile for Response {}
 
