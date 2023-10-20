@@ -1,8 +1,9 @@
 use std::time::Duration;
 
+use oauth2::AuthorizationCode;
 use openidconnect::{
     core::{CoreErrorResponseType, CoreTokenType},
-    ClientId, RedirectUrl, StandardErrorResponse, StandardTokenResponse,
+    ClientId, Nonce, RedirectUrl, StandardErrorResponse, StandardTokenResponse,
 };
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +11,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case", tag = "grant_type")]
 pub enum Request {
     AuthorizationCode {
-        code: String,
+        code: AuthorizationCode,
         redirect_uri: RedirectUrl,
         client_id: ClientId,
     },
@@ -34,7 +35,7 @@ pub enum Request {
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct ExtraResponseTokenFields {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub c_nonce: Option<String>,
+    pub c_nonce: Option<Nonce>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub c_nonce_expires_in: Option<Duration>,
     #[serde(skip_serializing_if = "Option::is_none")]
