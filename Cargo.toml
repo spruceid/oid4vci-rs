@@ -7,10 +7,6 @@ license = "Apache-2.0 OR MIT"
 description = "OpenID for Verifiable Credentials Issuance"
 repository = "https://github.com/spruceid/oidc4vci-rs/"
 
-[features]
-default = ["encryption"]
-encryption = ["josekit"]
-
 [dependencies]
 # TODO feature-gate
 isomdl = { git = "https://github.com/spruceid/isomdl", rev = "90ce218" }
@@ -20,7 +16,6 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_with = "3.3.0"
 serde_path_to_error = "0.1.14"
-josekit = { version = "0.8", optional = true }
 url = { version = "2.3.1", features = ["serde"] }
 openidconnect = "3.3.1"
 oauth2 = "4.4.2"
