@@ -253,7 +253,7 @@ where
     CR: CredentialResponseProfile,
 {
     #[serde(bound = "CR: CredentialResponseProfile")]
-    Immedate(CR),
+    Immediate(CR),
     Deferred {
         transaction_id: Option<String>, // must be present if credential is None (is the profile)
     },
