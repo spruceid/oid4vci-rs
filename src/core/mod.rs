@@ -65,3 +65,20 @@ pub mod client {
         CoreJweKeyManagementAlgorithm,
     >;
 }
+
+pub mod pushed_authorization_client {
+    use openidconnect::core::{
+        CoreJsonWebKeyType, CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm,
+    };
+
+    use crate::pushed_authorization_client;
+
+    use super::profiles::CoreProfiles;
+
+    pub type PushedAuthorizationClient = pushed_authorization_client::PushedAuthorizationClient<
+        CoreProfiles,
+        CoreJsonWebKeyType,
+        CoreJweContentEncryptionAlgorithm,
+        CoreJweKeyManagementAlgorithm,
+    >;
+}

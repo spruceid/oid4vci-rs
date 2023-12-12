@@ -275,11 +275,42 @@ pub struct CredentialMetadataDisplayLogo {
     alt_text: Option<String>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AdditionalOAuthMetadata {
     #[serde(rename = "pre-authorized_grant_anonymous_access_supported")]
     pre_authorized_grant_anonymous_access_supported: Option<bool>,
+    pushed_authorization_request_endpoint: Option<AuthUrl>,
+    require_pushed_authorization_requests: Option<bool>,
 }
+
+impl Default for AdditionalOAuthMetadata {
+    fn default() -> Self {
+        AdditionalOAuthMetadata {
+            pre_authorized_grant_anonymous_access_supported: Some(false),
+            pushed_authorization_request_endpoint: None,
+            require_pushed_authorization_requests: Some(false),
+        }
+    }
+}
+
+impl AdditionalOAuthMetadata {
+    pub fn set_pushed_authorization_request_endpoint(
+        mut self,
+        pushed_authorization_request_endpoint: Option<AuthUrl>,
+    ) -> Self {
+        self.pushed_authorization_request_endpoint = pushed_authorization_request_endpoint;
+        self
+    }
+
+    pub fn set_require_pushed_authorization_requests(
+        mut self,
+        require_pushed_authorization_requests: Option<bool>,
+    ) -> Self {
+        self.require_pushed_authorization_requests = require_pushed_authorization_requests;
+        self
+    }
+}
+
 impl AdditionalProviderMetadata for AdditionalOAuthMetadata {}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -432,6 +463,15 @@ impl AuthorizationMetadata {
 
     pub fn authorization_endpoint(&self) -> &AuthUrl {
         self.0.authorization_endpoint()
+    }
+
+    pub fn pushed_authorization_endpoint(&self) -> AuthUrl {
+        // TODO find better way to avoid unwrap
+        self.0
+            .additional_metadata()
+            .clone()
+            .pushed_authorization_request_endpoint
+            .unwrap()
     }
 
     pub fn token_endpoint(&self) -> &TokenUrl {
