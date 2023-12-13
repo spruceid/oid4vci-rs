@@ -179,6 +179,7 @@ mod test {
             IssuerUrl::new("https://server.example.com".into()).unwrap(),
             CredentialUrl::new("https://server.example.com/credential".into()).unwrap(),
             AuthUrl::new("https://server.example.com/authorize".into()).unwrap(),
+            None,
             TokenUrl::new("https://server.example.com/token".into()).unwrap(),
             RedirectUrl::new("https://client.example.org/cb".into()).unwrap(),
         );

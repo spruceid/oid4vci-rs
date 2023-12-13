@@ -11,7 +11,6 @@ pub mod metadata;
 pub mod profiles;
 pub mod proof_of_possession;
 pub mod pushed_authorization;
-pub mod pushed_authorization_client;
 pub mod token;
 mod types;
 
