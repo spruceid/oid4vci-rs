@@ -27,7 +27,7 @@ use crate::{
     profiles::{AuthorizationDetaislProfile, Profile},
     pushed_authorization::PushedAuthorizationRequest,
     token,
-    types::{BatchCredentialUrl, DeferredCredentialUrl},
+    types::{BatchCredentialUrl, DeferredCredentialUrl, ParUrl},
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -53,7 +53,7 @@ where
     >,
     issuer: IssuerUrl,
     credential_endpoint: CredentialUrl,
-    par_auth_url: Option<AuthUrl>,
+    par_auth_url: Option<ParUrl>,
     batch_credential_endpoint: Option<BatchCredentialUrl>,
     deferred_credential_endpoint: Option<DeferredCredentialUrl>,
     credential_response_encryption_alg_values_supported: Option<Vec<JA>>,
@@ -76,7 +76,7 @@ where
         issuer: IssuerUrl,
         credential_endpoint: CredentialUrl,
         auth_url: AuthUrl,
-        par_auth_url: Option<AuthUrl>,
+        par_auth_url: Option<ParUrl>,
         token_url: TokenUrl,
         redirect_uri: RedirectUrl,
     ) -> Self {
@@ -163,25 +163,12 @@ where
         Ok(PushedAuthorizationRequest::new(
             inner,
             self.par_auth_url.clone().unwrap(),
+            self.inner.auth_url().clone(),
             vec![],
             None,
             None,
             None,
         ))
-    }
-
-    pub fn pushed_authorize_url(&self, request_uri: String) -> String {
-        let mut auth_url = self.inner.auth_url().url().clone();
-
-        auth_url
-            .query_pairs_mut()
-            .append_pair("request_uri", &request_uri);
-
-        auth_url
-            .query_pairs_mut()
-            .append_pair("client_id", &self.inner.client_id().to_string());
-
-        auth_url.to_string()
     }
 
     pub fn authorize_url<S, AD>(&self, state_fn: S) -> AuthorizationRequest<AD>

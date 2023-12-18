@@ -24,9 +24,8 @@ rand = "0.8.5"
 time = { version = "0.3.29", features = ["serde"] }
 thiserror = "1.0.49"
 base64 = "0.21.4"
-p256 = "0.13.2"
-did-jwk = "0.1.0"
+serde_urlencoded = "0.7.1"
 
 [dev-dependencies]
-assert-json-diff = "2.0.2"
+did-jwk = "0.1.0"
 tokio = { version = "1.25.0", features = ["macros"] }
