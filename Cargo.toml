@@ -27,5 +27,6 @@ base64 = "0.21.4"
 serde_urlencoded = "0.7.1"
 
 [dev-dependencies]
+assert-json-diff = "2.0.2"
 did-jwk = "0.1.0"
 tokio = { version = "1.25.0", features = ["macros"] }
