@@ -225,10 +225,7 @@ where
                 .collect(),
                 body: serde_urlencoded::to_string(&body)
                     .map_err(|e| {
-                        RequestError::Other(format!(
-                            "unable to encode request body: {}",
-                            e.to_string()
-                        ))
+                        RequestError::Other(format!("unable to encode request body: {}", e))
                     })?
                     .as_bytes()
                     .to_vec(),
