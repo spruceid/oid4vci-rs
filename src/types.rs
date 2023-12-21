@@ -264,6 +264,13 @@ new_url_type![
     DeferredCredentialUrl
 ];
 
+new_url_type![
+    ///
+    /// URL of the Pushed Authorization Request Endpoint.
+    ///
+    ParUrl
+];
+
 new_type![
     ///
     /// String value of a background color of the Credential represented as numerical color values defined in CSS Color Module Level 37 [CSS-Color].

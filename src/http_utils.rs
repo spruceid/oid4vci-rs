@@ -7,6 +7,7 @@ use oauth2::{
 };
 
 pub const MIME_TYPE_JSON: &str = "application/json";
+pub const MIME_TYPE_FORM_URLENCODED: &str = "application/x-www-form-urlencoded";
 
 pub const BEARER: &str = "Bearer";
 

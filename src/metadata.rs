@@ -25,7 +25,7 @@ use crate::{
     proof_of_possession::KeyProofType,
 };
 
-pub use crate::types::{BatchCredentialUrl, CredentialUrl, DeferredCredentialUrl};
+pub use crate::types::{BatchCredentialUrl, CredentialUrl, DeferredCredentialUrl, ParUrl};
 
 const METADATA_URL_SUFFIX: &str = ".well-known/openid-credential-issuer";
 const AUTHORIZATION_METADATA_URL_SUFFIX: &str = ".well-known/oauth-authorization-server";
@@ -279,7 +279,28 @@ pub struct CredentialMetadataDisplayLogo {
 pub struct AdditionalOAuthMetadata {
     #[serde(rename = "pre-authorized_grant_anonymous_access_supported")]
     pre_authorized_grant_anonymous_access_supported: Option<bool>,
+    pushed_authorization_request_endpoint: Option<ParUrl>,
+    require_pushed_authorization_requests: Option<bool>,
 }
+
+impl AdditionalOAuthMetadata {
+    pub fn set_pushed_authorization_request_endpoint(
+        mut self,
+        pushed_authorization_request_endpoint: Option<ParUrl>,
+    ) -> Self {
+        self.pushed_authorization_request_endpoint = pushed_authorization_request_endpoint;
+        self
+    }
+
+    pub fn set_require_pushed_authorization_requests(
+        mut self,
+        require_pushed_authorization_requests: Option<bool>,
+    ) -> Self {
+        self.require_pushed_authorization_requests = require_pushed_authorization_requests;
+        self
+    }
+}
+
 impl AdditionalProviderMetadata for AdditionalOAuthMetadata {}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -432,6 +453,13 @@ impl AuthorizationMetadata {
 
     pub fn authorization_endpoint(&self) -> &AuthUrl {
         self.0.authorization_endpoint()
+    }
+
+    pub fn pushed_authorization_endpoint(&self) -> Option<ParUrl> {
+        self.0
+            .additional_metadata()
+            .clone()
+            .pushed_authorization_request_endpoint
     }
 
     pub fn token_endpoint(&self) -> &TokenUrl {

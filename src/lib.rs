@@ -10,6 +10,7 @@ mod http_utils;
 pub mod metadata;
 pub mod profiles;
 pub mod proof_of_possession;
+pub mod pushed_authorization;
 pub mod token;
 mod types;
 

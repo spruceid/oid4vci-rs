@@ -25,9 +25,16 @@ use crate::{
         IssuerMetadataDisplay,
     },
     profiles::{AuthorizationDetaislProfile, Profile},
+    pushed_authorization::PushedAuthorizationRequest,
     token,
-    types::{BatchCredentialUrl, DeferredCredentialUrl},
+    types::{BatchCredentialUrl, DeferredCredentialUrl, ParUrl},
 };
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Pushed authorization request is not supported")]
+    ParUnsupported(),
+}
 
 pub struct Client<C, JT, JE, JA>
 where
@@ -46,6 +53,7 @@ where
     >,
     issuer: IssuerUrl,
     credential_endpoint: CredentialUrl,
+    par_auth_url: Option<ParUrl>,
     batch_credential_endpoint: Option<BatchCredentialUrl>,
     deferred_credential_endpoint: Option<DeferredCredentialUrl>,
     credential_response_encryption_alg_values_supported: Option<Vec<JA>>,
@@ -68,6 +76,7 @@ where
         issuer: IssuerUrl,
         credential_endpoint: CredentialUrl,
         auth_url: AuthUrl,
+        par_auth_url: Option<ParUrl>,
         token_url: TokenUrl,
         redirect_uri: RedirectUrl,
     ) -> Self {
@@ -77,6 +86,7 @@ where
             inner,
             issuer,
             credential_endpoint,
+            par_auth_url,
             batch_credential_endpoint: None,
             deferred_credential_endpoint: None,
             credential_response_encryption_alg_values_supported: None,
@@ -113,6 +123,9 @@ where
             issuer_metadata.credential_issuer().clone(),
             issuer_metadata.credential_endpoint().clone(),
             authorization_metadata.authorization_endpoint().clone(),
+            authorization_metadata
+                .pushed_authorization_endpoint()
+                .clone(),
             authorization_metadata.token_endpoint().clone(),
             redirect_uri,
         )
@@ -133,6 +146,29 @@ where
         )
         .set_credentials_supported(issuer_metadata.credentials_supported().clone())
         .set_display(issuer_metadata.display().cloned())
+    }
+
+    pub fn pushed_authorization_request<S, AD>(
+        &self,
+        state_fn: S,
+    ) -> Result<PushedAuthorizationRequest<AD>, Error>
+    where
+        S: FnOnce() -> CsrfToken,
+        AD: AuthorizationDetaislProfile,
+    {
+        if self.par_auth_url.is_none() {
+            return Err(Error::ParUnsupported());
+        }
+        let inner = self.inner.authorize_url(state_fn);
+        Ok(PushedAuthorizationRequest::new(
+            inner,
+            self.par_auth_url.clone().unwrap(),
+            self.inner.auth_url().clone(),
+            vec![],
+            None,
+            None,
+            None,
+        ))
     }
 
     pub fn authorize_url<S, AD>(&self, state_fn: S) -> AuthorizationRequest<AD>
