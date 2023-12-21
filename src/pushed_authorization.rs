@@ -199,7 +199,12 @@ where
             .set_client_assertion(client_assertion.clone())
             .set_authorization_details(Some(
                 serde_json::to_string::<Vec<AuthorizationDetail<AD>>>(&self.authorization_details)
-                    .unwrap_or("[]".to_string()),
+                    .map_err(|e| {
+                        RequestError::Other(format!(
+                            "unable to serialize authorization_details: {}",
+                            e
+                        ))
+                    })?,
             ))
             .set_wallet_issuer(self.wallet_issuer)
             .set_user_hint(self.user_hint)
@@ -218,11 +223,15 @@ where
                 ]
                 .into_iter()
                 .collect(),
-                body: serde_json::to_vec(&format!(
-                    "&{:}&", // had to add & before and after to fix parsing during the request
-                    serde_urlencoded::to_string(&body).unwrap_or("".to_string())
-                ))
-                .map_err(|e| RequestError::Other(e.to_string()))?,
+                body: serde_urlencoded::to_string(&body)
+                    .map_err(|e| {
+                        RequestError::Other(format!(
+                            "unable to encode request body: {}",
+                            e.to_string()
+                        ))
+                    })?
+                    .as_bytes()
+                    .to_vec(),
             },
             body,
             token,
