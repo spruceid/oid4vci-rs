@@ -2,15 +2,13 @@ use std::ops::Deref;
 
 use openidconnect::Nonce;
 use serde::{Deserialize, Serialize};
-use ssi::{
-    claims::{
-        jws::{self, Header, JWSVerifier},
-        jwt,
-    },
-    dids::{DIDResolver, DIDURLBuf, VerificationMethodDIDResolver},
-    jwk::{Algorithm, JWK},
-    verification_methods::AnyMethod,
+use ssi_claims::{
+    jws::{self, Header, JWSVerifier},
+    jwt,
 };
+use ssi_dids_core::{DIDResolver, DIDURLBuf, VerificationMethodDIDResolver};
+use ssi_jwk::{Algorithm, JWK};
+use ssi_verification_methods::AnyMethod;
 use time::{Duration, OffsetDateTime};
 use url::Url;
 
@@ -111,7 +109,7 @@ pub enum ConversionError {
     #[error(transparent)]
     SerializationError(#[from] serde_json::Error),
     #[error(transparent)]
-    SigningError(#[from] ssi::claims::jws::Error),
+    SigningError(#[from] ssi_claims::jws::Error),
     #[error("Unable to select JWT algorithm, please specify in JWK")]
     MissingJWKAlg,
 }
@@ -119,7 +117,7 @@ pub enum ConversionError {
 #[derive(thiserror::Error, Debug)]
 pub enum ParsingError {
     #[error(transparent)]
-    InvalidJWS(#[from] ssi::claims::jws::Error),
+    InvalidJWS(#[from] ssi_claims::jws::Error),
     #[error("JWS type header is invalid, expected `{expected}`, found `{actual}`")]
     InvalidJWSType { actual: String, expected: String },
     #[error("JWS does not specify an algorithm")]
@@ -131,11 +129,11 @@ pub enum ParsingError {
     #[error("Could not retrieve JWK from KID: {0}")]
     KIDDereferenceError(String),
     #[error(transparent)]
-    DIDDereferenceError(#[from] ssi::dids::resolution::Error),
+    DIDDereferenceError(#[from] ssi_dids_core::resolution::Error),
     #[error(transparent)]
-    InvalidDIDURL(#[from] ssi::dids::InvalidDIDURL<String>),
+    InvalidDIDURL(#[from] ssi_dids_core::InvalidDIDURL<String>),
     #[error(transparent)]
-    ProofValidationError(#[from] ssi::claims::ProofValidationError),
+    ProofValidationError(#[from] ssi_claims::ProofValidationError),
 }
 
 impl ProofOfPossession {

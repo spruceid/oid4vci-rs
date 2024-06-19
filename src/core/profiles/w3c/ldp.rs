@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use ssi::claims::SpecializedJsonCredential;
+use ssi_claims::SpecializedJsonCredential;
 
 use crate::profiles::{
     AuthorizationDetaislProfile, CredentialMetadataProfile, CredentialOfferProfile,

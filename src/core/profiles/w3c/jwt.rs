@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use ssi::{claims::CompactJWSString, jwk};
+use ssi_claims::CompactJWSString;
 
 use crate::profiles::{
     AuthorizationDetaislProfile, CredentialMetadataProfile, CredentialOfferProfile,
@@ -10,7 +10,7 @@ use super::{CredentialDefinition, CredentialOfferDefinition};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Metadata {
-    cryptographic_suites_supported: Option<Vec<jwk::Algorithm>>,
+    cryptographic_suites_supported: Option<Vec<ssi_jwk::Algorithm>>,
     credential_definition: CredentialDefinition,
     order: Option<Vec<String>>,
 }
@@ -25,7 +25,7 @@ impl Metadata {
     }
     field_getters_setters![
         pub self [self] ["JWT VC metadata value"] {
-            set_cryptographic_suites_supported -> cryptographic_suites_supported[Option<Vec<jwk::Algorithm>>],
+            set_cryptographic_suites_supported -> cryptographic_suites_supported[Option<Vec<ssi_jwk::Algorithm>>],
             set_credential_definition -> credential_definition[CredentialDefinition],
             set_order -> order[Option<Vec<String>>],
         }

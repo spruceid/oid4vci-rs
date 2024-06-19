@@ -12,7 +12,7 @@ use openidconnect::{
     JweKeyManagementAlgorithm, Nonce,
 };
 use serde::{Deserialize, Serialize};
-use ssi::jwk::JWK;
+use ssi_jwk::JWK;
 
 use crate::{
     http_utils::{auth_bearer, content_type_has_essence, MIME_TYPE_JSON},
