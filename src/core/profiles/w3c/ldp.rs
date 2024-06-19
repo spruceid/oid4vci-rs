@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use ssi::{ldp::ProofSuiteType, vc::Credential};
+use ssi::claims::SpecializedJsonCredential;
 
 use crate::profiles::{
     AuthorizationDetaislProfile, CredentialMetadataProfile, CredentialOfferProfile,
@@ -10,7 +10,7 @@ use super::{CredentialDefinition, CredentialOfferDefinition};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Metadata {
-    cryptographic_suites_supported: Option<Vec<ProofSuiteType>>,
+    cryptographic_suites_supported: Option<Vec<String>>,
     #[serde(rename = "@context")]
     context: Vec<serde_json::Value>,
     credentials_definition: CredentialDefinitionLD,
@@ -31,7 +31,7 @@ impl Metadata {
     }
     field_getters_setters![
         pub self [self] ["LD VC metadata value"] {
-            set_cryptographic_suites_supported -> cryptographic_suites_supported[Option<Vec<ProofSuiteType>>],
+            set_cryptographic_suites_supported -> cryptographic_suites_supported[Option<Vec<String>>],
             set_context -> context[Vec<serde_json::Value>],
             set_credentials_definition -> credentials_definition[CredentialDefinitionLD],
             set_order -> order[Option<Vec<String>>],
@@ -160,19 +160,19 @@ impl CredentialRequestProfile for Request {
     type Response = Response;
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Response {
-    credential: Credential,
+    credential: SpecializedJsonCredential,
 }
 
 impl Response {
-    pub fn new(credential: Credential) -> Self {
+    pub fn new(credential: SpecializedJsonCredential) -> Self {
         Self { credential }
     }
 
     field_getters_setters![
         pub self [self] ["LD VC credential response value"] {
-            set_credential -> credential[Credential],
+            set_credential -> credential[SpecializedJsonCredential],
         }
     ];
 }

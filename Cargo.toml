@@ -11,7 +11,7 @@ repository = "https://github.com/spruceid/oidc4vci-rs/"
 # TODO feature-gate
 isomdl = { git = "https://github.com/spruceid/isomdl", rev = "90ce218" }
 
-ssi = "0.7.0"
+ssi = { git = "https://github.com/spruceid/ssi.git", branch = "treeldr" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_with = "3.3.0"
@@ -28,5 +28,5 @@ serde_urlencoded = "0.7.1"
 
 [dev-dependencies]
 assert-json-diff = "2.0.2"
-did-jwk = "0.1.0"
+did-jwk = { git = "https://github.com/spruceid/ssi.git", branch = "treeldr" }
 tokio = { version = "1.25.0", features = ["macros"] }
