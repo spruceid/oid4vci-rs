@@ -6,9 +6,8 @@ use ssi_claims::{
     jws::{self, Header, JWSVerifier},
     jwt,
 };
-use ssi_dids_core::{DIDResolver, DIDURLBuf, VerificationMethodDIDResolver};
+use ssi_dids_core::DIDURLBuf;
 use ssi_jwk::{Algorithm, JWK};
-use ssi_verification_methods::AnyMethod;
 use time::{Duration, OffsetDateTime};
 use url::Url;
 
@@ -178,7 +177,7 @@ impl ProofOfPossession {
 
     pub async fn from_proof<R>(proof: &Proof, resolver: R) -> Result<Self, ParsingError>
     where
-        R: DIDResolver,
+        R: JWSVerifier,
     {
         match proof {
             Proof::JWT { jwt } => Self::from_jwt(jwt, resolver).await,
@@ -188,7 +187,7 @@ impl ProofOfPossession {
 
     pub async fn from_jwt<R>(jwt: &str, resolver: R) -> Result<Self, ParsingError>
     where
-        R: DIDResolver,
+        R: JWSVerifier,
     {
         let header: Header = jws::decode_unverified(jwt)?.0;
 
@@ -204,9 +203,11 @@ impl ProofOfPossession {
         let (controller, jwk) = match (header.key_id, header.jwk, header.x509_certificate_chain) {
             (Some(kid), None, None) => {
                 let vm = kid.parse()?;
-                get_jwk_from_kid(&kid, resolver)
+                //get_jwk_from_kid(&kid, resolver)
+                resolver
+                    .fetch_public_jwk(Some(&kid))
                     .await
-                    .map(|r| (Some(vm), r))?
+                    .map(|r| (Some(vm), r.deref().clone()))?
             }
             (None, Some(jwk), None) => (None, jwk),
             (None, None, Some(_x5c)) => {
@@ -276,21 +277,14 @@ impl ProofOfPossession {
     }
 }
 
-async fn get_jwk_from_kid<R>(kid: &str, resolver: R) -> Result<JWK, ParsingError>
-where
-    R: DIDResolver,
-{
-    let resolver: VerificationMethodDIDResolver<_, AnyMethod> =
-        VerificationMethodDIDResolver::new(resolver);
-    Ok(resolver.fetch_public_jwk(Some(kid)).await?.deref().clone())
-}
-
 #[cfg(test)]
 mod test {
     use did_jwk::DIDJWK;
     use did_method_key::DIDKey;
     use serde_json::json;
+    use ssi_dids_core::{DIDResolver, VerificationMethodDIDResolver};
     use ssi_jwk::JWK;
+    use ssi_verification_methods::AnyMethod;
 
     use super::*;
 
@@ -323,7 +317,8 @@ mod test {
 
         let pop_jwt = pop.to_jwt().unwrap();
 
-        let pop = ProofOfPossession::from_jwt(&pop_jwt, &DIDJWK)
+        let resolver: VerificationMethodDIDResolver<_, AnyMethod> = DIDJWK.with_default_options();
+        let pop = ProofOfPossession::from_jwt(&pop_jwt, resolver)
             .await
             .unwrap();
 
@@ -369,7 +364,8 @@ mod test {
         )
         .to_jwt()
         .unwrap();
-        let pop = ProofOfPossession::from_jwt(&pop_jwt, &DIDKey)
+        let resolver: VerificationMethodDIDResolver<_, AnyMethod> = DIDKey.with_default_options();
+        let pop = ProofOfPossession::from_jwt(&pop_jwt, resolver)
             .await
             .unwrap();
         pop.verify(&ProofOfPossessionVerificationParams {
@@ -398,7 +394,8 @@ mod test {
 
         let pop_jwt = pop.to_jwt().unwrap();
 
-        let pop = ProofOfPossession::from_jwt(&pop_jwt, &DIDJWK)
+        let resolver: VerificationMethodDIDResolver<_, AnyMethod> = DIDJWK.with_default_options();
+        let pop = ProofOfPossession::from_jwt(&pop_jwt, resolver)
             .await
             .unwrap();
 
@@ -432,7 +429,8 @@ mod test {
 
         let pop_jwt = pop.to_jwt().unwrap();
 
-        let pop = ProofOfPossession::from_jwt(&pop_jwt, &DIDJWK)
+        let resolver: VerificationMethodDIDResolver<_, AnyMethod> = DIDJWK.with_default_options();
+        let pop = ProofOfPossession::from_jwt(&pop_jwt, resolver)
             .await
             .unwrap();
 
