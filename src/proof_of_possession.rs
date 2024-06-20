@@ -288,7 +288,9 @@ where
 #[cfg(test)]
 mod test {
     use did_jwk::DIDJWK;
+    use did_method_key::DIDKey;
     use serde_json::json;
+    use ssi_jwk::JWK;
 
     use super::*;
 
@@ -330,6 +332,51 @@ mod test {
             audience: pop.body.audience.clone(),
             issuer: "test".to_string(),
             controller_did: Some(did),
+            controller_jwk: None,
+            nbf_tolerance: None,
+            exp_tolerance: None,
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn basic_didkey_p256() {
+        let expires_in = Duration::minutes(5);
+        let jwk = JWK::generate_p256();
+        let did = DIDKey::generate(&jwk).unwrap();
+        let did_url = DIDKey
+            .resolve(&did.to_owned())
+            .await
+            .unwrap()
+            .document
+            .verification_method
+            .first()
+            .unwrap()
+            .id
+            .clone();
+        let pop_jwt = ProofOfPossession::generate(
+            &ProofOfPossessionParams {
+                issuer: "test".to_string(),
+                audience: Url::parse("http://localhost:300").unwrap(),
+                nonce: None,
+                controller: ProofOfPossessionController {
+                    jwk,
+                    vm: Some(did_url.parse().unwrap()),
+                },
+            },
+            expires_in,
+        )
+        .to_jwt()
+        .unwrap();
+        let pop = ProofOfPossession::from_jwt(&pop_jwt, &DIDKey)
+            .await
+            .unwrap();
+        pop.verify(&ProofOfPossessionVerificationParams {
+            nonce: pop.body.nonce.clone(),
+            audience: pop.body.audience.clone(),
+            issuer: "test".to_string(),
+            controller_did: Some(did_url.to_owned()),
             controller_jwk: None,
             nbf_tolerance: None,
             exp_tolerance: None,

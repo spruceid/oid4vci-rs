@@ -32,4 +32,5 @@ serde_urlencoded = "0.7.1"
 [dev-dependencies]
 assert-json-diff = "2.0.2"
 did-jwk = { git = "https://github.com/spruceid/ssi.git", branch = "treeldr" }
+did-method-key = { git = "https://github.com/spruceid/ssi.git", branch = "treeldr" }
 tokio = { version = "1.25.0", features = ["macros"] }
