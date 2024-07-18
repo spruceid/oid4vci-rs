@@ -1,8 +1,5 @@
 use serde::{Deserialize, Serialize};
-use ssi_claims::{
-    data_integrity::{AnySuite, DataIntegrity},
-    SpecializedJsonCredential,
-};
+use ssi_claims::vc::AnyJsonCredential;
 
 use crate::profiles::{
     AuthorizationDetaislProfile, CredentialMetadataProfile, CredentialOfferProfile,
@@ -163,19 +160,20 @@ impl CredentialRequestProfile for Request {
     type Response = Response;
 }
 
+// We might want to make the credential type generic
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Response {
-    credential: DataIntegrity<SpecializedJsonCredential, AnySuite>,
+    credential: AnyJsonCredential,
 }
 
 impl Response {
-    pub fn new(credential: DataIntegrity<SpecializedJsonCredential, AnySuite>) -> Self {
+    pub fn new(credential: AnyJsonCredential) -> Self {
         Self { credential }
     }
 
     field_getters_setters![
         pub self [self] ["LD VC credential response value"] {
-            set_credential -> credential[DataIntegrity<SpecializedJsonCredential, AnySuite>],
+            set_credential -> credential[AnyJsonCredential],
         }
     ];
 }

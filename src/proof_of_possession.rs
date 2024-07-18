@@ -3,11 +3,11 @@ use std::ops::Deref;
 use openidconnect::Nonce;
 use serde::{Deserialize, Serialize};
 use ssi_claims::{
-    jws::{self, Header, JWSVerifier},
+    jws::{self, Header},
     jwt,
 };
 use ssi_dids_core::DIDURLBuf;
-use ssi_jwk::{Algorithm, JWK};
+use ssi_jwk::{Algorithm, JWKResolver, JWK};
 use time::{Duration, OffsetDateTime};
 use url::Url;
 
@@ -177,7 +177,7 @@ impl ProofOfPossession {
 
     pub async fn from_proof<R>(proof: &Proof, resolver: R) -> Result<Self, ParsingError>
     where
-        R: JWSVerifier,
+        R: JWKResolver,
     {
         match proof {
             Proof::JWT { jwt } => Self::from_jwt(jwt, resolver).await,
@@ -187,7 +187,7 @@ impl ProofOfPossession {
 
     pub async fn from_jwt<R>(jwt: &str, resolver: R) -> Result<Self, ParsingError>
     where
-        R: JWSVerifier,
+        R: JWKResolver,
     {
         let header: Header = jws::decode_unverified(jwt)?.0;
 
@@ -317,7 +317,7 @@ mod test {
 
         let pop_jwt = pop.to_jwt().unwrap();
 
-        let resolver: VerificationMethodDIDResolver<_, AnyMethod> = DIDJWK.with_default_options();
+        let resolver: VerificationMethodDIDResolver<_, AnyMethod> = DIDJWK.into_vm_resolver();
         let pop = ProofOfPossession::from_jwt(&pop_jwt, resolver)
             .await
             .unwrap();
@@ -364,7 +364,7 @@ mod test {
         )
         .to_jwt()
         .unwrap();
-        let resolver: VerificationMethodDIDResolver<_, AnyMethod> = DIDKey.with_default_options();
+        let resolver: VerificationMethodDIDResolver<_, AnyMethod> = DIDKey.into_vm_resolver();
         let pop = ProofOfPossession::from_jwt(&pop_jwt, resolver)
             .await
             .unwrap();
@@ -394,7 +394,7 @@ mod test {
 
         let pop_jwt = pop.to_jwt().unwrap();
 
-        let resolver: VerificationMethodDIDResolver<_, AnyMethod> = DIDJWK.with_default_options();
+        let resolver: VerificationMethodDIDResolver<_, AnyMethod> = DIDJWK.into_vm_resolver();
         let pop = ProofOfPossession::from_jwt(&pop_jwt, resolver)
             .await
             .unwrap();
@@ -429,7 +429,7 @@ mod test {
 
         let pop_jwt = pop.to_jwt().unwrap();
 
-        let resolver: VerificationMethodDIDResolver<_, AnyMethod> = DIDJWK.with_default_options();
+        let resolver: VerificationMethodDIDResolver<_, AnyMethod> = DIDJWK.into_vm_resolver();
         let pop = ProofOfPossession::from_jwt(&pop_jwt, resolver)
             .await
             .unwrap();
