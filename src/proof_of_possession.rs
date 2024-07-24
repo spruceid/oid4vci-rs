@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use openidconnect::Nonce;
 use serde::{Deserialize, Serialize};
 use ssi_claims::{
@@ -175,20 +173,17 @@ impl ProofOfPossession {
         Ok(jws::encode_sign_custom_header(&payload, jwk, &header)?)
     }
 
-    pub async fn from_proof<R>(proof: &Proof, resolver: R) -> Result<Self, ParsingError>
-    where
-        R: JWKResolver,
-    {
+    pub async fn from_proof(
+        proof: &Proof,
+        resolver: impl JWKResolver,
+    ) -> Result<Self, ParsingError> {
         match proof {
             Proof::JWT { jwt } => Self::from_jwt(jwt, resolver).await,
             Proof::CWT { .. } => todo!(),
         }
     }
 
-    pub async fn from_jwt<R>(jwt: &str, resolver: R) -> Result<Self, ParsingError>
-    where
-        R: JWKResolver,
-    {
+    pub async fn from_jwt(jwt: &str, resolver: impl JWKResolver) -> Result<Self, ParsingError> {
         let header: Header = jws::decode_unverified(jwt)?.0;
 
         if header.type_ != Some(JWS_TYPE.to_string()) {
@@ -207,7 +202,7 @@ impl ProofOfPossession {
                 resolver
                     .fetch_public_jwk(Some(&kid))
                     .await
-                    .map(|r| (Some(vm), r.deref().clone()))?
+                    .map(|r| (Some(vm), r.into_owned()))?
             }
             (None, Some(jwk), None) => (None, jwk),
             (None, None, Some(_x5c)) => {
@@ -267,7 +262,7 @@ impl ProofOfPossession {
         if let Some(did) = &params.controller_did {
             if self.controller.vm.is_none() {
                 return Err(VerificationError::InvalidDID {
-                    expected: did.clone().to_string(),
+                    expected: did.to_string(),
                     actual: format!("{:?}", self.controller.vm),
                 });
             }
@@ -300,7 +295,7 @@ mod test {
                     nonce: None,
                     controller: ProofOfPossessionController {
                         jwk,
-                        vm: Some(did_url.parse().unwrap()),
+                        vm: Some(did_url.clone()),
                     },
                 },
                 expires_in,
@@ -339,17 +334,7 @@ mod test {
     async fn basic_didkey_p256() {
         let expires_in = Duration::minutes(5);
         let jwk = JWK::generate_p256();
-        let did = DIDKey::generate(&jwk).unwrap();
-        let did_url = DIDKey
-            .resolve(&did.to_owned())
-            .await
-            .unwrap()
-            .document
-            .verification_method
-            .first()
-            .unwrap()
-            .id
-            .clone();
+        let did_url = DIDKey::generate_url(&jwk).unwrap();
         let pop_jwt = ProofOfPossession::generate(
             &ProofOfPossessionParams {
                 issuer: "test".to_string(),
@@ -357,7 +342,7 @@ mod test {
                 nonce: None,
                 controller: ProofOfPossessionController {
                     jwk,
-                    vm: Some(did_url.parse().unwrap()),
+                    vm: Some(did_url.clone()),
                 },
             },
             expires_in,
@@ -372,7 +357,7 @@ mod test {
             nonce: pop.body.nonce.clone(),
             audience: pop.body.audience.clone(),
             issuer: "test".to_string(),
-            controller_did: Some(did_url.to_owned()),
+            controller_did: Some(did_url),
             controller_jwk: None,
             nbf_tolerance: None,
             exp_tolerance: None,
