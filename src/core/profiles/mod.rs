@@ -87,7 +87,7 @@ impl CredentialRequestProfile for CoreProfilesRequest {
     type Response = CoreProfilesResponse;
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "format")]
 pub enum CoreProfilesResponse {
     #[serde(rename = "jwt_vc_json")]
