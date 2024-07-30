@@ -271,6 +271,20 @@ new_url_type![
     ParUrl
 ];
 
+new_url_type![
+    ///
+    /// URL of the Credential Issuer's Notification Endpoint
+    ///
+    NotificationUrl
+];
+
+new_url_type![
+    ///
+    /// URI where the Wallet can obtain an image
+    ///
+    ImageUrl
+];
+
 new_type![
     ///
     /// String value of a background color of the Credential represented as numerical color values defined in CSS Color Module Level 37 [CSS-Color].

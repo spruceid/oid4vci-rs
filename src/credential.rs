@@ -12,9 +12,9 @@ use openidconnect::{
     JweKeyManagementAlgorithm, Nonce,
 };
 use serde::{Deserialize, Serialize};
-use ssi_jwk::JWK;
 
 use crate::{
+    credential_response_encryption::CredentialResponseEncryption,
     http_utils::{auth_bearer, content_type_has_essence, MIME_TYPE_JSON},
     metadata::CredentialUrl,
     profiles::{CredentialRequestProfile, CredentialResponseProfile},
@@ -27,16 +27,15 @@ where
     CR: CredentialRequestProfile,
     JT: JsonWebKeyType,
     JE: JweContentEncryptionAlgorithm<JT>,
-    JA: JweKeyManagementAlgorithm,
+    JA: JweKeyManagementAlgorithm + Clone,
 {
     #[serde(flatten, bound = "CR: CredentialRequestProfile")]
     additional_profile_fields: CR,
     proof: Option<Proof>,
-    credential_encryption_jwk: Option<JWK>,
-    #[serde(bound = "JA: JweKeyManagementAlgorithm")]
-    credential_response_encryption_alg: Option<JA>,
-    #[serde(bound = "JE: JweContentEncryptionAlgorithm<JT>")]
-    credential_response_encryption_enc: Option<JE>,
+    #[serde(
+        bound = "JT: JsonWebKeyType, JA: JweKeyManagementAlgorithm, JE: JweContentEncryptionAlgorithm<JT>"
+    )]
+    credential_response_encryption: Option<CredentialResponseEncryption<JT, JE, JA>>,
     #[serde(skip)]
     _phantom_jt: PhantomData<JT>,
 }
@@ -46,15 +45,13 @@ where
     CR: CredentialRequestProfile,
     JT: JsonWebKeyType,
     JE: JweContentEncryptionAlgorithm<JT>,
-    JA: JweKeyManagementAlgorithm,
+    JA: JweKeyManagementAlgorithm + Clone,
 {
     pub(crate) fn new(additional_profile_fields: CR) -> Self {
         Self {
             additional_profile_fields,
             proof: None,
-            credential_encryption_jwk: None,
-            credential_response_encryption_alg: None,
-            credential_response_encryption_enc: None,
+            credential_response_encryption: None,
             _phantom_jt: PhantomData,
         }
     }
@@ -63,9 +60,7 @@ where
         pub self [self] ["credential request value"] {
             set_additional_profile_fields -> additional_profile_fields[CR],
             set_proof -> proof[Option<Proof>],
-            set_credential_encryption_jwk -> credential_encryption_jwk[Option<JWK>],
-            set_credential_response_encryption_alg -> credential_response_encryption_alg[Option<JA>],
-            set_credential_response_encryption_enc -> credential_response_encryption_enc[Option<JE>],
+            set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryption<JT, JE, JA>>],
         }
     ];
 }
@@ -75,7 +70,7 @@ where
     CR: CredentialRequestProfile,
     JT: JsonWebKeyType,
     JE: JweContentEncryptionAlgorithm<JT>,
-    JA: JweKeyManagementAlgorithm,
+    JA: JweKeyManagementAlgorithm + Clone,
 {
     body: Request<CR, JT, JE, JA>,
     url: CredentialUrl,
@@ -87,7 +82,7 @@ where
     CR: CredentialRequestProfile,
     JT: JsonWebKeyType,
     JE: JweContentEncryptionAlgorithm<JT>,
-    JA: JweKeyManagementAlgorithm,
+    JA: JweKeyManagementAlgorithm + Clone,
 {
     pub(crate) fn new(
         body: Request<CR, JT, JE, JA>,
@@ -105,9 +100,7 @@ where
         pub self [self.body] ["credential request value"] {
             set_additional_profile_fields -> additional_profile_fields[CR],
             set_proof -> proof[Option<Proof>],
-            set_credential_encryption_jwk -> credential_encryption_jwk[Option<JWK>],
-            set_credential_response_encryption_alg -> credential_response_encryption_alg[Option<JA>],
-            set_credential_response_encryption_enc -> credential_response_encryption_enc[Option<JE>],
+            set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryption<JT, JE, JA>>],
         }
     ];
 
@@ -262,8 +255,8 @@ where
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorType {
-    InvalidRequest,
     InvalidToken,
+    InvalidCredentialRequest,
     UnsupportedCredentialType,
     UnsupportedCredentialFormat,
     InvalidProof,
@@ -278,7 +271,7 @@ where
     CR: CredentialRequestProfile,
     JT: JsonWebKeyType,
     JE: JweContentEncryptionAlgorithm<JT>,
-    JA: JweKeyManagementAlgorithm,
+    JA: JweKeyManagementAlgorithm + Clone,
 {
     #[serde(bound = "CR: CredentialRequestProfile")]
     credential_requests: Vec<Request<CR, JT, JE, JA>>,
@@ -327,6 +320,39 @@ mod test {
             }
         }))
         .unwrap();
+    }
+
+    #[test]
+    fn example_credential_request_referenced() {
+        let _: crate::core::credential::Request = serde_json::from_value(json!({
+            "credential_identifier": "UniversityDegreeCredential",
+            "proof": {
+               "proof_type": "jwt",
+               "jwt": "eyJraWQiOiJkaWQ6ZXhhbXBsZTplYmZlYjFmNzEyZWJjNmYxYzI3NmUxMmVjMjEva2V5cy8
+               xIiwiYWxnIjoiRVMyNTYiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJzNkJoZFJrcXQzIiwiYXVkIjoiaHR
+               0cHM6Ly9zZXJ2ZXIuZXhhbXBsZS5jb20iLCJpYXQiOjE1MzY5NTk5NTksIm5vbmNlIjoidFppZ25zbk
+               ZicCJ9.ewdkIkPV50iOeBUqMXCC_aZKPxgihac0aW9EkL1nOzM"
+            }
+        }))
+        .unwrap();
+    }
+
+    #[test]
+    fn example_credential_request_deny() {
+        assert!(
+            serde_json::from_value::<crate::core::credential::Request>(json!({
+                "format": "jwt_vc_json",
+                "credential_identifier": "UniversityDegreeCredential",
+                "proof": {
+                   "proof_type": "jwt",
+                   "jwt": "eyJraWQiOiJkaWQ6ZXhhbXBsZTplYmZlYjFmNzEyZWJjNmYxYzI3NmUxMmVjMjEva2V5cy8
+               xIiwiYWxnIjoiRVMyNTYiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJzNkJoZFJrcXQzIiwiYXVkIjoiaHR
+               0cHM6Ly9zZXJ2ZXIuZXhhbXBsZS5jb20iLCJpYXQiOjE1MzY5NTk5NTksIm5vbmNlIjoidFppZ25zbk
+               ZicCJ9.ewdkIkPV50iOeBUqMXCC_aZKPxgihac0aW9EkL1nOzM"
+                }
+            }))
+            .is_err()
+        );
     }
 
     #[test]

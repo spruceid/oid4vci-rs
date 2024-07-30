@@ -11,6 +11,15 @@ use url::Url;
 
 const JWS_TYPE: &str = "openid4vci-proof+jwt";
 
+pub type ProofSigningAlgValuesSupported = Vec<ssi_jwk::Algorithm>;
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct KeyProofTypeWrapper {
+    #[serde(rename = "$key$")]
+    key: KeyProofType,
+    proof_signing_alg_values_supported: Vec<ssi_jwk::Algorithm>,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum KeyProofType {
     #[serde(rename = "jwt")]

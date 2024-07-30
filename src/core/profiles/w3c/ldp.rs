@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use ssi_claims::vc::AnyJsonCredential;
 
 use crate::profiles::{
-    AuthorizationDetaislProfile, CredentialMetadataProfile, CredentialOfferProfile,
+    AuthorizationDetailsProfile, CredentialMetadataProfile, CredentialOfferProfile,
     CredentialRequestProfile, CredentialResponseProfile,
 };
 
@@ -121,12 +121,21 @@ impl CredentialOfferProfile for Offer {}
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AuthorizationDetails {
     credential_definition: CredentialDefinitionLD,
+
+    #[serde(
+        default,
+        skip_serializing,
+        deserialize_with = "crate::deny_field::deny_field",
+        rename = "credential_configuration_id"
+    )]
+    _credential_configuration_id: (),
 }
 
 impl AuthorizationDetails {
     pub fn new(credential_definition: CredentialDefinitionLD) -> Self {
         Self {
             credential_definition,
+            _credential_configuration_id: (),
         }
     }
 
@@ -136,17 +145,26 @@ impl AuthorizationDetails {
         }
     ];
 }
-impl AuthorizationDetaislProfile for AuthorizationDetails {}
+impl AuthorizationDetailsProfile for AuthorizationDetails {}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Request {
     credential_definition: CredentialDefinitionLD,
+
+    #[serde(
+        default,
+        skip_serializing,
+        deserialize_with = "crate::deny_field::deny_field",
+        rename = "credential_identifier"
+    )]
+    _credential_identifier: (),
 }
 
 impl Request {
     pub fn new(credential_definition: CredentialDefinitionLD) -> Self {
         Self {
             credential_definition,
+            _credential_identifier: (),
         }
     }
 

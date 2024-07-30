@@ -3,11 +3,11 @@ use openidconnect::{CsrfToken, IssuerUrl};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::profiles::AuthorizationDetaislProfile;
+use crate::profiles::AuthorizationDetailsProfile;
 
 pub struct AuthorizationRequest<'a, AD>
 where
-    AD: AuthorizationDetaislProfile,
+    AD: AuthorizationDetailsProfile,
 {
     inner: oauth2::AuthorizationRequest<'a>, // TODO
     authorization_details: Vec<AuthorizationDetail<AD>>,
@@ -20,7 +20,7 @@ where
 
 impl<'a, AD> AuthorizationRequest<'a, AD>
 where
-    AD: AuthorizationDetaislProfile,
+    AD: AuthorizationDetailsProfile,
 {
     pub(crate) fn new(
         inner: oauth2::AuthorizationRequest<'a>,
@@ -74,10 +74,10 @@ where
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AuthorizationDetail<AD>
 where
-    AD: AuthorizationDetaislProfile,
+    AD: AuthorizationDetailsProfile,
 {
     r#type: AuthorizationDetailType,
-    #[serde(flatten, bound = "AD: AuthorizationDetaislProfile")]
+    #[serde(flatten, bound = "AD: AuthorizationDetailsProfile")]
     addition_profile_fields: AD,
     #[serde(skip_serializing_if = "Option::is_none")]
     locations: Option<Vec<IssuerUrl>>,
@@ -97,7 +97,7 @@ mod test {
     use serde_json::json;
 
     use crate::{
-        core::profiles::{w3c, CoreProfilesAuthorizationDetails},
+        core::profiles::{w3c, CoreProfilesAuthorizationDetails, FormatAuthorizationDetails},
         metadata::CredentialUrl,
     };
 
@@ -119,6 +119,34 @@ mod test {
                }
             ]))
             .unwrap();
+    }
+
+    #[test]
+    fn example_authorization_details_credential_configuration_id() {
+        let _: Vec<AuthorizationDetail<CoreProfilesAuthorizationDetails>> =
+            serde_json::from_value(json!([
+                {
+                  "type": "openid_credential",
+                  "credential_configuration_id": "UniversityDegreeCredential"
+                }
+            ]))
+            .unwrap();
+    }
+
+    #[test]
+    fn example_authorization_details_credential_configuration_id_deny() {
+        assert!(
+            serde_json::from_value::<Vec<AuthorizationDetail<CoreProfilesAuthorizationDetails>>>(
+                json!([
+                    {
+                      "type": "openid_credential",
+                      "format": "jwt_vc_json",
+                      "credential_configuration_id": "UniversityDegreeCredential"
+                    }
+                ])
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -190,11 +218,13 @@ mod test {
         let state = CsrfToken::new("state".into());
         let authorization_details = vec![AuthorizationDetail {
             r#type: AuthorizationDetailType::OpenidCredential,
-            addition_profile_fields: CoreProfilesAuthorizationDetails::JWTVC(
-                w3c::jwt::AuthorizationDetails::new(w3c::CredentialDefinition::new(vec![
-                    "VerifiableCredential".into(),
-                    "UniversityDegreeCredential".into(),
-                ])),
+            addition_profile_fields: CoreProfilesAuthorizationDetails::Format(
+                FormatAuthorizationDetails::JWTVC(w3c::jwt::AuthorizationDetails::new(
+                    w3c::CredentialDefinition::new(vec![
+                        "VerifiableCredential".into(),
+                        "UniversityDegreeCredential".into(),
+                    ]),
+                )),
             ),
             locations: None,
         }];

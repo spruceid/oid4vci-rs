@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use serde::{Deserialize, Serialize};
 
 use crate::profiles::{
-    AuthorizationDetaislProfile, CredentialMetadataProfile, CredentialOfferProfile,
+    AuthorizationDetailsProfile, CredentialMetadataProfile, CredentialOfferProfile,
     CredentialRequestProfile, CredentialResponseProfile, Profile,
 };
 
@@ -35,10 +35,18 @@ impl CredentialMetadataProfile for CoreProfilesMetadata {
 
     fn to_request(&self) -> Self::Request {
         match self {
-            CoreProfilesMetadata::JWTVC(m) => Self::Request::JWTVC(m.to_request()),
-            CoreProfilesMetadata::JWTLDVC(m) => Self::Request::JWTLDVC(m.to_request()),
-            CoreProfilesMetadata::LDVC(m) => Self::Request::LDVC(m.to_request()),
-            CoreProfilesMetadata::ISOmDL(m) => Self::Request::ISOmDL(m.to_request()),
+            CoreProfilesMetadata::JWTVC(m) => {
+                Self::Request::Format(FormatRequest::JWTVC(m.to_request()))
+            }
+            CoreProfilesMetadata::JWTLDVC(m) => {
+                Self::Request::Format(FormatRequest::JWTLDVC(m.to_request()))
+            }
+            CoreProfilesMetadata::LDVC(m) => {
+                Self::Request::Format(FormatRequest::LDVC(m.to_request()))
+            }
+            CoreProfilesMetadata::ISOmDL(m) => {
+                Self::Request::Format(FormatRequest::ISOmDL(m.to_request()))
+            }
         }
     }
 }
@@ -58,8 +66,36 @@ pub enum CoreProfilesOffer {
 impl CredentialOfferProfile for CoreProfilesOffer {}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct ReferencedAuthorizationDetails {
+    credential_configuration_id: String,
+
+    #[serde(
+        default,
+        skip_serializing,
+        deserialize_with = "crate::deny_field::deny_field",
+        rename = "format"
+    )]
+    _format: (),
+}
+
+impl ReferencedAuthorizationDetails {
+    pub fn new(credential_configuration_id: String) -> Self {
+        Self {
+            credential_configuration_id,
+            _format: (),
+        }
+    }
+
+    field_getters_setters![
+        pub self [self] ["Authorization Details definition value"] {
+            set_credential_configuration_id -> credential_configuration_id[String],
+        }
+    ];
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "format")]
-pub enum CoreProfilesAuthorizationDetails {
+pub enum FormatAuthorizationDetails {
     #[serde(rename = "jwt_vc_json")]
     JWTVC(w3c::jwt::AuthorizationDetails),
     #[serde(rename = "jwt_vc_json-ld")]
@@ -69,11 +105,46 @@ pub enum CoreProfilesAuthorizationDetails {
     #[serde(rename = "mso_mdoc")]
     ISOmDL(isomdl::AuthorizationDetails),
 }
-impl AuthorizationDetaislProfile for CoreProfilesAuthorizationDetails {}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum CoreProfilesAuthorizationDetails {
+    Format(FormatAuthorizationDetails),
+    Referenced(ReferencedAuthorizationDetails),
+}
+impl AuthorizationDetailsProfile for CoreProfilesAuthorizationDetails {}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct ReferencedRequest {
+    credential_identifier: String,
+
+    #[serde(
+        default,
+        skip_serializing,
+        deserialize_with = "crate::deny_field::deny_field",
+        rename = "format"
+    )]
+    _format: (),
+}
+
+impl ReferencedRequest {
+    pub fn new(credential_identifier: String) -> Self {
+        Self {
+            credential_identifier,
+            _format: (),
+        }
+    }
+
+    field_getters_setters![
+        pub self [self] ["Authorization Details definition value"] {
+            set_credential_identifier -> credential_identifier[String],
+        }
+    ];
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "format")]
-pub enum CoreProfilesRequest {
+pub enum FormatRequest {
     #[serde(rename = "jwt_vc_json")]
     JWTVC(w3c::jwt::Request),
     #[serde(rename = "jwt_vc_json-ld")]
@@ -83,6 +154,14 @@ pub enum CoreProfilesRequest {
     #[serde(rename = "mso_mdoc")]
     ISOmDL(isomdl::Request),
 }
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum CoreProfilesRequest {
+    Format(FormatRequest),
+    Referenced(ReferencedRequest),
+}
+
 impl CredentialRequestProfile for CoreProfilesRequest {
     type Response = CoreProfilesResponse;
 }

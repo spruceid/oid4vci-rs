@@ -1,5 +1,4 @@
 #![allow(clippy::type_complexity)]
-use std::{future::Future, marker::PhantomData};
 
 use oauth2::{
     http::{header::ACCEPT, HeaderValue, Method, StatusCode},
@@ -17,15 +16,20 @@ use openidconnect::{
     ProviderMetadata, ResponseTypes, Scope,
 };
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none};
+use serde_with::{serde_as, skip_serializing_none, KeyValueMap};
+use std::{future::Future, marker::PhantomData};
 
 use crate::{
+    credential_response_encryption::CredentialResponseEncryptionMetadata,
     http_utils::{check_content_type, MIME_TYPE_JSON},
     profiles::CredentialMetadataProfile,
-    proof_of_possession::KeyProofType,
+    proof_of_possession::KeyProofTypeWrapper,
+    types::ImageUrl,
 };
 
-pub use crate::types::{BatchCredentialUrl, CredentialUrl, DeferredCredentialUrl, ParUrl};
+pub use crate::types::{
+    BatchCredentialUrl, CredentialUrl, DeferredCredentialUrl, NotificationUrl, ParUrl,
+};
 
 const METADATA_URL_SUFFIX: &str = ".well-known/openid-credential-issuer";
 const AUTHORIZATION_METADATA_URL_SUFFIX: &str = ".well-known/oauth-authorization-server";
@@ -41,18 +45,21 @@ where
     JA: JweKeyManagementAlgorithm + Clone,
 {
     credential_issuer: IssuerUrl,
-    authorization_server: Option<IssuerUrl>, // Not sure this is the right type
+    authorization_servers: Option<Vec<IssuerUrl>>, // Not sure this is the right type
     credential_endpoint: CredentialUrl,
     batch_credential_endpoint: Option<BatchCredentialUrl>,
     deferred_credential_endpoint: Option<DeferredCredentialUrl>,
-    #[serde(bound = "JA: JweKeyManagementAlgorithm")]
-    credential_response_encryption_alg_values_supported: Option<Vec<JA>>,
-    #[serde(bound = "JE: JweContentEncryptionAlgorithm<JT>")]
-    credential_response_encryption_enc_values_supported: Option<Vec<JE>>,
-    require_credential_response_encryption: Option<bool>,
+    notification_endpoint: Option<NotificationUrl>,
+    #[serde(
+        bound = "JT: JsonWebKeyType, JA: JweKeyManagementAlgorithm, JE: JweContentEncryptionAlgorithm<JT>"
+    )]
+    credential_response_encryption: Option<CredentialResponseEncryptionMetadata<JT, JE, JA>>,
+    credential_identifiers_supported: Option<bool>,
+    signed_metadata: Option<String>,
+    display: Option<Vec<IssuerMetadataDisplay>>,
     #[serde(bound = "CM: CredentialMetadataProfile")]
-    credentials_supported: Vec<CredentialMetadata<CM>>,
-    display: Option<IssuerMetadataDisplay>,
+    #[serde_as(as = "KeyValueMap<_>")]
+    credential_configurations_supported: Vec<CredentialMetadata<CM>>,
     #[serde(skip)]
     _phantom_jt: PhantomData<JT>,
 }
@@ -67,19 +74,20 @@ where
     pub fn new(
         credential_issuer: IssuerUrl,
         credential_endpoint: CredentialUrl,
-        credentials_supported: Vec<CredentialMetadata<CM>>,
+        credential_configurations_supported: Vec<CredentialMetadata<CM>>,
     ) -> Self {
         Self {
             credential_issuer,
-            authorization_server: None,
+            authorization_servers: None,
             credential_endpoint,
             batch_credential_endpoint: None,
             deferred_credential_endpoint: None,
-            credential_response_encryption_alg_values_supported: None,
-            credential_response_encryption_enc_values_supported: None,
-            require_credential_response_encryption: None,
-            credentials_supported,
+            notification_endpoint: None,
+            credential_response_encryption: None,
+            credential_identifiers_supported: None,
+            signed_metadata: None,
             display: None,
+            credential_configurations_supported,
             _phantom_jt: PhantomData,
         }
     }
@@ -87,15 +95,16 @@ where
     field_getters_setters![
         pub self [self] ["issuer metadata value"] {
             set_credential_issuer -> credential_issuer[IssuerUrl],
-            set_authorization_server -> authorization_server[Option<IssuerUrl>],
+            set_authorization_servers -> authorization_servers[Option<Vec<IssuerUrl>>],
             set_credential_endpoint -> credential_endpoint[CredentialUrl],
             set_batch_credential_endpoint -> batch_credential_endpoint[Option<BatchCredentialUrl>],
             set_deferred_credential_endpoint -> deferred_credential_endpoint[Option<DeferredCredentialUrl>],
-            set_credential_response_encryption_alg_values_supported -> credential_response_encryption_alg_values_supported[Option<Vec<JA>>],
-            set_credential_response_encryption_enc_values_supported -> credential_response_encryption_enc_values_supported[Option<Vec<JE>>],
-            set_require_credential_response_encryption -> require_credential_response_encryption[Option<bool>],
-            set_credentials_supported -> credentials_supported[Vec<CredentialMetadata<CM>>],
-            set_display -> display[Option<IssuerMetadataDisplay>],
+            set_notification_endpoint -> notification_endpoint[Option<NotificationUrl>],
+            set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryptionMetadata<JT, JE, JA>>],
+            set_credential_identifiers_supported -> credential_identifiers_supported[Option<bool>],
+            set_signed_metadata -> signed_metadata[Option<String>],
+            set_display -> display[Option<Vec<IssuerMetadataDisplay>>],
+            set_credential_configurations_supported -> credential_configurations_supported[Vec<CredentialMetadata<CM>>],
         }
     ];
 
@@ -190,6 +199,13 @@ where
 pub struct IssuerMetadataDisplay {
     name: Option<String>,
     locale: Option<LanguageTag>,
+    logo: Option<MetadataDisplayLogo>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct MetadataDisplayLogo {
+    url: LogoUrl,
+    alt_text: Option<String>,
 }
 
 #[serde_as]
@@ -199,9 +215,12 @@ pub struct CredentialMetadata<CM>
 where
     CM: CredentialMetadataProfile,
 {
+    #[serde(rename = "$key$")]
+    name: Option<String>,
     scope: Option<Scope>,
     cryptographic_binding_methods_supported: Option<Vec<CryptographicBindingMethod>>,
-    proof_types_supported: Option<Vec<KeyProofType>>,
+    #[serde_as(as = "Option<KeyValueMap<_>>")]
+    proof_types_supported: Option<Vec<KeyProofTypeWrapper>>,
     display: Option<Vec<CredentialMetadataDisplay>>,
     #[serde(bound = "CM: CredentialMetadataProfile")]
     #[serde(flatten)]
@@ -225,6 +244,7 @@ where
 {
     pub fn new(additional_fields: CM) -> Self {
         Self {
+            name: None,
             scope: None,
             cryptographic_binding_methods_supported: None,
             proof_types_supported: None,
@@ -237,7 +257,7 @@ where
         pub self [self] ["credential metadata value"] {
             set_scope -> scope[Option<Scope>],
             set_cryptographic_binding_methods_supported -> cryptographic_binding_methods_supported[Option<Vec<CryptographicBindingMethod>>],
-            set_proof_types_suuported -> proof_types_supported[Option<Vec<KeyProofType>>],
+            set_proof_types_suuported -> proof_types_supported[Option<Vec<KeyProofTypeWrapper>>],
             set_display -> display[Option<Vec<CredentialMetadataDisplay>>],
             set_additional_fields -> additional_fields[CM],
         }
@@ -263,16 +283,16 @@ pub enum CryptographicBindingMethod {
 pub struct CredentialMetadataDisplay {
     name: String,
     locale: Option<LanguageTag>,
-    logo: Option<CredentialMetadataDisplayLogo>,
+    logo: Option<MetadataDisplayLogo>,
     description: Option<String>,
     background_color: Option<String>,
+    background_image: Option<MetadataBackgroundImage>,
     text_color: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct CredentialMetadataDisplayLogo {
-    url: Option<LogoUrl>,
-    alt_text: Option<String>,
+pub struct MetadataBackgroundImage {
+    uri: ImageUrl,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -361,10 +381,12 @@ impl AuthorizationMetadata {
         JE: JweContentEncryptionAlgorithm<JT>,
         JA: JweKeyManagementAlgorithm + Clone,
     {
-        let issuer_url = issuer_metadata
-            .authorization_server
-            .clone()
-            .unwrap_or(issuer_metadata.credential_issuer.clone());
+        let issuer_url = (match &issuer_metadata.authorization_servers {
+            Some(v) => v.clone().into_iter().next(),
+            _ => None,
+        })
+        .unwrap_or(issuer_metadata.credential_issuer.clone());
+
         let discovery_url = issuer_url
             .join(AUTHORIZATION_METADATA_URL_SUFFIX)
             .map_err(DiscoveryError::UrlParse)?;
@@ -387,10 +409,12 @@ impl AuthorizationMetadata {
         JE: JweContentEncryptionAlgorithm<JT>,
         JA: JweKeyManagementAlgorithm + Clone,
     {
-        let issuer_url = issuer_metadata
-            .authorization_server
-            .clone()
-            .unwrap_or(issuer_metadata.credential_issuer.clone());
+        let issuer_url = (match &issuer_metadata.authorization_servers {
+            Some(v) => v.clone().into_iter().next(),
+            _ => None,
+        })
+        .unwrap_or(issuer_metadata.credential_issuer.clone());
+
         let discovery_url = issuer_url
             .join(AUTHORIZATION_METADATA_URL_SUFFIX)
             .map_err(DiscoveryError::UrlParse)?;
@@ -470,15 +494,115 @@ impl AuthorizationMetadata {
 
 #[cfg(test)]
 mod test {
-    use serde_json::json;
-
     use crate::core::profiles::CoreProfilesMetadata;
 
     use super::*;
 
     #[test]
+    fn example_issuer_metadata() {
+        let jd = &mut serde_json::Deserializer::from_str(
+            r##"{
+            "credential_issuer": "https://credential-issuer.example.com",
+            "authorization_servers": [ "https://server.example.com" ],
+            "credential_endpoint": "https://credential-issuer.example.com",
+            "batch_credential_endpoint": "https://credential-issuer.example.com/batch_credential",
+            "deferred_credential_endpoint": "https://credential-issuer.example.com/deferred_credential",
+            "credential_response_encryption": {
+                "alg_values_supported" : [
+                    "ECDH-ES"
+                ],
+                "enc_values_supported" : [
+                    "A128GCM"
+                ],
+                "encryption_required": false
+            },
+            "display": [
+                {
+                    "name": "Example University",
+                    "locale": "en-US"
+                },
+                {
+                    "name": "Example Université",
+                    "locale": "fr-FR"
+                }
+            ],
+            "credential_configurations_supported": {
+                "UniversityDegreeCredential": {
+                    "format": "jwt_vc_json",
+                    "scope": "UniversityDegree",
+                    "cryptographic_binding_methods_supported": [
+                        "did:example"
+                    ],
+                    "credential_signing_alg_values_supported": [
+                        "ES256"
+                    ],
+                    "credential_definition":{
+                        "type": [
+                            "VerifiableCredential",
+                            "UniversityDegreeCredential"
+                        ],
+                        "credentialSubject": {
+                            "given_name": {
+                                "display": [
+                                    {
+                                        "name": "Given Name",
+                                        "locale": "en-US"
+                                    }
+                                ]
+                            },
+                            "family_name": {
+                                "display": [
+                                    {
+                                        "name": "Surname",
+                                        "locale": "en-US"
+                                    }
+                                ]
+                            },
+                            "degree": {},
+                            "gpa": {
+                                "display": [
+                                    {
+                                        "name": "GPA"
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    "proof_types_supported": {
+                        "jwt": {
+                            "proof_signing_alg_values_supported": [
+                                "ES256"
+                            ]
+                        }
+                    },
+                    "display": [
+                        {
+                            "name": "University Credential",
+                            "locale": "en-US",
+                            "logo": {
+                                "url": "https://university.example.edu/public/logo.png",
+                                "alt_text": "a square logo of a university"
+                            },
+                            "background_color": "#12107c",
+                            "text_color": "#FFFFFF"
+                        }
+                    ]
+                }
+            }
+        }"##,
+        );
+        let _: IssuerMetadata<
+            CoreProfilesMetadata,
+            CoreJsonWebKeyType,
+            CoreJweContentEncryptionAlgorithm,
+            CoreJweKeyManagementAlgorithm,
+        > = serde_path_to_error::deserialize(jd).unwrap();
+    }
+
+    #[test]
     fn example_credential_metadata_jwt() {
-        let _: CredentialMetadata<CoreProfilesMetadata> = serde_json::from_value(json!({
+        let jd = &mut serde_json::Deserializer::from_str(
+            r##"{
             "format": "jwt_vc_json",
             "id": "UniversityDegree_JWT",
             "cryptographic_binding_methods_supported": [
@@ -519,9 +643,13 @@ mod test {
                     }
                 }
             },
-            "proof_types_supported": [
-                "jwt"
-            ],
+            "proof_types_supported": {
+                "jwt": {
+                    "proof_signing_alg_values_supported": [
+                        "ES256"
+                    ]
+                }
+            },
             "display": [
                 {
                     "name": "University Credential",
@@ -534,13 +662,16 @@ mod test {
                     "text_color": "#FFFFFF"
                 }
             ]
-        }))
-        .unwrap();
+        }"##,
+        );
+        let _: CredentialMetadata<CoreProfilesMetadata> =
+            serde_path_to_error::deserialize(jd).unwrap();
     }
 
     #[test]
     fn example_credential_metadata_ldp() {
-        let _: CredentialMetadata<CoreProfilesMetadata> = serde_json::from_value(json!({
+        let jd = &mut serde_json::Deserializer::from_str(
+            r##"{
             "format": "ldp_vc",
             "@context": [
                 "https://www.w3.org/2018/credentials/v1",
@@ -604,13 +735,16 @@ mod test {
                     "text_color": "#FFFFFF"
                 }
             ]
-        }))
-        .unwrap();
+        }"##,
+        );
+        let _: CredentialMetadata<CoreProfilesMetadata> =
+            serde_path_to_error::deserialize(jd).unwrap();
     }
 
     #[test]
     fn example_credential_metadata_isomdl() {
-        let _: CredentialMetadata<CoreProfilesMetadata> = serde_json::from_value(json!({
+        let jd = &mut serde_json::Deserializer::from_str(
+            r##"{
             "format": "mso_mdoc",
             "doctype": "org.iso.18013.5.1.mDL",
             "cryptographic_binding_methods_supported": [
@@ -668,8 +802,10 @@ mod test {
                 "org.iso.18013.5.1.aamva": {
                     "organ_donor": {}
                 }
-        }
-        }))
-        .unwrap();
+            }
+        }"##,
+        );
+        let _: CredentialMetadata<CoreProfilesMetadata> =
+            serde_path_to_error::deserialize(jd).unwrap();
     }
 }

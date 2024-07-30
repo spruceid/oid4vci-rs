@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use ssi_claims::CompactJWSString;
 
 use crate::profiles::{
-    AuthorizationDetaislProfile, CredentialMetadataProfile, CredentialOfferProfile,
+    AuthorizationDetailsProfile, CredentialMetadataProfile, CredentialOfferProfile,
     CredentialRequestProfile, CredentialResponseProfile,
 };
 
@@ -61,12 +61,21 @@ impl CredentialOfferProfile for Offer {}
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AuthorizationDetails {
     credential_definition: CredentialDefinition,
+
+    #[serde(
+        default,
+        skip_serializing,
+        deserialize_with = "crate::deny_field::deny_field",
+        rename = "credential_identifier"
+    )]
+    _credential_identifier: (),
 }
 
 impl AuthorizationDetails {
     pub fn new(credential_definition: CredentialDefinition) -> Self {
         Self {
             credential_definition,
+            _credential_identifier: (),
         }
     }
     field_getters_setters![
@@ -75,17 +84,26 @@ impl AuthorizationDetails {
         }
     ];
 }
-impl AuthorizationDetaislProfile for AuthorizationDetails {}
+impl AuthorizationDetailsProfile for AuthorizationDetails {}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Request {
     credential_definition: CredentialDefinition,
+
+    #[serde(
+        default,
+        skip_serializing,
+        deserialize_with = "crate::deny_field::deny_field",
+        rename = "credential_identifier"
+    )]
+    _credential_identifier: (),
 }
 
 impl Request {
     pub fn new(credential_definition: CredentialDefinition) -> Self {
         Self {
             credential_definition,
+            _credential_identifier: (),
         }
     }
     field_getters_setters![
