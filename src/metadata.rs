@@ -202,10 +202,41 @@ pub struct IssuerMetadataDisplay {
     logo: Option<MetadataDisplayLogo>,
 }
 
+impl IssuerMetadataDisplay {
+    pub fn new(
+        name: Option<String>,
+        locale: Option<LanguageTag>,
+        logo: Option<MetadataDisplayLogo>,
+    ) -> Self {
+        Self { name, locale, logo }
+    }
+
+    field_getters_setters![
+        pub self [self] ["metadata background image value"] {
+            set_name -> name[Option<String>],
+            set_locale -> locale[Option<LanguageTag>],
+            set_logo -> logo[Option<MetadataDisplayLogo>],
+        }
+    ];
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct MetadataDisplayLogo {
     url: LogoUrl,
     alt_text: Option<String>,
+}
+
+impl MetadataDisplayLogo {
+    pub fn new(url: LogoUrl, alt_text: Option<String>) -> Self {
+        Self { url, alt_text }
+    }
+
+    field_getters_setters![
+        pub self [self] ["metadata display logo value"] {
+            set_url -> url[LogoUrl],
+            set_alt_text -> alt_text[Option<String>],
+        }
+    ];
 }
 
 #[serde_as]
@@ -290,9 +321,55 @@ pub struct CredentialMetadataDisplay {
     text_color: Option<String>,
 }
 
+impl CredentialMetadataDisplay {
+    pub fn new(
+        name: String,
+        locale: Option<LanguageTag>,
+        logo: Option<MetadataDisplayLogo>,
+        description: Option<String>,
+        background_color: Option<String>,
+        background_image: Option<MetadataBackgroundImage>,
+        text_color: Option<String>,
+    ) -> Self {
+        Self {
+            name,
+            locale,
+            logo,
+            description,
+            background_color,
+            background_image,
+            text_color,
+        }
+    }
+
+    field_getters_setters![
+        pub self [self] ["credential metadata display value"] {
+            set_name -> name[String],
+            set_locale -> locale[Option<LanguageTag>],
+            set_logo -> logo[Option<MetadataDisplayLogo>],
+            set_description -> description[Option<String>],
+            set_background_color -> background_color[Option<String>],
+            set_background_image -> background_image[Option<MetadataBackgroundImage>],
+            set_text_color -> text_color[Option<String>],
+        }
+    ];
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct MetadataBackgroundImage {
     uri: ImageUrl,
+}
+
+impl MetadataBackgroundImage {
+    pub fn new(uri: ImageUrl) -> Self {
+        Self { uri }
+    }
+
+    field_getters_setters![
+        pub self [self] ["metadata background image value"] {
+            set_uri -> uri[ImageUrl],
+        }
+    ];
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
