@@ -23,7 +23,7 @@ use crate::{
     credential_response_encryption::CredentialResponseEncryptionMetadata,
     http_utils::{check_content_type, MIME_TYPE_JSON},
     profiles::CredentialMetadataProfile,
-    proof_of_possession::KeyProofTypeWrapper,
+    proof_of_possession::KeyProofTypesSupported,
     types::ImageUrl,
 };
 
@@ -251,7 +251,7 @@ where
     scope: Option<Scope>,
     cryptographic_binding_methods_supported: Option<Vec<CryptographicBindingMethod>>,
     #[serde_as(as = "Option<KeyValueMap<_>>")]
-    proof_types_supported: Option<Vec<KeyProofTypeWrapper>>,
+    proof_types_supported: Option<Vec<KeyProofTypesSupported>>,
     display: Option<Vec<CredentialMetadataDisplay>>,
     #[serde(bound = "CM: CredentialMetadataProfile")]
     #[serde(flatten)]
@@ -288,7 +288,7 @@ where
         pub self [self] ["credential metadata value"] {
             set_scope -> scope[Option<Scope>],
             set_cryptographic_binding_methods_supported -> cryptographic_binding_methods_supported[Option<Vec<CryptographicBindingMethod>>],
-            set_proof_types_suuported -> proof_types_supported[Option<Vec<KeyProofTypeWrapper>>],
+            set_proof_types_suuported -> proof_types_supported[Option<Vec<KeyProofTypesSupported>>],
             set_display -> display[Option<Vec<CredentialMetadataDisplay>>],
             set_additional_fields -> additional_fields[CM],
         }
@@ -446,6 +446,7 @@ impl AuthorizationMetadata {
             .set_token_endpoint(Some(token_endpoint)),
         )
     }
+
     pub fn discover<HC, RE, CM, JT, JE, JA>(
         issuer_metadata: &IssuerMetadata<CM, JT, JE, JA>,
         http_client: HC,
@@ -459,6 +460,7 @@ impl AuthorizationMetadata {
         JA: JweKeyManagementAlgorithm + Clone,
     {
         let issuer_url = (match &issuer_metadata.authorization_servers {
+            // TODO: respond with the appropriate authorization server
             Some(v) => v.clone().into_iter().next(),
             _ => None,
         })
@@ -487,6 +489,7 @@ impl AuthorizationMetadata {
         JA: JweKeyManagementAlgorithm + Clone,
     {
         let issuer_url = (match &issuer_metadata.authorization_servers {
+            // TODO: respond with the appropriate authorization server
             Some(v) => v.clone().into_iter().next(),
             _ => None,
         })
@@ -572,13 +575,18 @@ impl AuthorizationMetadata {
 #[cfg(test)]
 mod test {
     use crate::core::profiles::CoreProfilesMetadata;
+    use serde_json::json;
 
     use super::*;
 
     #[test]
     fn example_issuer_metadata() {
-        let jd = &mut serde_json::Deserializer::from_str(
-            r##"{
+        let _: IssuerMetadata<
+            CoreProfilesMetadata,
+            CoreJsonWebKeyType,
+            CoreJweContentEncryptionAlgorithm,
+            CoreJweKeyManagementAlgorithm,
+        > = serde_json::from_value(json!({
             "credential_issuer": "https://credential-issuer.example.com",
             "authorization_servers": [ "https://server.example.com" ],
             "credential_endpoint": "https://credential-issuer.example.com",
@@ -666,20 +674,12 @@ mod test {
                     ]
                 }
             }
-        }"##,
-        );
-        let _: IssuerMetadata<
-            CoreProfilesMetadata,
-            CoreJsonWebKeyType,
-            CoreJweContentEncryptionAlgorithm,
-            CoreJweKeyManagementAlgorithm,
-        > = serde_path_to_error::deserialize(jd).unwrap();
+        })).unwrap();
     }
 
     #[test]
     fn example_credential_metadata_jwt() {
-        let jd = &mut serde_json::Deserializer::from_str(
-            r##"{
+        let _: CredentialMetadata<CoreProfilesMetadata> = serde_json::from_value(json!({
             "format": "jwt_vc_json",
             "id": "UniversityDegree_JWT",
             "cryptographic_binding_methods_supported": [
@@ -739,16 +739,13 @@ mod test {
                     "text_color": "#FFFFFF"
                 }
             ]
-        }"##,
-        );
-        let _: CredentialMetadata<CoreProfilesMetadata> =
-            serde_path_to_error::deserialize(jd).unwrap();
+        }))
+        .unwrap();
     }
 
     #[test]
     fn example_credential_metadata_ldp() {
-        let jd = &mut serde_json::Deserializer::from_str(
-            r##"{
+        let _: CredentialMetadata<CoreProfilesMetadata> = serde_json::from_value(json!({
             "format": "ldp_vc",
             "@context": [
                 "https://www.w3.org/2018/credentials/v1",
@@ -812,16 +809,13 @@ mod test {
                     "text_color": "#FFFFFF"
                 }
             ]
-        }"##,
-        );
-        let _: CredentialMetadata<CoreProfilesMetadata> =
-            serde_path_to_error::deserialize(jd).unwrap();
+        }))
+        .unwrap();
     }
 
     #[test]
     fn example_credential_metadata_isomdl() {
-        let jd = &mut serde_json::Deserializer::from_str(
-            r##"{
+        let _: CredentialMetadata<CoreProfilesMetadata> = serde_json::from_value(json!({
             "format": "mso_mdoc",
             "doctype": "org.iso.18013.5.1.mDL",
             "cryptographic_binding_methods_supported": [
@@ -880,9 +874,7 @@ mod test {
                     "organ_donor": {}
                 }
             }
-        }"##,
-        );
-        let _: CredentialMetadata<CoreProfilesMetadata> =
-            serde_path_to_error::deserialize(jd).unwrap();
+        }))
+        .unwrap();
     }
 }

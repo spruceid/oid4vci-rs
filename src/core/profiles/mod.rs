@@ -36,16 +36,16 @@ impl CredentialMetadataProfile for CoreProfilesMetadata {
     fn to_request(&self) -> Self::Request {
         match self {
             CoreProfilesMetadata::JWTVC(m) => {
-                Self::Request::Format(FormatRequest::JWTVC(m.to_request()))
+                Self::Request::Value(ValueRequest::JWTVC(m.to_request()))
             }
             CoreProfilesMetadata::JWTLDVC(m) => {
-                Self::Request::Format(FormatRequest::JWTLDVC(m.to_request()))
+                Self::Request::Value(ValueRequest::JWTLDVC(m.to_request()))
             }
             CoreProfilesMetadata::LDVC(m) => {
-                Self::Request::Format(FormatRequest::LDVC(m.to_request()))
+                Self::Request::Value(ValueRequest::LDVC(m.to_request()))
             }
             CoreProfilesMetadata::ISOmDL(m) => {
-                Self::Request::Format(FormatRequest::ISOmDL(m.to_request()))
+                Self::Request::Value(ValueRequest::ISOmDL(m.to_request()))
             }
         }
     }
@@ -95,7 +95,7 @@ impl ReferencedAuthorizationDetails {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "format")]
-pub enum FormatAuthorizationDetails {
+pub enum ValueAuthorizationDetails {
     #[serde(rename = "jwt_vc_json")]
     JWTVC(w3c::jwt::AuthorizationDetails),
     #[serde(rename = "jwt_vc_json-ld")]
@@ -109,7 +109,7 @@ pub enum FormatAuthorizationDetails {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum CoreProfilesAuthorizationDetails {
-    Format(FormatAuthorizationDetails),
+    Value(ValueAuthorizationDetails),
     Referenced(ReferencedAuthorizationDetails),
 }
 impl AuthorizationDetailsProfile for CoreProfilesAuthorizationDetails {}
@@ -144,7 +144,7 @@ impl ReferencedRequest {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "format")]
-pub enum FormatRequest {
+pub enum ValueRequest {
     #[serde(rename = "jwt_vc_json")]
     JWTVC(w3c::jwt::Request),
     #[serde(rename = "jwt_vc_json-ld")]
@@ -158,7 +158,7 @@ pub enum FormatRequest {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum CoreProfilesRequest {
-    Format(FormatRequest),
+    Value(ValueRequest),
     Referenced(ReferencedRequest),
 }
 

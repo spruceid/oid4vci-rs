@@ -38,7 +38,7 @@ pub enum Request {
 
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct ExtraResponseTokenFields<AD>
 where
     AD: AuthorizationDetailsProfile,
@@ -47,19 +47,6 @@ where
     pub c_nonce_expires_in: Option<Duration>,
     #[serde(bound = "AD: AuthorizationDetailsProfile")]
     pub authorization_details: Option<Vec<AuthorizationDetail<AD>>>,
-}
-
-impl<AD> Default for ExtraResponseTokenFields<AD>
-where
-    AD: AuthorizationDetailsProfile,
-{
-    fn default() -> Self {
-        Self {
-            c_nonce: None,
-            c_nonce_expires_in: None,
-            authorization_details: None,
-        }
-    }
 }
 
 pub type Response = StandardTokenResponse<

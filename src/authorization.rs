@@ -97,7 +97,7 @@ mod test {
     use serde_json::json;
 
     use crate::{
-        core::profiles::{w3c, CoreProfilesAuthorizationDetails, FormatAuthorizationDetails},
+        core::profiles::{w3c, CoreProfilesAuthorizationDetails, ValueAuthorizationDetails},
         metadata::CredentialUrl,
     };
 
@@ -218,8 +218,8 @@ mod test {
         let state = CsrfToken::new("state".into());
         let authorization_details = vec![AuthorizationDetail {
             r#type: AuthorizationDetailType::OpenidCredential,
-            addition_profile_fields: CoreProfilesAuthorizationDetails::Format(
-                FormatAuthorizationDetails::JWTVC(w3c::jwt::AuthorizationDetails::new(
+            addition_profile_fields: CoreProfilesAuthorizationDetails::Value(
+                ValueAuthorizationDetails::JWTVC(w3c::jwt::AuthorizationDetails::new(
                     w3c::CredentialDefinition::new(vec![
                         "VerifiableCredential".into(),
                         "UniversityDegreeCredential".into(),
