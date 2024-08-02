@@ -50,7 +50,7 @@ pub struct CredentialOfferGrants {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AuthorizationCodeGrant {
     issuer_state: Option<CsrfToken>,
-    authorization_server: Option<String>,
+    authorization_server: Option<IssuerUrl>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -59,7 +59,7 @@ pub struct PreAuthorizationCodeGrant {
     pre_authorized_code: String,
     tx_code: Option<TxCode>,
     interval: Option<usize>,
-    authorization_server: Option<String>,
+    authorization_server: Option<IssuerUrl>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
