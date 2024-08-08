@@ -669,6 +669,9 @@ mod test {
                                 "alt_text": "a square logo of a university"
                             },
                             "background_color": "#12107c",
+                            "background_image": {
+                                "uri": "https://university.example.edu/public/background-image.png"
+                            },
                             "text_color": "#FFFFFF"
                         }
                     ]
@@ -736,6 +739,9 @@ mod test {
                         "alt_text": "a square logo of a university"
                     },
                     "background_color": "#12107c",
+                    "background_image": {
+                        "uri": "https://university.example.edu/public/background-image.png"
+                    },
                     "text_color": "#FFFFFF"
                 }
             ]
@@ -806,6 +812,9 @@ mod test {
                         "alt_text": "a square logo of a university"
                     },
                     "background_color": "#12107c",
+                    "background_image": {
+                        "uri": "https://university.example.edu/public/background-image.png"
+                    },
                     "text_color": "#FFFFFF"
                 }
             ]
@@ -833,6 +842,9 @@ mod test {
                         "alt_text": "a square figure of a mobile driving license"
                     },
                     "background_color": "#12107c",
+                    "background_image": {
+                        "uri": "https://examplestate.com/public/background-image.png"
+                    },
                     "text_color": "#FFFFFF"
                 },
                 {
@@ -843,6 +855,9 @@ mod test {
                         "alt_text": "大学のロゴ"
                     },
                     "background_color": "#12107c",
+                    "background_image": {
+                        "uri": "https://examplestate.com/public/background-image.png"
+                    },
                     "text_color": "#FFFFFF"
                 }
             ],
