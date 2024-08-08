@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::profiles::{
-    AuthorizationDetaislProfile, CredentialMetadataProfile, CredentialOfferProfile,
+    AuthorizationDetailsProfile, CredentialMetadataProfile, CredentialOfferProfile,
     CredentialRequestProfile, CredentialResponseProfile,
 };
 
@@ -20,15 +20,33 @@ pub struct Offer {}
 impl CredentialOfferProfile for Offer {}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct AuthorizationDetails {}
-impl AuthorizationDetaislProfile for AuthorizationDetails {}
+pub struct AuthorizationDetails {
+    #[serde(
+        default,
+        skip_serializing,
+        deserialize_with = "crate::deny_field::deny_field",
+        rename = "credential_configuration_id"
+    )]
+    _credential_configuration_id: (),
+}
+impl AuthorizationDetailsProfile for AuthorizationDetails {}
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub struct Request {}
+pub struct Request {
+    #[serde(
+        default,
+        skip_serializing,
+        deserialize_with = "crate::deny_field::deny_field",
+        rename = "credential_identifier"
+    )]
+    _credential_identifier: (),
+}
 
 impl Request {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            _credential_identifier: (),
+        }
     }
 }
 impl CredentialRequestProfile for Request {

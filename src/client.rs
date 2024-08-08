@@ -20,11 +20,12 @@ use serde::{Deserialize, Serialize};
 use crate::{
     authorization::AuthorizationRequest,
     credential,
+    credential_response_encryption::CredentialResponseEncryptionMetadata,
     metadata::{
-        AuthorizationMetadata, CredentialMetadata, CredentialUrl, IssuerMetadata,
-        IssuerMetadataDisplay,
+        AuthorizationMetadata, CredentialIssuerMetadata, CredentialIssuerMetadataDisplay,
+        CredentialMetadata, CredentialUrl,
     },
-    profiles::{AuthorizationDetaislProfile, Profile},
+    profiles::{AuthorizationDetailsProfile, Profile},
     pushed_authorization::PushedAuthorizationRequest,
     token,
     types::{BatchCredentialUrl, DeferredCredentialUrl, ParUrl},
@@ -41,7 +42,7 @@ where
     C: Profile,
     JT: JsonWebKeyType,
     JE: JweContentEncryptionAlgorithm<JT>,
-    JA: JweKeyManagementAlgorithm,
+    JA: JweKeyManagementAlgorithm + Clone,
 {
     inner: oauth2::Client<
         BasicErrorResponse,
@@ -56,11 +57,9 @@ where
     par_auth_url: Option<ParUrl>,
     batch_credential_endpoint: Option<BatchCredentialUrl>,
     deferred_credential_endpoint: Option<DeferredCredentialUrl>,
-    credential_response_encryption_alg_values_supported: Option<Vec<JA>>,
-    credential_response_encryption_enc_values_supported: Option<Vec<JE>>,
-    require_credential_response_encryption: Option<bool>,
-    credentials_supported: Vec<CredentialMetadata<C::Metadata>>,
-    display: Option<IssuerMetadataDisplay>,
+    credential_response_encryption: Option<CredentialResponseEncryptionMetadata<JT, JE, JA>>,
+    credential_configurations_supported: Vec<CredentialMetadata<C::Metadata>>,
+    display: Option<Vec<CredentialIssuerMetadataDisplay>>,
     _phantom_jt: PhantomData<JT>,
 }
 
@@ -89,10 +88,8 @@ where
             par_auth_url,
             batch_credential_endpoint: None,
             deferred_credential_endpoint: None,
-            credential_response_encryption_alg_values_supported: None,
-            credential_response_encryption_enc_values_supported: None,
-            require_credential_response_encryption: None,
-            credentials_supported: vec![],
+            credential_response_encryption: None,
+            credential_configurations_supported: vec![],
             display: None,
             _phantom_jt: PhantomData,
         }
@@ -104,24 +101,22 @@ where
             set_credential_endpoint -> credential_endpoint[CredentialUrl],
             set_batch_credential_endpoint -> batch_credential_endpoint[Option<BatchCredentialUrl>],
             set_deferred_credential_endpoint -> deferred_credential_endpoint[Option<DeferredCredentialUrl>],
-            set_credential_response_encryption_alg_values_supported -> credential_response_encryption_alg_values_supported[Option<Vec<JA>>],
-            set_credential_response_encryption_enc_values_supported -> credential_response_encryption_enc_values_supported[Option<Vec<JE>>],
-            set_require_credential_response_encryption -> require_credential_response_encryption[Option<bool>],
-            set_credentials_supported -> credentials_supported[Vec<CredentialMetadata<C::Metadata>>],
-            set_display -> display[Option<IssuerMetadataDisplay>],
+            set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryptionMetadata<JT, JE, JA>>],
+            set_credential_configurations_supported -> credential_configurations_supported[Vec<CredentialMetadata<C::Metadata>>],
+            set_display -> display[Option<Vec<CredentialIssuerMetadataDisplay>>],
         }
     ];
 
     pub fn from_issuer_metadata(
-        issuer_metadata: IssuerMetadata<C::Metadata, JT, JE, JA>,
+        credential_issuer_metadata: CredentialIssuerMetadata<C::Metadata, JT, JE, JA>,
         authorization_metadata: AuthorizationMetadata,
         client_id: ClientId,
         redirect_uri: RedirectUrl,
     ) -> Self {
         Self::new(
             client_id,
-            issuer_metadata.credential_issuer().clone(),
-            issuer_metadata.credential_endpoint().clone(),
+            credential_issuer_metadata.credential_issuer().clone(),
+            credential_issuer_metadata.credential_endpoint().clone(),
             authorization_metadata.authorization_endpoint().clone(),
             authorization_metadata
                 .pushed_authorization_endpoint()
@@ -129,23 +124,27 @@ where
             authorization_metadata.token_endpoint().clone(),
             redirect_uri,
         )
-        .set_batch_credential_endpoint(issuer_metadata.batch_credential_endpoint().cloned())
-        .set_deferred_credential_endpoint(issuer_metadata.deferred_credential_endpoint().cloned())
-        .set_credential_response_encryption_alg_values_supported(
-            issuer_metadata
-                .credential_response_encryption_alg_values_supported()
+        .set_batch_credential_endpoint(
+            credential_issuer_metadata
+                .batch_credential_endpoint()
                 .cloned(),
         )
-        .set_credential_response_encryption_enc_values_supported(
-            issuer_metadata
-                .credential_response_encryption_enc_values_supported()
+        .set_deferred_credential_endpoint(
+            credential_issuer_metadata
+                .deferred_credential_endpoint()
                 .cloned(),
         )
-        .set_require_credential_response_encryption(
-            issuer_metadata.require_credential_response_encryption(),
+        .set_credential_response_encryption(
+            credential_issuer_metadata
+                .credential_response_encryption()
+                .cloned(),
         )
-        .set_credentials_supported(issuer_metadata.credentials_supported().clone())
-        .set_display(issuer_metadata.display().cloned())
+        .set_display(credential_issuer_metadata.display().cloned())
+        .set_credential_configurations_supported(
+            credential_issuer_metadata
+                .credential_configurations_supported()
+                .clone(),
+        )
     }
 
     pub fn pushed_authorization_request<S, AD>(
@@ -154,7 +153,7 @@ where
     ) -> Result<PushedAuthorizationRequest<AD>, Error>
     where
         S: FnOnce() -> CsrfToken,
-        AD: AuthorizationDetaislProfile,
+        AD: AuthorizationDetailsProfile,
     {
         if self.par_auth_url.is_none() {
             return Err(Error::ParUnsupported());
@@ -174,7 +173,7 @@ where
     pub fn authorize_url<S, AD>(&self, state_fn: S) -> AuthorizationRequest<AD>
     where
         S: FnOnce() -> CsrfToken,
-        AD: AuthorizationDetaislProfile,
+        AD: AuthorizationDetailsProfile,
     {
         let inner = self.inner.authorize_url(state_fn);
         AuthorizationRequest::new(inner, vec![], None, None, None)
