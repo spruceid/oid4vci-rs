@@ -37,7 +37,7 @@ const AUTHORIZATION_METADATA_URL_SUFFIX: &str = ".well-known/oauth-authorization
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct IssuerMetadata<CM, JT, JE, JA>
+pub struct CredentialIssuerMetadata<CM, JT, JE, JA>
 where
     CM: CredentialMetadataProfile,
     JT: JsonWebKeyType,
@@ -56,7 +56,7 @@ where
     credential_response_encryption: Option<CredentialResponseEncryptionMetadata<JT, JE, JA>>,
     credential_identifiers_supported: Option<bool>,
     signed_metadata: Option<String>,
-    display: Option<Vec<IssuerMetadataDisplay>>,
+    display: Option<Vec<CredentialIssuerMetadataDisplay>>,
     #[serde(bound = "CM: CredentialMetadataProfile")]
     #[serde_as(as = "KeyValueMap<_>")]
     credential_configurations_supported: Vec<CredentialMetadata<CM>>,
@@ -64,7 +64,7 @@ where
     _phantom_jt: PhantomData<JT>,
 }
 
-impl<CM, JT, JE, JA> IssuerMetadata<CM, JT, JE, JA>
+impl<CM, JT, JE, JA> CredentialIssuerMetadata<CM, JT, JE, JA>
 where
     CM: CredentialMetadataProfile,
     JT: JsonWebKeyType,
@@ -103,7 +103,7 @@ where
             set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryptionMetadata<JT, JE, JA>>],
             set_credential_identifiers_supported -> credential_identifiers_supported[Option<bool>],
             set_signed_metadata -> signed_metadata[Option<String>],
-            set_display -> display[Option<Vec<IssuerMetadataDisplay>>],
+            set_display -> display[Option<Vec<CredentialIssuerMetadataDisplay>>],
             set_credential_configurations_supported -> credential_configurations_supported[Vec<CredentialMetadata<CM>>],
         }
     ];
@@ -196,13 +196,13 @@ where
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct IssuerMetadataDisplay {
+pub struct CredentialIssuerMetadataDisplay {
     name: Option<String>,
     locale: Option<LanguageTag>,
     logo: Option<MetadataDisplayLogo>,
 }
 
-impl IssuerMetadataDisplay {
+impl CredentialIssuerMetadataDisplay {
     pub fn new(
         name: Option<String>,
         locale: Option<LanguageTag>,
@@ -448,7 +448,7 @@ impl AuthorizationMetadata {
     }
 
     pub fn discover<HC, RE, CM, JT, JE, JA>(
-        issuer_metadata: &IssuerMetadata<CM, JT, JE, JA>,
+        credential_issuer_metadata: &CredentialIssuerMetadata<CM, JT, JE, JA>,
         http_client: HC,
     ) -> Result<Self, DiscoveryError<RE>>
     where
@@ -459,12 +459,12 @@ impl AuthorizationMetadata {
         JE: JweContentEncryptionAlgorithm<JT>,
         JA: JweKeyManagementAlgorithm + Clone,
     {
-        let issuer_url = (match &issuer_metadata.authorization_servers {
+        let issuer_url = (match &credential_issuer_metadata.authorization_servers {
             // TODO: respond with the appropriate authorization server
             Some(v) => v.clone().into_iter().next(),
             _ => None,
         })
-        .unwrap_or(issuer_metadata.credential_issuer.clone());
+        .unwrap_or(credential_issuer_metadata.credential_issuer.clone());
 
         let discovery_url = issuer_url
             .join(AUTHORIZATION_METADATA_URL_SUFFIX)
@@ -476,7 +476,7 @@ impl AuthorizationMetadata {
     }
 
     pub async fn discover_async<F, HC, RE, CM, JT, JE, JA>(
-        issuer_metadata: &IssuerMetadata<CM, JT, JE, JA>,
+        credential_issuer_metadata: &CredentialIssuerMetadata<CM, JT, JE, JA>,
         http_client: HC,
     ) -> Result<Self, DiscoveryError<RE>>
     where
@@ -488,12 +488,12 @@ impl AuthorizationMetadata {
         JE: JweContentEncryptionAlgorithm<JT>,
         JA: JweKeyManagementAlgorithm + Clone,
     {
-        let issuer_url = (match &issuer_metadata.authorization_servers {
+        let issuer_url = (match &credential_issuer_metadata.authorization_servers {
             // TODO: respond with the appropriate authorization server
             Some(v) => v.clone().into_iter().next(),
             _ => None,
         })
-        .unwrap_or(issuer_metadata.credential_issuer.clone());
+        .unwrap_or(credential_issuer_metadata.credential_issuer.clone());
 
         let discovery_url = issuer_url
             .join(AUTHORIZATION_METADATA_URL_SUFFIX)
@@ -580,8 +580,8 @@ mod test {
     use super::*;
 
     #[test]
-    fn example_issuer_metadata() {
-        let _: IssuerMetadata<
+    fn example_credential_issuer_metadata() {
+        let _: CredentialIssuerMetadata<
             CoreProfilesMetadata,
             CoreJsonWebKeyType,
             CoreJweContentEncryptionAlgorithm,

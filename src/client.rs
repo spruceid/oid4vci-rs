@@ -22,8 +22,8 @@ use crate::{
     credential,
     credential_response_encryption::CredentialResponseEncryptionMetadata,
     metadata::{
-        AuthorizationMetadata, CredentialMetadata, CredentialUrl, IssuerMetadata,
-        IssuerMetadataDisplay,
+        AuthorizationMetadata, CredentialIssuerMetadata, CredentialIssuerMetadataDisplay,
+        CredentialMetadata, CredentialUrl,
     },
     profiles::{AuthorizationDetailsProfile, Profile},
     pushed_authorization::PushedAuthorizationRequest,
@@ -59,7 +59,7 @@ where
     deferred_credential_endpoint: Option<DeferredCredentialUrl>,
     credential_response_encryption: Option<CredentialResponseEncryptionMetadata<JT, JE, JA>>,
     credential_configurations_supported: Vec<CredentialMetadata<C::Metadata>>,
-    display: Option<Vec<IssuerMetadataDisplay>>,
+    display: Option<Vec<CredentialIssuerMetadataDisplay>>,
     _phantom_jt: PhantomData<JT>,
 }
 
@@ -103,20 +103,20 @@ where
             set_deferred_credential_endpoint -> deferred_credential_endpoint[Option<DeferredCredentialUrl>],
             set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryptionMetadata<JT, JE, JA>>],
             set_credential_configurations_supported -> credential_configurations_supported[Vec<CredentialMetadata<C::Metadata>>],
-            set_display -> display[Option<Vec<IssuerMetadataDisplay>>],
+            set_display -> display[Option<Vec<CredentialIssuerMetadataDisplay>>],
         }
     ];
 
     pub fn from_issuer_metadata(
-        issuer_metadata: IssuerMetadata<C::Metadata, JT, JE, JA>,
+        credential_issuer_metadata: CredentialIssuerMetadata<C::Metadata, JT, JE, JA>,
         authorization_metadata: AuthorizationMetadata,
         client_id: ClientId,
         redirect_uri: RedirectUrl,
     ) -> Self {
         Self::new(
             client_id,
-            issuer_metadata.credential_issuer().clone(),
-            issuer_metadata.credential_endpoint().clone(),
+            credential_issuer_metadata.credential_issuer().clone(),
+            credential_issuer_metadata.credential_endpoint().clone(),
             authorization_metadata.authorization_endpoint().clone(),
             authorization_metadata
                 .pushed_authorization_endpoint()
@@ -124,14 +124,24 @@ where
             authorization_metadata.token_endpoint().clone(),
             redirect_uri,
         )
-        .set_batch_credential_endpoint(issuer_metadata.batch_credential_endpoint().cloned())
-        .set_deferred_credential_endpoint(issuer_metadata.deferred_credential_endpoint().cloned())
-        .set_credential_response_encryption(
-            issuer_metadata.credential_response_encryption().cloned(),
+        .set_batch_credential_endpoint(
+            credential_issuer_metadata
+                .batch_credential_endpoint()
+                .cloned(),
         )
-        .set_display(issuer_metadata.display().cloned())
+        .set_deferred_credential_endpoint(
+            credential_issuer_metadata
+                .deferred_credential_endpoint()
+                .cloned(),
+        )
+        .set_credential_response_encryption(
+            credential_issuer_metadata
+                .credential_response_encryption()
+                .cloned(),
+        )
+        .set_display(credential_issuer_metadata.display().cloned())
         .set_credential_configurations_supported(
-            issuer_metadata
+            credential_issuer_metadata
                 .credential_configurations_supported()
                 .clone(),
         )

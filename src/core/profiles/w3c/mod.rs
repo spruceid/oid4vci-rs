@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::metadata::IssuerMetadataDisplay;
+use crate::metadata::CredentialIssuerMetadataDisplay;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -53,7 +53,7 @@ impl CredentialOfferDefinition {
 pub struct CredentialSubjectClaims {
     mandatory: Option<bool>,
     value_type: Option<String>,
-    display: Option<Vec<IssuerMetadataDisplay>>,
+    display: Option<Vec<CredentialIssuerMetadataDisplay>>,
 }
 
 impl CredentialSubjectClaims {
@@ -69,7 +69,7 @@ impl CredentialSubjectClaims {
         pub self [self] ["credential subject claims value"] {
             set_mandatory -> mandatory[Option<bool>],
             set_value_type -> value_type[Option<String>],
-            set_display -> display[Option<Vec<IssuerMetadataDisplay>>],
+            set_display -> display[Option<Vec<CredentialIssuerMetadataDisplay>>],
         }
     ];
 }
