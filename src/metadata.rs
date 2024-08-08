@@ -288,7 +288,7 @@ where
         pub self [self] ["credential metadata value"] {
             set_scope -> scope[Option<Scope>],
             set_cryptographic_binding_methods_supported -> cryptographic_binding_methods_supported[Option<Vec<CryptographicBindingMethod>>],
-            set_proof_types_suuported -> proof_types_supported[Option<Vec<KeyProofTypesSupported>>],
+            set_proof_types_supported -> proof_types_supported[Option<Vec<KeyProofTypesSupported>>],
             set_display -> display[Option<Vec<CredentialMetadataDisplay>>],
             set_additional_fields -> additional_fields[CM],
         }
