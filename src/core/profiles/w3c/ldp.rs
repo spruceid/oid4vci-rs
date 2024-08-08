@@ -10,7 +10,7 @@ use super::{CredentialDefinition, CredentialOfferDefinition};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Metadata {
-    cryptographic_suites_supported: Option<Vec<String>>,
+    credential_signing_alg_values_supported: Option<Vec<String>>,
     #[serde(rename = "@context")]
     context: Vec<serde_json::Value>,
     credentials_definition: CredentialDefinitionLD,
@@ -23,7 +23,7 @@ impl Metadata {
         credentials_definition: CredentialDefinitionLD,
     ) -> Self {
         Self {
-            cryptographic_suites_supported: None,
+            credential_signing_alg_values_supported: None,
             context,
             credentials_definition,
             order: None,
@@ -31,7 +31,7 @@ impl Metadata {
     }
     field_getters_setters![
         pub self [self] ["LD VC metadata value"] {
-            set_cryptographic_suites_supported -> cryptographic_suites_supported[Option<Vec<String>>],
+            set_credential_signing_alg_values_supported -> credential_signing_alg_values_supported[Option<Vec<String>>],
             set_context -> context[Vec<serde_json::Value>],
             set_credentials_definition -> credentials_definition[CredentialDefinitionLD],
             set_order -> order[Option<Vec<String>>],

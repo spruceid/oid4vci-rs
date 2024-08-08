@@ -685,7 +685,7 @@ mod test {
             "cryptographic_binding_methods_supported": [
                 "did:example"
             ],
-            "cryptographic_suites_supported": [
+            "credential_signing_alg_values_supported": [
                 "ES256K"
             ],
             "credential_definition":{
@@ -758,7 +758,7 @@ mod test {
             "cryptographic_binding_methods_supported": [
                 "did:example"
             ],
-            "cryptographic_suites_supported": [
+            "credential_signing_alg_values_supported": [
                 "Ed25519Signature2018"
             ],
             "credentials_definition": {
@@ -821,7 +821,7 @@ mod test {
             "cryptographic_binding_methods_supported": [
                 "mso"
             ],
-            "cryptographic_suites_supported": [
+            "credential_signing_alg_values_supported": [
                 "ES256", "ES384", "ES512"
             ],
             "display": [

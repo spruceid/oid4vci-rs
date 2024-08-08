@@ -12,7 +12,7 @@ pub type Namespace = String;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Metadata {
-    // cryptographic_suites_supported: Option<Vec<cose::Algorithm>>, // TODO cose
+    // credential_signing_alg_values_supported: Option<Vec<cose::Algorithm>>, // TODO cose
     doctype: DocType,
     claims: Option<HashMap<Namespace, CredentialSubjectClaims>>,
     order: Option<Vec<String>>,
