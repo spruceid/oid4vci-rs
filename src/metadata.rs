@@ -447,11 +447,14 @@ impl AuthorizationMetadata {
         )
     }
 
-    pub fn discover<HC, RE, CM, JT, JE, JA>(
+    pub fn discover<LF, HC, RE, CM, JT, JE, JA>(
         credential_issuer_metadata: &CredentialIssuerMetadata<CM, JT, JE, JA>,
+        grant_type: Option<CoreGrantType>,
         http_client: HC,
+        logging_fn: Option<LF>,
     ) -> Result<Self, DiscoveryError<RE>>
     where
+        LF: Fn(&DiscoveryError<RE>),
         HC: Fn(HttpRequest) -> Result<HttpResponse, RE>,
         RE: std::error::Error + 'static,
         CM: CredentialMetadataProfile,
@@ -459,28 +462,115 @@ impl AuthorizationMetadata {
         JE: JweContentEncryptionAlgorithm<JT>,
         JA: JweKeyManagementAlgorithm + Clone,
     {
-        let issuer_url = (match &credential_issuer_metadata.authorization_servers {
-            // TODO: respond with the appropriate authorization server
-            Some(v) => v.clone().into_iter().next(),
-            _ => None,
-        })
-        .unwrap_or(credential_issuer_metadata.credential_issuer.clone());
+        let log_and_continue = |e: DiscoveryError<RE>| -> DiscoveryError<RE> {
+            if let Some(ref logging_fn) = logging_fn {
+                logging_fn(&e);
+            }
+            e
+        };
 
-        let discovery_url = issuer_url
-            .join(AUTHORIZATION_METADATA_URL_SUFFIX)
-            .map_err(DiscoveryError::UrlParse)?;
+        let discover_url = |url: &IssuerUrl| -> Result<Self, DiscoveryError<RE>> {
+            let issuer_url = url.clone();
 
-        http_client(Self::discovery_request(discovery_url))
-            .map_err(DiscoveryError::Request)
-            .and_then(|http_response| Self::discovery_response(&issuer_url, http_response))
+            let discovery_url = issuer_url
+                .join(AUTHORIZATION_METADATA_URL_SUFFIX)
+                .map_err(DiscoveryError::UrlParse)
+                .map_err(log_and_continue)?;
+
+            http_client(Self::discovery_request(discovery_url))
+                .map_err(DiscoveryError::Request)
+                .map_err(log_and_continue)
+                .and_then(|http_response| Self::discovery_response(&issuer_url, http_response))
+                .map_err(log_and_continue)
+        };
+
+        let default = || discover_url(&credential_issuer_metadata.credential_issuer);
+
+        match (
+            &credential_issuer_metadata.authorization_servers,
+            grant_type,
+        ) {
+            (Some(servers), Some(grant_type)) => {
+                if servers.is_empty() {
+                    // The `authorization_servers` field is an empty array, it could be
+                    // treated as an error, but we default to try `credential_issuer`.
+                    //
+                    // ```
+                    // DiscoveryError::Other(
+                    //     "failed to select an authorization server: no matching grant_type".to_string(),
+                    // )
+                    // ```
+                    return default();
+                }
+
+                let server = servers
+                    .iter()
+                    .map(|auth_server| {
+                        let response = discover_url(auth_server)?;
+
+                        Ok::<Option<Self>, DiscoveryError<RE>>(
+                            response.0.grant_types_supported().and_then(|gts| {
+                                if gts.iter().any(|gt| *gt == grant_type) {
+                                    Some(response.clone())
+                                } else {
+                                    None
+                                }
+                            }),
+                        )
+                    })
+                    .take_while(|s| !matches!(s, Ok(Some(_))))
+                    .next();
+
+                match server {
+                    Some(Ok(Some(s))) => Ok(s),
+                    Some(Ok(None)) => {
+                        // Could return an error because no servers have successfully matched the
+                        // specified `grant_type`.
+                        //
+                        // ```
+                        // DiscoveryError::Other(
+                        //     "failed to select an authorization server: no matching grant_type".to_string(),
+                        // )
+                        // ```
+                        default()
+                    }
+                    Some(Err(_)) => {
+                        // This will contain the errors of the last `authorization_servers`'s entry
+                        // discovery calls, could also be handled differently.
+                        //
+                        // ```
+                        // DiscoveryError::Other(
+                        //     "failed to select an authorization server: no matching grant_type".to_string(),
+                        // )
+                        // ```
+                        default()
+                    }
+                    None => {
+                        // Could return an error because no servers have successfully matched the
+                        // specified `grant_type`.
+                        //
+                        // ```
+                        // DiscoveryError::Other(
+                        //     "failed to select an authorization server: no matching grant_type".to_string(),
+                        // )
+                        // ```
+                        default()
+                    }
+                }
+            }
+            _ => default(),
+        }
     }
 
-    pub async fn discover_async<F, HC, RE, CM, JT, JE, JA>(
+    pub async fn discover_async<F, LF, HC, RE, CM, JT, JE, JA>(
         credential_issuer_metadata: &CredentialIssuerMetadata<CM, JT, JE, JA>,
+        grant_type: Option<CoreGrantType>,
         http_client: HC,
+        logging_fn: Option<LF>,
     ) -> Result<Self, DiscoveryError<RE>>
     where
         F: Future<Output = Result<HttpResponse, RE>>,
+        LF: Fn(&DiscoveryError<RE>),
         HC: Fn(HttpRequest) -> F + 'static,
         RE: std::error::Error + 'static,
         CM: CredentialMetadataProfile,
@@ -488,21 +578,107 @@ impl AuthorizationMetadata {
         JE: JweContentEncryptionAlgorithm<JT>,
         JA: JweKeyManagementAlgorithm + Clone,
     {
-        let issuer_url = (match &credential_issuer_metadata.authorization_servers {
-            // TODO: respond with the appropriate authorization server
-            Some(v) => v.clone().into_iter().next(),
-            _ => None,
-        })
-        .unwrap_or(credential_issuer_metadata.credential_issuer.clone());
+        type S = AuthorizationMetadata;
 
-        let discovery_url = issuer_url
-            .join(AUTHORIZATION_METADATA_URL_SUFFIX)
-            .map_err(DiscoveryError::UrlParse)?;
+        async fn discover_inner<F, LF, HC, RE>(
+            url: &IssuerUrl,
+            http_client: &HC,
+            logging_fn: Option<&LF>,
+        ) -> Result<S, DiscoveryError<RE>>
+        where
+            F: Future<Output = Result<HttpResponse, RE>>,
+            LF: Fn(&DiscoveryError<RE>),
+            HC: Fn(HttpRequest) -> F + 'static,
+            RE: std::error::Error + 'static,
+        {
+            let log_and_continue = |e: DiscoveryError<RE>| -> DiscoveryError<RE> {
+                if let Some(ref logging_fn) = logging_fn {
+                    logging_fn(&e);
+                }
+                e
+            };
 
-        http_client(Self::discovery_request(discovery_url))
-            .await
-            .map_err(DiscoveryError::Request)
-            .and_then(|http_response| Self::discovery_response(&issuer_url, http_response))
+            let issuer_url = url.clone();
+
+            let discovery_url = issuer_url
+                .join(AUTHORIZATION_METADATA_URL_SUFFIX)
+                .map_err(DiscoveryError::UrlParse)
+                .map_err(log_and_continue)?;
+
+            http_client(S::discovery_request(discovery_url))
+                .await
+                .map_err(DiscoveryError::Request)
+                .map_err(log_and_continue)
+                .and_then(|http_response| S::discovery_response(&issuer_url, http_response))
+                .map_err(log_and_continue)
+        }
+
+        match (
+            &credential_issuer_metadata.authorization_servers,
+            grant_type,
+        ) {
+            (Some(servers), Some(grant_type)) => {
+                if servers.is_empty() {
+                    // The `authorization_servers` field is an empty array, it could be
+                    // treated as an error, but we default to try `credential_issuer`.
+                    //
+                    // ```
+                    // DiscoveryError::Other(
+                    //     "failed to select an authorization server: no matching grant_type".to_string(),
+                    // )
+                    // ```
+                    return discover_inner(
+                        &credential_issuer_metadata.credential_issuer,
+                        &http_client,
+                        logging_fn.as_ref(),
+                    )
+                    .await;
+                }
+
+                for auth_server in servers {
+                    let response =
+                        discover_inner(auth_server, &http_client, logging_fn.as_ref()).await;
+
+                    match response {
+                        Ok(response) if response.0.grant_types_supported().is_some() => {
+                            if response
+                                .0
+                                .grant_types_supported()
+                                .unwrap()
+                                .iter()
+                                .any(|gt| *gt == grant_type)
+                            {
+                                return Ok(response.clone());
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+
+                // Could return an error because no servers have successfully matched the
+                // specified `grant_type`.
+                //
+                // ```
+                // DiscoveryError::Other(
+                //     "failed to select an authorization server: no matching grant_type".to_string(),
+                // )
+                // ```
+                discover_inner(
+                    &credential_issuer_metadata.credential_issuer,
+                    &http_client,
+                    logging_fn.as_ref(),
+                )
+                .await
+            }
+            _ => {
+                discover_inner(
+                    &credential_issuer_metadata.credential_issuer,
+                    &http_client,
+                    logging_fn.as_ref(),
+                )
+                .await
+            }
+        }
     }
 
     fn discovery_request(discovery_url: url::Url) -> HttpRequest {
