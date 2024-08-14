@@ -4,7 +4,7 @@ use isomdl::definitions::device_request::DocType;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    w3c::CredentialSubjectClaims, AuthorizationDetaislProfile, CredentialMetadataProfile,
+    w3c::CredentialSubjectClaims, AuthorizationDetailsProfile, CredentialMetadataProfile,
     CredentialOfferProfile, CredentialRequestProfile, CredentialResponseProfile,
 };
 
@@ -12,7 +12,7 @@ pub type Namespace = String;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Metadata {
-    // cryptographic_suites_supported: Option<Vec<cose::Algorithm>>, // TODO cose
+    // credential_signing_alg_values_supported: Option<Vec<cose::Algorithm>>, // TODO cose
     doctype: DocType,
     claims: Option<HashMap<Namespace, CredentialSubjectClaims>>,
     order: Option<Vec<String>>,
@@ -63,6 +63,14 @@ impl CredentialOfferProfile for Offer {}
 pub struct AuthorizationDetails {
     doctype: DocType,
     claims: Option<HashMap<Namespace, CredentialSubjectClaims>>,
+
+    #[serde(
+        default,
+        skip_serializing,
+        deserialize_with = "crate::deny_field::deny_field",
+        rename = "credential_configuration_id"
+    )]
+    _credential_configuration_id: (),
 }
 
 impl AuthorizationDetails {
@@ -70,7 +78,11 @@ impl AuthorizationDetails {
         doctype: DocType,
         claims: Option<HashMap<Namespace, CredentialSubjectClaims>>,
     ) -> Self {
-        Self { doctype, claims }
+        Self {
+            doctype,
+            claims,
+            _credential_configuration_id: (),
+        }
     }
     field_getters_setters![
         pub self [self] ["ISO mDL authorization details value"] {
@@ -79,12 +91,20 @@ impl AuthorizationDetails {
         }
     ];
 }
-impl AuthorizationDetaislProfile for AuthorizationDetails {}
+impl AuthorizationDetailsProfile for AuthorizationDetails {}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Request {
     doctype: DocType,
     claims: Option<HashMap<Namespace, CredentialSubjectClaims>>,
+
+    #[serde(
+        default,
+        skip_serializing,
+        deserialize_with = "crate::deny_field::deny_field",
+        rename = "credential_identifier"
+    )]
+    _credential_identifier: (),
 }
 
 impl Request {
@@ -92,6 +112,7 @@ impl Request {
         Self {
             doctype,
             claims: None,
+            _credential_identifier: (),
         }
     }
     field_getters_setters![

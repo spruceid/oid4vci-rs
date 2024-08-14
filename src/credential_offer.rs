@@ -1,3 +1,5 @@
+#![allow(clippy::large_enum_variant)]
+
 use openidconnect::{CsrfToken, IssuerUrl, Scope};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
@@ -7,13 +9,9 @@ use crate::profiles::CredentialOfferProfile;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
-pub enum CredentialOffer<CO>
-where
-    CO: CredentialOfferProfile,
-{
+pub enum CredentialOffer {
     Value {
-        #[serde(bound = "CO: CredentialOfferProfile")]
-        credential_offer: CredentialOfferParameters<CO>,
+        credential_offer: CredentialOfferParameters,
     },
     Reference {
         credential_offer_uri: Url,
@@ -23,13 +21,9 @@ where
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct CredentialOfferParameters<CO>
-where
-    CO: CredentialOfferProfile,
-{
+pub struct CredentialOfferParameters {
     credential_issuer: IssuerUrl,
-    #[serde(bound = "CO: CredentialOfferProfile")]
-    credentials: Vec<CredentialOfferFormat<CO>>,
+    credential_configuration_ids: Vec<String>,
     grants: Option<CredentialOfferGrants>,
 }
 
@@ -56,34 +50,76 @@ pub struct CredentialOfferGrants {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AuthorizationCodeGrant {
     issuer_state: Option<CsrfToken>,
+    authorization_server: Option<IssuerUrl>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PreAuthorizationCodeGrant {
     #[serde(rename = "pre-authorized_code")]
     pre_authorized_code: String,
-    user_pin_required: Option<bool>,
+    tx_code: Option<TxCode>,
     interval: Option<usize>,
+    authorization_server: Option<IssuerUrl>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum InputMode {
+    #[serde(rename = "numeric")]
+    Numeric,
+    #[serde(rename = "text")]
+    Text,
+}
+
+impl Default for InputMode {
+    fn default() -> Self {
+        Self::Numeric
+    }
+}
+
+#[serde_as]
+#[skip_serializing_none]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct TxCode {
+    input_mode: Option<InputMode>,
+    length: Option<usize>,
+    description: Option<String>,
+}
+
+impl TxCode {
+    pub fn new(
+        input_mode: Option<InputMode>,
+        length: Option<usize>,
+        description: Option<String>,
+    ) -> Self {
+        Self {
+            input_mode,
+            length,
+            description,
+        }
+    }
+
+    field_getters_setters![
+        pub self [self] ["transaction code value"] {
+            set_input_mode -> input_mode[Option<InputMode>],
+            set_length -> length[Option<usize>],
+            set_description -> description[Option<String>],
+        }
+    ];
 }
 
 #[cfg(test)]
 mod test {
     use serde_json::json;
 
-    use crate::core::profiles::CoreProfilesOffer;
-
     use super::*;
 
     #[test]
     fn example_credential_offer_object() {
-        let _: CredentialOfferParameters<CoreProfilesOffer> = serde_json::from_value(json!({
+        let _: CredentialOfferParameters = serde_json::from_value(json!({
            "credential_issuer": "https://credential-issuer.example.com",
-           "credentials": [
-              "UniversityDegree_JWT",
-              {
-                 "format": "mso_mdoc",
-                 "doctype": "org.iso.18013.5.1.mDL"
-              }
+           "credential_configuration_ids": [
+              "UniversityDegreeCredential",
+              "org.iso.18013.5.1.mDL"
            ],
            "grants": {
               "authorization_code": {
@@ -91,7 +127,11 @@ mod test {
               },
               "urn:ietf:params:oauth:grant-type:pre-authorized_code": {
                  "pre-authorized_code": "adhjhdjajkdkhjhdj",
-                 "user_pin_required": true
+                 "tx_code": {
+                   "length": 4,
+                   "input_mode": "numeric",
+                   "description": "Please provide the one-time code that was sent via e-mail"
+                 }
               }
            }
         }))

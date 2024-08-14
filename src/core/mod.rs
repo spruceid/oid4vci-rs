@@ -9,7 +9,7 @@ pub mod metadata {
 
     use super::profiles::CoreProfilesMetadata;
 
-    pub type IssuerMetadata = metadata::IssuerMetadata<
+    pub type CredentialIssuerMetadata = metadata::CredentialIssuerMetadata<
         CoreProfilesMetadata,
         CoreJsonWebKeyType,
         CoreJweContentEncryptionAlgorithm,

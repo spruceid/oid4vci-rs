@@ -6,6 +6,10 @@ use openidconnect::{
     ClientId, Nonce, RedirectUrl, StandardErrorResponse, StandardTokenResponse,
 };
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, skip_serializing_none};
+
+use crate::profiles::AuthorizationDetailsProfile;
+use crate::{authorization::AuthorizationDetail, core::profiles::CoreProfilesAuthorizationDetails};
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case", tag = "grant_type")]
@@ -32,19 +36,45 @@ pub enum Request {
     },
 }
 
+#[serde_as]
+#[skip_serializing_none]
 #[derive(Debug, Default, Deserialize, Serialize)]
-pub struct ExtraResponseTokenFields {
-    #[serde(skip_serializing_if = "Option::is_none")]
+pub struct ExtraResponseTokenFields<AD>
+where
+    AD: AuthorizationDetailsProfile,
+{
     pub c_nonce: Option<Nonce>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub c_nonce_expires_in: Option<Duration>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub authorization_pending: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub interval: Option<Duration>,
+    #[serde(bound = "AD: AuthorizationDetailsProfile")]
+    pub authorization_details: Option<Vec<AuthorizationDetail<AD>>>,
 }
 
-pub type Response = StandardTokenResponse<ExtraResponseTokenFields, CoreTokenType>;
+pub type Response = StandardTokenResponse<
+    ExtraResponseTokenFields<CoreProfilesAuthorizationDetails>,
+    CoreTokenType,
+>;
+
+/// The following additional error codes, defined in RFC8628, are
+/// mentioned and can be used as follow:
+/// ```
+/// use openidconnect::core::CoreErrorResponseType;
+/// use oid4vci::token::Error;
+///
+/// let auth_pending_err = Error::new(
+///   CoreErrorResponseType::Extension("authorization_pending".to_string()),
+///   None,
+///   None,
+/// );
+///
+/// let slow_down_err = Error::new(
+///   CoreErrorResponseType::Extension("slow_down".to_string()),
+///   None,
+///   None,
+/// );
+/// ```
 pub type Error = StandardErrorResponse<CoreErrorResponseType>;
 
-impl openidconnect::ExtraTokenFields for ExtraResponseTokenFields {}
+impl<AD> openidconnect::ExtraTokenFields for ExtraResponseTokenFields<AD> where
+    AD: AuthorizationDetailsProfile
+{
+}

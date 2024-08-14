@@ -4,7 +4,7 @@ use crate::{
     authorization::AuthorizationDetail,
     credential::RequestError,
     http_utils::{content_type_has_essence, MIME_TYPE_FORM_URLENCODED, MIME_TYPE_JSON},
-    profiles::AuthorizationDetaislProfile,
+    profiles::AuthorizationDetailsProfile,
     types::ParUrl,
 };
 use oauth2::{
@@ -17,6 +17,7 @@ use oauth2::{
 };
 use openidconnect::{core::CoreErrorResponseType, IssuerUrl, Nonce, StandardErrorResponse};
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, skip_serializing_none};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ParRequestUri(pub String);
@@ -40,6 +41,8 @@ impl ParRequestUri {
 
 pub type Error = StandardErrorResponse<CoreErrorResponseType>;
 
+#[serde_as]
+#[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ParAuthParams {
     client_id: ClientId,
@@ -47,19 +50,12 @@ pub struct ParAuthParams {
     code_challenge: String,
     code_challenge_method: PkceCodeChallengeMethod,
     redirect_uri: RedirectUrl,
-    #[serde(skip_serializing_if = "Option::is_none")]
     response_type: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     client_assertion: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     client_assertion_type: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     authorization_details: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     wallet_issuer: Option<IssuerUrl>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     user_hint: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     issuer_state: Option<CsrfToken>,
 }
 
@@ -90,7 +86,7 @@ pub struct PushedAuthorizationResponse {
 
 pub struct PushedAuthorizationRequest<'a, AD>
 where
-    AD: AuthorizationDetaislProfile,
+    AD: AuthorizationDetailsProfile,
 {
     inner: oauth2::AuthorizationRequest<'a>, // TODO
     par_auth_url: ParUrl,
@@ -103,7 +99,7 @@ where
 
 impl<'a, AD> PushedAuthorizationRequest<'a, AD>
 where
-    AD: AuthorizationDetaislProfile,
+    AD: AuthorizationDetailsProfile,
 {
     pub(crate) fn new(
         inner: oauth2::AuthorizationRequest<'a>,

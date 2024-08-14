@@ -5,7 +5,7 @@ use serde::{de::DeserializeOwned, Serialize};
 pub trait Profile {
     type Metadata: CredentialMetadataProfile;
     type Offer: CredentialOfferProfile;
-    type Authorization: AuthorizationDetaislProfile;
+    type Authorization: AuthorizationDetailsProfile;
     type Credential: CredentialRequestProfile;
 }
 pub trait CredentialMetadataProfile: Clone + Debug + DeserializeOwned + Serialize {
@@ -14,7 +14,7 @@ pub trait CredentialMetadataProfile: Clone + Debug + DeserializeOwned + Serializ
     fn to_request(&self) -> Self::Request;
 }
 pub trait CredentialOfferProfile: Debug + DeserializeOwned + Serialize {}
-pub trait AuthorizationDetaislProfile: Debug + DeserializeOwned + Serialize {}
+pub trait AuthorizationDetailsProfile: Debug + DeserializeOwned + Serialize {}
 pub trait CredentialRequestProfile: Debug + DeserializeOwned + Serialize {
     type Response: CredentialResponseProfile;
 }
