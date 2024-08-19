@@ -181,7 +181,7 @@ impl CredentialRequestProfile for Request {
     type Response = Response;
 }
 
-// We want to make the credential type generic and avoid using AnySuite, but right now we are already pulling ssi-claims
+// TODO We want to make the credential type generic and avoid using AnySuite, but right now we are already pulling ssi-claims
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Response {
     credential: DataIntegrity<AnyJsonCredential, AnySuite>,
