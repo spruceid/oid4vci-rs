@@ -11,9 +11,9 @@ repository = "https://github.com/spruceid/oidc4vci-rs/"
 # TODO feature-gate
 isomdl = { git = "https://github.com/spruceid/isomdl", rev = "90ce218" }
 
-ssi-claims = { git = "https://github.com/spruceid/ssi.git", branch = "main" }
-ssi-dids-core = { git = "https://github.com/spruceid/ssi.git", branch = "main" }
-ssi-jwk = { git = "https://github.com/spruceid/ssi.git", branch = "main" }
+ssi-claims = "0.1.0"
+ssi-dids-core = "0.1.0"
+ssi-jwk = "0.2.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_with = "3.3.0"
@@ -31,7 +31,7 @@ serde_urlencoded = "0.7.1"
 
 [dev-dependencies]
 assert-json-diff = "2.0.2"
-did-jwk = { git = "https://github.com/spruceid/ssi.git", branch = "main" }
-did-method-key = { git = "https://github.com/spruceid/ssi.git", branch = "main" }
-ssi-verification-methods = { git = "https://github.com/spruceid/ssi.git", branch = "main" }
+did-jwk = "0.2.0"
+did-method-key = "0.3.0"
+ssi-verification-methods = "0.1.1"
 tokio = { version = "1.25.0", features = ["macros"] }
