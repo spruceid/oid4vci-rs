@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
-use ssi_claims::vc::AnyJsonCredential;
+use ssi_claims::{
+    data_integrity::{AnySuite, DataIntegrity},
+    vc::AnyJsonCredential,
+};
 
 use crate::profiles::{
     AuthorizationDetailsProfile, CredentialMetadataProfile, CredentialOfferProfile,
@@ -178,20 +181,20 @@ impl CredentialRequestProfile for Request {
     type Response = Response;
 }
 
-// We might want to make the credential type generic
+// We want to make the credential type generic and avoid using AnySuite, but right now we are already pulling ssi-claims
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Response {
-    credential: AnyJsonCredential,
+    credential: DataIntegrity<AnyJsonCredential, AnySuite>,
 }
 
 impl Response {
-    pub fn new(credential: AnyJsonCredential) -> Self {
+    pub fn new(credential: DataIntegrity<AnyJsonCredential, AnySuite>) -> Self {
         Self { credential }
     }
 
     field_getters_setters![
         pub self [self] ["LD VC credential response value"] {
-            set_credential -> credential[AnyJsonCredential],
+            set_credential -> credential[DataIntegrity<AnyJsonCredential, AnySuite>],
         }
     ];
 }
