@@ -169,7 +169,7 @@ where
         {
             ref content_type if content_type_has_essence(content_type, MIME_TYPE_JSON) => {
                 serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_slice(
-                    &http_response.body(),
+                    http_response.body(),
                 ))
                 .map_err(RequestError::Parse)
             }
