@@ -13,7 +13,7 @@ use oauth2::{
         header::{ACCEPT, CONTENT_TYPE},
         HeaderValue, Method, StatusCode,
     },
-    AuthUrl, ClientId, CsrfToken, HttpRequest, HttpResponse, PkceCodeChallenge,
+    AsyncHttpClient, AuthUrl, ClientId, CsrfToken, HttpRequest, PkceCodeChallenge,
     PkceCodeChallengeMethod, RedirectUrl,
 };
 use openidconnect::{core::CoreErrorResponseType, IssuerUrl, Nonce, StandardErrorResponse};
@@ -122,63 +122,70 @@ where
         }
     }
 
-    pub async fn async_request<C, F, RE>(
+    pub fn async_request<'c, C>(
         self,
-        mut http_client: C,
+        http_client: &'c C,
         client_assertion_type: Option<String>,
         client_assertion: Option<String>,
-    ) -> Result<(url::Url, CsrfToken), RequestError<RE>>
+    ) -> impl Future<
+        Output = Result<(url::Url, CsrfToken), RequestError<<C as AsyncHttpClient<'c>>::Error>>,
+    > + 'c
     where
-        C: FnMut(HttpRequest) -> F,
-        F: Future<Output = Result<HttpResponse, RE>>,
-        RE: std::error::Error + 'static,
+        'a: 'c,
+        C: AsyncHttpClient<'c>,
+        AD: 'c,
     {
-        let mut auth_url = self.auth_url.url().clone();
+        Box::pin(async move {
+            let mut auth_url = self.auth_url.url().clone();
 
-        let (http_request, req_body, token) = self
-            .prepare_request(client_assertion, client_assertion_type)
-            .map_err(|err| RequestError::Other(format!("failed to prepare request: {err:?}")))?;
+            let (http_request, req_body, token) = self
+                .prepare_request(client_assertion, client_assertion_type)
+                .map_err(|err| {
+                    RequestError::Other(format!("failed to prepare request: {err:?}"))
+                })?;
 
-        let http_response = http_client(http_request)
-            .await
-            .map_err(RequestError::Request)?;
+            let http_response = http_client
+                .call(http_request)
+                .await
+                .map_err(RequestError::Request)?;
 
-        if http_response.status() != StatusCode::OK {
-            return Err(RequestError::Response(
-                http_response.status(),
-                http_response.body().to_owned(),
-                "unexpected HTTP status code".to_string(),
-            ));
-        }
-
-        let parsed_response: PushedAuthorizationResponse = match http_response
-            .headers()
-            .get(CONTENT_TYPE)
-            .map(ToOwned::to_owned)
-            .unwrap_or_else(|| HeaderValue::from_static(MIME_TYPE_JSON))
-        {
-            ref content_type if content_type_has_essence(content_type, MIME_TYPE_JSON) => {
-                serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_slice(
-                    &http_response.body().to_owned(),
-                ))
-                .map_err(RequestError::Parse)
+            if http_response.status() != StatusCode::OK {
+                return Err(RequestError::Response(
+                    http_response.status(),
+                    http_response.body().to_owned(),
+                    "unexpected HTTP status code".to_string(),
+                ));
             }
-            ref content_type => Err(RequestError::Response(
-                http_response.status(),
-                http_response.body().to_owned(),
-                format!("unexpected response Content-Type: `{:?}`", content_type),
-            )),
-        }?;
 
-        auth_url
-            .query_pairs_mut()
-            .append_pair("request_uri", parsed_response.request_uri.get());
+            let parsed_response: PushedAuthorizationResponse = match http_response
+                .headers()
+                .get(CONTENT_TYPE)
+                .map(ToOwned::to_owned)
+                .unwrap_or_else(|| HeaderValue::from_static(MIME_TYPE_JSON))
+            {
+                ref content_type if content_type_has_essence(content_type, MIME_TYPE_JSON) => {
+                    serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_slice(
+                        &http_response.body().to_owned(),
+                    ))
+                    .map_err(RequestError::Parse)
+                }
+                ref content_type => Err(RequestError::Response(
+                    http_response.status(),
+                    http_response.body().to_owned(),
+                    format!("unexpected response Content-Type: `{:?}`", content_type),
+                )),
+            }?;
 
-        auth_url
-            .query_pairs_mut()
-            .append_pair("client_id", &req_body.client_id.to_string());
+            auth_url
+                .query_pairs_mut()
+                .append_pair("request_uri", parsed_response.request_uri.get());
 
-        Ok((auth_url, token))
+            auth_url
+                .query_pairs_mut()
+                .append_pair("client_id", &req_body.client_id.to_string());
+
+            Ok((auth_url, token))
+        })
     }
 
     pub fn prepare_request(
