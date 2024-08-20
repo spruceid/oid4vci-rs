@@ -1,24 +1,23 @@
 #![allow(clippy::type_complexity)]
 
 use oauth2::{
-    http::{header::ACCEPT, HeaderValue, Method, StatusCode},
-    AuthUrl, HttpRequest, HttpResponse, TokenUrl,
+    http::{self, header::ACCEPT, HeaderValue, Method, StatusCode},
+    AsyncHttpClient, AuthUrl, HttpRequest, HttpResponse, SyncHttpClient, TokenUrl,
 };
 use openidconnect::{
     core::{
         CoreAuthDisplay, CoreClaimName, CoreClaimType, CoreClientAuthMethod, CoreGrantType,
-        CoreJsonWebKey, CoreJsonWebKeyType, CoreJsonWebKeyUse, CoreJweContentEncryptionAlgorithm,
-        CoreJweKeyManagementAlgorithm, CoreJwsSigningAlgorithm, CoreResponseMode, CoreResponseType,
-        CoreSubjectIdentifierType,
+        CoreJsonWebKey, CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm,
+        CoreJwsSigningAlgorithm, CoreResponseMode, CoreResponseType, CoreSubjectIdentifierType,
     },
-    AdditionalProviderMetadata, DiscoveryError, IssuerUrl, JsonWebKeySetUrl, JsonWebKeyType,
+    AdditionalProviderMetadata, DiscoveryError, IssuerUrl, JsonWebKeySetUrl,
     JweContentEncryptionAlgorithm, JweKeyManagementAlgorithm, LanguageTag, LogoUrl,
     ProviderMetadata, ResponseTypes, Scope,
 };
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, KeyValueMap};
-use std::{future::Future, marker::PhantomData};
-use tracing::{event, trace_span, Level};
+use std::future::Future;
+use tracing::{debug, info, warn};
 
 use crate::{
     credential_response_encryption::CredentialResponseEncryptionMetadata,
@@ -38,11 +37,10 @@ const AUTHORIZATION_METADATA_URL_SUFFIX: &str = ".well-known/oauth-authorization
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct CredentialIssuerMetadata<CM, JT, JE, JA>
+pub struct CredentialIssuerMetadata<CM, JE, JA>
 where
     CM: CredentialMetadataProfile,
-    JT: JsonWebKeyType,
-    JE: JweContentEncryptionAlgorithm<JT>,
+    JE: JweContentEncryptionAlgorithm,
     JA: JweKeyManagementAlgorithm + Clone,
 {
     credential_issuer: IssuerUrl,
@@ -51,25 +49,20 @@ where
     batch_credential_endpoint: Option<BatchCredentialUrl>,
     deferred_credential_endpoint: Option<DeferredCredentialUrl>,
     notification_endpoint: Option<NotificationUrl>,
-    #[serde(
-        bound = "JT: JsonWebKeyType, JA: JweKeyManagementAlgorithm, JE: JweContentEncryptionAlgorithm<JT>"
-    )]
-    credential_response_encryption: Option<CredentialResponseEncryptionMetadata<JT, JE, JA>>,
+    #[serde(bound = "JA: JweKeyManagementAlgorithm, JE: JweContentEncryptionAlgorithm")]
+    credential_response_encryption: Option<CredentialResponseEncryptionMetadata<JE, JA>>,
     credential_identifiers_supported: Option<bool>,
     signed_metadata: Option<String>,
     display: Option<Vec<CredentialIssuerMetadataDisplay>>,
     #[serde(bound = "CM: CredentialMetadataProfile")]
     #[serde_as(as = "KeyValueMap<_>")]
     credential_configurations_supported: Vec<CredentialMetadata<CM>>,
-    #[serde(skip)]
-    _phantom_jt: PhantomData<JT>,
 }
 
-impl<CM, JT, JE, JA> CredentialIssuerMetadata<CM, JT, JE, JA>
+impl<CM, JE, JA> CredentialIssuerMetadata<CM, JE, JA>
 where
     CM: CredentialMetadataProfile,
-    JT: JsonWebKeyType,
-    JE: JweContentEncryptionAlgorithm<JT>,
+    JE: JweContentEncryptionAlgorithm,
     JA: JweKeyManagementAlgorithm + Clone,
 {
     pub fn new(
@@ -89,7 +82,6 @@ where
             signed_metadata: None,
             display: None,
             credential_configurations_supported,
-            _phantom_jt: PhantomData,
         }
     }
 
@@ -101,7 +93,7 @@ where
             set_batch_credential_endpoint -> batch_credential_endpoint[Option<BatchCredentialUrl>],
             set_deferred_credential_endpoint -> deferred_credential_endpoint[Option<DeferredCredentialUrl>],
             set_notification_endpoint -> notification_endpoint[Option<NotificationUrl>],
-            set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryptionMetadata<JT, JE, JA>>],
+            set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryptionMetadata<JE, JA>>],
             set_credential_identifiers_supported -> credential_identifiers_supported[Option<bool>],
             set_signed_metadata -> signed_metadata[Option<String>],
             set_display -> display[Option<Vec<CredentialIssuerMetadataDisplay>>],
@@ -109,78 +101,95 @@ where
         }
     ];
 
-    pub fn discover<HC, RE>(
+    pub fn discover<C>(
         issuer_url: &IssuerUrl,
-        http_client: HC,
-    ) -> Result<Self, DiscoveryError<RE>>
+        http_client: &C,
+    ) -> Result<Self, DiscoveryError<<C as SyncHttpClient>::Error>>
     where
-        HC: Fn(HttpRequest) -> Result<HttpResponse, RE>,
-        RE: std::error::Error + 'static,
+        C: SyncHttpClient,
     {
         let discovery_url = issuer_url
             .join(METADATA_URL_SUFFIX)
             .map_err(DiscoveryError::UrlParse)?;
 
-        http_client(Self::discovery_request(discovery_url))
+        http_client
+            .call(
+                Self::discovery_request(discovery_url.clone()).map_err(|err| {
+                    DiscoveryError::Other(format!("failed to prepare request: {err}"))
+                })?,
+            )
             .map_err(DiscoveryError::Request)
-            .and_then(|http_response| Self::discovery_response(issuer_url, http_response))
+            .and_then(|http_response| {
+                Self::discovery_response(issuer_url, &discovery_url, http_response)
+            })
     }
 
-    pub async fn discover_async<F, HC, RE>(
+    pub fn discover_async<'c, C>(
         issuer_url: IssuerUrl,
-        http_client: HC,
-    ) -> Result<Self, DiscoveryError<RE>>
+        http_client: &'c C,
+    ) -> impl Future<Output = Result<Self, DiscoveryError<<C as AsyncHttpClient<'c>>::Error>>> + 'c
     where
-        F: Future<Output = Result<HttpResponse, RE>>,
-        HC: Fn(HttpRequest) -> F + 'static,
-        RE: std::error::Error + 'static,
+        Self: 'c,
+        C: AsyncHttpClient<'c>,
     {
-        let discovery_url = issuer_url
-            .join(METADATA_URL_SUFFIX)
-            .map_err(DiscoveryError::UrlParse)?;
+        Box::pin(async move {
+            let discovery_url = issuer_url
+                .join(METADATA_URL_SUFFIX)
+                .map_err(DiscoveryError::UrlParse)?;
 
-        http_client(Self::discovery_request(discovery_url))
-            .await
-            .map_err(DiscoveryError::Request)
-            .and_then(|http_response| Self::discovery_response(&issuer_url, http_response))
+            let provider_metadata = http_client
+                .call(
+                    Self::discovery_request(discovery_url.clone()).map_err(|err| {
+                        DiscoveryError::Other(format!("failed to prepare request: {err}"))
+                    })?,
+                )
+                .await
+                .map_err(DiscoveryError::Request)
+                .and_then(|http_response| {
+                    Self::discovery_response(&issuer_url, &discovery_url, http_response)
+                })?;
+            Ok(provider_metadata)
+        })
     }
 
-    fn discovery_request(discovery_url: url::Url) -> HttpRequest {
-        HttpRequest {
-            url: discovery_url,
-            method: Method::GET,
-            headers: vec![(ACCEPT, HeaderValue::from_static(MIME_TYPE_JSON))]
-                .into_iter()
-                .collect(),
-            body: Vec::new(),
-        }
+    fn discovery_request(discovery_url: url::Url) -> Result<HttpRequest, http::Error> {
+        http::Request::builder()
+            .uri(discovery_url.to_string())
+            .method(Method::GET)
+            .header(ACCEPT, HeaderValue::from_static(MIME_TYPE_JSON))
+            .body(Vec::new())
     }
 
     fn discovery_response<RE>(
         issuer_url: &IssuerUrl,
+        discovery_url: &url::Url,
         discovery_response: HttpResponse,
     ) -> Result<Self, DiscoveryError<RE>>
     where
         RE: std::error::Error + 'static,
     {
-        if discovery_response.status_code != StatusCode::OK {
+        if discovery_response.status() != StatusCode::OK {
             return Err(DiscoveryError::Response(
-                discovery_response.status_code,
-                discovery_response.body,
-                format!("HTTP status code {}", discovery_response.status_code),
+                discovery_response.status(),
+                discovery_response.body().to_owned(),
+                format!(
+                    "HTTP status code {} at {}",
+                    discovery_response.status(),
+                    discovery_url
+                ),
             ));
         }
 
-        check_content_type(&discovery_response.headers, MIME_TYPE_JSON).map_err(|err_msg| {
+        check_content_type(discovery_response.headers(), MIME_TYPE_JSON).map_err(|err_msg| {
             DiscoveryError::Response(
-                discovery_response.status_code,
-                discovery_response.body.clone(),
+                discovery_response.status(),
+                discovery_response.body().to_owned(),
                 err_msg,
             )
         })?;
 
         let provider_metadata = serde_path_to_error::deserialize::<_, Self>(
-            &mut serde_json::Deserializer::from_slice(&discovery_response.body),
+            &mut serde_json::Deserializer::from_slice(discovery_response.body()),
         )
         .map_err(DiscoveryError::Parse)?;
 
@@ -248,7 +257,7 @@ where
     CM: CredentialMetadataProfile,
 {
     #[serde(rename = "$key$")]
-    name: Option<String>,
+    name: String,
     scope: Option<Scope>,
     cryptographic_binding_methods_supported: Option<Vec<CryptographicBindingMethod>>,
     #[serde_as(as = "Option<KeyValueMap<_>>")]
@@ -274,9 +283,9 @@ impl<CM> CredentialMetadata<CM>
 where
     CM: CredentialMetadataProfile,
 {
-    pub fn new(additional_fields: CM) -> Self {
+    pub fn new(name: String, additional_fields: CM) -> Self {
         Self {
-            name: None,
+            name,
             scope: None,
             cryptographic_binding_methods_supported: None,
             proof_types_supported: None,
@@ -412,9 +421,6 @@ pub struct AuthorizationMetadata(
         CoreGrantType,
         CoreJweContentEncryptionAlgorithm,
         CoreJweKeyManagementAlgorithm,
-        CoreJwsSigningAlgorithm,
-        CoreJsonWebKeyType,
-        CoreJsonWebKeyUse,
         CoreJsonWebKey,
         CoreResponseMode,
         CoreResponseType,
@@ -448,206 +454,186 @@ impl AuthorizationMetadata {
         )
     }
 
-    fn trace_and_continue<RE>(err: DiscoveryError<RE>) -> DiscoveryError<RE>
+    fn discover_inner<C>(
+        issuer_url: &IssuerUrl,
+        http_client: &C,
+    ) -> Result<Self, DiscoveryError<<C as SyncHttpClient>::Error>>
     where
-        RE: std::error::Error + 'static,
+        C: SyncHttpClient,
     {
-        event!(Level::ERROR, "{err}");
-        err
-    }
-
-    fn discover_inner<HC, RE>(http_client: HC, url: &IssuerUrl) -> Result<Self, DiscoveryError<RE>>
-    where
-        HC: Fn(HttpRequest) -> Result<HttpResponse, RE>,
-        RE: std::error::Error + 'static,
-    {
-        let _span = trace_span!("discover_inner").entered();
-        event!(Level::DEBUG, "discovering {:?}", url);
-
-        let issuer_url = url.clone();
-
+        debug!("Discovering {issuer_url}");
         let discovery_url = issuer_url
             .join(AUTHORIZATION_METADATA_URL_SUFFIX)
-            .map_err(DiscoveryError::UrlParse)
-            .map_err(Self::trace_and_continue)?;
+            .map_err(DiscoveryError::UrlParse)?;
 
-        http_client(Self::discovery_request(discovery_url))
-            .map_err(DiscoveryError::Request)
-            .map_err(Self::trace_and_continue)
-            .and_then(|http_response| Self::discovery_response(&issuer_url, http_response))
-            .map_err(Self::trace_and_continue)
-    }
-
-    pub fn discover<HC, RE, CM, JT, JE, JA>(
-        credential_issuer_metadata: &CredentialIssuerMetadata<CM, JT, JE, JA>,
-        grant_type: Option<CoreGrantType>,
-        http_client: HC,
-    ) -> Result<Self, DiscoveryError<RE>>
-    where
-        HC: Fn(HttpRequest) -> Result<HttpResponse, RE>,
-        RE: std::error::Error + 'static,
-        CM: CredentialMetadataProfile,
-        JT: JsonWebKeyType,
-        JE: JweContentEncryptionAlgorithm<JT>,
-        JA: JweKeyManagementAlgorithm + Clone,
-    {
-        let _span = trace_span!("discover").entered();
-
-        if grant_type.is_none() {
-            return Self::discover_inner(
-                &http_client,
-                &credential_issuer_metadata.credential_issuer,
-            );
-        }
-
-        let tail = vec![credential_issuer_metadata.credential_issuer.clone()];
-        let grant_type = grant_type.unwrap();
-        let servers = match credential_issuer_metadata.authorization_servers {
-            Some(ref servers) => [servers.clone(), tail].concat(),
-            None => tail,
-        };
-
-        servers
-            .iter()
-            .map(|auth_server| {
-                let response = Self::discover_inner(&http_client, auth_server)?;
-
-                Ok::<Option<Self>, DiscoveryError<RE>>(response.0.grant_types_supported().and_then(
-                    |gts| {
-                        if gts.iter().any(|gt| *gt == grant_type) {
-                            Some(response.clone())
-                        } else {
-                            None
-                        }
-                    },
-                ))
-            })
-            .take_while(|s| !matches!(s, Ok(Some(_))))
-            .next()
-            .ok_or(DiscoveryError::Other(
-                "failed to select an authorization server: no matching grant_type".to_string(),
-            ))??
-            .ok_or(DiscoveryError::Other(
-                "failed to select an authorization server: no matching grant_type".to_string(),
-            ))
-    }
-
-    async fn discover_async_inner<F, HC, RE>(
-        http_client: &HC,
-        url: &IssuerUrl,
-    ) -> Result<Self, DiscoveryError<RE>>
-    where
-        F: Future<Output = Result<HttpResponse, RE>>,
-        HC: Fn(HttpRequest) -> F + 'static,
-        RE: std::error::Error + 'static,
-    {
-        let _span = trace_span!("discover_async_inner").entered();
-        event!(Level::DEBUG, "discovering {:?}", url);
-
-        let issuer_url = url.clone();
-
-        let discovery_url = issuer_url
-            .join(AUTHORIZATION_METADATA_URL_SUFFIX)
-            .map_err(DiscoveryError::UrlParse)
-            .map_err(Self::trace_and_continue)?;
-
-        http_client(Self::discovery_request(discovery_url))
-            .await
-            .map_err(DiscoveryError::Request)
-            .map_err(Self::trace_and_continue)
-            .and_then(|http_response| Self::discovery_response(&issuer_url, http_response))
-            .map_err(Self::trace_and_continue)
-    }
-
-    pub async fn discover_async<F, HC, RE, CM, JT, JE, JA>(
-        credential_issuer_metadata: &CredentialIssuerMetadata<CM, JT, JE, JA>,
-        grant_type: Option<CoreGrantType>,
-        http_client: HC,
-    ) -> Result<Self, DiscoveryError<RE>>
-    where
-        F: Future<Output = Result<HttpResponse, RE>>,
-        HC: Fn(HttpRequest) -> F + 'static,
-        RE: std::error::Error + 'static,
-        CM: CredentialMetadataProfile,
-        JT: JsonWebKeyType,
-        JE: JweContentEncryptionAlgorithm<JT>,
-        JA: JweKeyManagementAlgorithm + Clone,
-    {
-        let _span = trace_span!("discover_async").entered();
-
-        if grant_type.is_none() {
-            return Self::discover_async_inner(
-                &http_client,
-                &credential_issuer_metadata.credential_issuer,
+        http_client
+            .call(
+                Self::discovery_request(discovery_url.clone()).map_err(|err| {
+                    DiscoveryError::Other(format!("failed to prepare request: {err}"))
+                })?,
             )
-            .await;
-        }
+            .map_err(DiscoveryError::Request)
+            .and_then(|http_response| {
+                Self::discovery_response(issuer_url, &discovery_url, http_response)
+            })
+    }
 
-        let grant_type = grant_type.unwrap();
-        let servers = match credential_issuer_metadata.authorization_servers {
-            Some(ref servers) => servers.clone(),
-            None => vec![],
-        };
-
-        for ref auth_server in servers {
-            let response = Self::discover_async_inner(&http_client, auth_server).await;
-
-            match response {
-                Ok(response) if response.0.grant_types_supported().is_some() => {
-                    if response
-                        .0
-                        .grant_types_supported()
-                        .unwrap()
-                        .iter()
-                        .any(|gt| *gt == grant_type)
-                    {
+    pub fn discover<C, CM, JE, JA>(
+        credential_issuer_metadata: &CredentialIssuerMetadata<CM, JE, JA>,
+        grant_type: Option<CoreGrantType>,
+        http_client: &C,
+    ) -> Result<Self, DiscoveryError<<C as SyncHttpClient>::Error>>
+    where
+        C: SyncHttpClient,
+        CM: CredentialMetadataProfile,
+        JE: JweContentEncryptionAlgorithm,
+        JA: JweKeyManagementAlgorithm + Clone,
+    {
+        if let Some(ref servers) = credential_issuer_metadata.authorization_servers {
+            for auth_server in servers {
+                let response = Self::discover_inner(auth_server, http_client);
+                match (response, grant_type.clone()) {
+                    (Ok(response), Some(grant_type)) => {
+                        let gts = match response.0.grant_types_supported() {
+                            Some(gts) => gts,
+                            None => {
+                                // https://openid.net/specs/openid-connect-discovery-1_0.html
+                                // If omitted, the default value is ["authorization_code", "implicit"].
+                                &vec![CoreGrantType::AuthorizationCode, CoreGrantType::Implicit]
+                            }
+                        };
+                        if gts.iter().any(|gt| *gt == grant_type) {
+                            return Ok(response.clone());
+                        } else {
+                            info!("Auth server not supporting grant type, trying the next one");
+                        }
+                    }
+                    (Ok(response), None) => {
                         return Ok(response.clone());
                     }
+                    (Err(e), _) => {
+                        warn!("Error fetching auth server metadata, trying the next one: {e:?}");
+                    }
                 }
-                _ => continue,
             }
         }
-
-        Self::discover_async_inner(&http_client, &credential_issuer_metadata.credential_issuer)
-            .await
+        Self::discover_inner(&credential_issuer_metadata.credential_issuer, http_client)
     }
 
-    fn discovery_request(discovery_url: url::Url) -> HttpRequest {
-        HttpRequest {
-            url: discovery_url,
-            method: Method::GET,
-            headers: vec![(ACCEPT, HeaderValue::from_static(MIME_TYPE_JSON))]
-                .into_iter()
-                .collect(),
-            body: Vec::new(),
-        }
+    fn discover_async_inner<'c, C>(
+        issuer_url: &'c IssuerUrl,
+        http_client: &'c C,
+    ) -> impl Future<Output = Result<Self, DiscoveryError<<C as AsyncHttpClient<'c>>::Error>>> + 'c
+    where
+        Self: 'c,
+        C: AsyncHttpClient<'c>,
+    {
+        Box::pin(async move {
+            debug!("Discovering {issuer_url}");
+            let discovery_url = issuer_url
+                .join(AUTHORIZATION_METADATA_URL_SUFFIX)
+                .map_err(DiscoveryError::UrlParse)?;
+
+            http_client
+                .call(
+                    Self::discovery_request(discovery_url.clone()).map_err(|err| {
+                        DiscoveryError::Other(format!("failed to prepare request: {err}"))
+                    })?,
+                )
+                .await
+                .map_err(DiscoveryError::Request)
+                .and_then(|http_response| {
+                    Self::discovery_response(issuer_url, &discovery_url, http_response)
+                })
+        })
+    }
+
+    pub fn discover_async<'c, C, CM, JE, JA>(
+        credential_issuer_metadata: &'c CredentialIssuerMetadata<CM, JE, JA>,
+        grant_type: Option<CoreGrantType>,
+        http_client: &'c C,
+    ) -> impl Future<Output = Result<Self, DiscoveryError<<C as AsyncHttpClient<'c>>::Error>>> + 'c
+    where
+        Self: 'c,
+        C: AsyncHttpClient<'c>,
+        CM: CredentialMetadataProfile,
+        JE: JweContentEncryptionAlgorithm,
+        JA: JweKeyManagementAlgorithm + Clone,
+    {
+        Box::pin(async move {
+            if let Some(ref servers) = credential_issuer_metadata.authorization_servers {
+                for auth_server in servers {
+                    let response = Self::discover_async_inner(auth_server, http_client).await;
+                    match (response, grant_type.clone()) {
+                        (Ok(response), Some(grant_type)) => {
+                            let gts = match response.0.grant_types_supported() {
+                                Some(gts) => gts,
+                                None => {
+                                    // https://openid.net/specs/openid-connect-discovery-1_0.html
+                                    // If omitted, the default value is ["authorization_code", "implicit"].
+                                    &vec![CoreGrantType::AuthorizationCode, CoreGrantType::Implicit]
+                                }
+                            };
+                            if gts.iter().any(|gt| *gt == grant_type) {
+                                return Ok(response.clone());
+                            } else {
+                                info!("Auth server not supporting grant type, trying the next one");
+                            }
+                        }
+                        (Ok(response), None) => {
+                            return Ok(response.clone());
+                        }
+                        (Err(e), _) => {
+                            warn!(
+                                "Error fetching auth server metadata, trying the next one: {e:?}"
+                            );
+                        }
+                    }
+                }
+            }
+            Self::discover_async_inner(&credential_issuer_metadata.credential_issuer, http_client)
+                .await
+        })
+    }
+
+    fn discovery_request(discovery_url: url::Url) -> Result<HttpRequest, http::Error> {
+        http::Request::builder()
+            .uri(discovery_url.to_string())
+            .method(Method::GET)
+            .header(ACCEPT, HeaderValue::from_static(MIME_TYPE_JSON))
+            .body(Vec::new())
     }
 
     fn discovery_response<RE>(
         issuer_url: &IssuerUrl,
+        discovery_url: &url::Url,
         discovery_response: HttpResponse,
     ) -> Result<Self, DiscoveryError<RE>>
     where
         RE: std::error::Error + 'static,
     {
-        if discovery_response.status_code != StatusCode::OK {
+        if discovery_response.status() != StatusCode::OK {
             return Err(DiscoveryError::Response(
-                discovery_response.status_code,
-                discovery_response.body,
-                format!("HTTP status code {}", discovery_response.status_code),
+                discovery_response.status(),
+                discovery_response.body().to_owned(),
+                format!(
+                    "HTTP status code {} at {}",
+                    discovery_response.status(),
+                    discovery_url
+                ),
             ));
         }
 
-        check_content_type(&discovery_response.headers, MIME_TYPE_JSON).map_err(|err_msg| {
+        check_content_type(discovery_response.headers(), MIME_TYPE_JSON).map_err(|err_msg| {
             DiscoveryError::Response(
-                discovery_response.status_code,
-                discovery_response.body.clone(),
+                discovery_response.status(),
+                discovery_response.body().to_owned(),
                 err_msg,
             )
         })?;
 
         let provider_metadata = serde_path_to_error::deserialize::<_, Self>(
-            &mut serde_json::Deserializer::from_slice(&discovery_response.body),
+            &mut serde_json::Deserializer::from_slice(discovery_response.body()),
         )
         .map_err(DiscoveryError::Parse)?;
 
@@ -690,7 +676,6 @@ mod test {
     fn example_credential_issuer_metadata() {
         let _: CredentialIssuerMetadata<
             CoreProfilesMetadata,
-            CoreJsonWebKeyType,
             CoreJweContentEncryptionAlgorithm,
             CoreJweKeyManagementAlgorithm,
         > = serde_json::from_value(json!({
@@ -790,6 +775,7 @@ mod test {
     #[test]
     fn example_credential_metadata_jwt() {
         let _: CredentialMetadata<CoreProfilesMetadata> = serde_json::from_value(json!({
+            "$key$": "name", // purely for test reason, you cannot really deserialize CredentialMetadata on its own
             "format": "jwt_vc_json",
             "id": "UniversityDegree_JWT",
             "cryptographic_binding_methods_supported": [
@@ -859,6 +845,7 @@ mod test {
     #[test]
     fn example_credential_metadata_ldp() {
         let _: CredentialMetadata<CoreProfilesMetadata> = serde_json::from_value(json!({
+            "$key$": "name", // purely for test reason, you cannot really deserialize CredentialMetadata on its own
             "format": "ldp_vc",
             "@context": [
                 "https://www.w3.org/2018/credentials/v1",
@@ -932,6 +919,7 @@ mod test {
     #[test]
     fn example_credential_metadata_isomdl() {
         let _: CredentialMetadata<CoreProfilesMetadata> = serde_json::from_value(json!({
+            "$key$": "name", // purely for test reason, you cannot really deserialize CredentialMetadata on its own
             "format": "mso_mdoc",
             "doctype": "org.iso.18013.5.1.mDL",
             "cryptographic_binding_methods_supported": [

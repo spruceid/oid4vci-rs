@@ -1,19 +1,16 @@
-use std::marker::PhantomData;
-
 use oauth2::{
     basic::{BasicErrorResponse, BasicRevocationErrorResponse, BasicTokenIntrospectionResponse},
-    AccessToken, AuthUrl, AuthorizationCode, ClientId, CodeTokenRequest, CsrfToken, RedirectUrl,
-    StandardRevocableToken, TokenUrl,
+    AccessToken, AuthUrl, AuthorizationCode, ClientId, CodeTokenRequest, CsrfToken, EndpointNotSet,
+    EndpointSet, RedirectUrl, StandardRevocableToken, TokenUrl,
 };
 use openidconnect::{
     core::{
         CoreApplicationType, CoreClientAuthMethod, CoreGrantType, CoreJsonWebKey,
-        CoreJsonWebKeyType, CoreJsonWebKeyUse, CoreJweContentEncryptionAlgorithm,
-        CoreJweKeyManagementAlgorithm, CoreJwsSigningAlgorithm, CoreResponseType,
-        CoreSubjectIdentifierType, CoreTokenType,
+        CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm, CoreResponseType,
+        CoreSubjectIdentifierType,
     },
     registration::ClientMetadata,
-    IssuerUrl, JsonWebKeyType, JweContentEncryptionAlgorithm, JweKeyManagementAlgorithm,
+    IssuerUrl, JweContentEncryptionAlgorithm, JweKeyManagementAlgorithm,
 };
 use serde::{Deserialize, Serialize};
 
@@ -37,37 +34,38 @@ pub enum Error {
     ParUnsupported(),
 }
 
-pub struct Client<C, JT, JE, JA>
+pub struct Client<C, JE, JA>
 where
     C: Profile,
-    JT: JsonWebKeyType,
-    JE: JweContentEncryptionAlgorithm<JT>,
+    JE: JweContentEncryptionAlgorithm,
     JA: JweKeyManagementAlgorithm + Clone,
 {
     inner: oauth2::Client<
         BasicErrorResponse,
         token::Response,
-        CoreTokenType,
         BasicTokenIntrospectionResponse,
         StandardRevocableToken,
         BasicRevocationErrorResponse,
+        EndpointSet,
+        EndpointNotSet,
+        EndpointNotSet,
+        EndpointNotSet,
+        EndpointSet,
     >,
     issuer: IssuerUrl,
     credential_endpoint: CredentialUrl,
     par_auth_url: Option<ParUrl>,
     batch_credential_endpoint: Option<BatchCredentialUrl>,
     deferred_credential_endpoint: Option<DeferredCredentialUrl>,
-    credential_response_encryption: Option<CredentialResponseEncryptionMetadata<JT, JE, JA>>,
+    credential_response_encryption: Option<CredentialResponseEncryptionMetadata<JE, JA>>,
     credential_configurations_supported: Vec<CredentialMetadata<C::Metadata>>,
     display: Option<Vec<CredentialIssuerMetadataDisplay>>,
-    _phantom_jt: PhantomData<JT>,
 }
 
-impl<C, JT, JE, JA> Client<C, JT, JE, JA>
+impl<C, JE, JA> Client<C, JE, JA>
 where
     C: Profile,
-    JT: JsonWebKeyType,
-    JE: JweContentEncryptionAlgorithm<JT>,
+    JE: JweContentEncryptionAlgorithm,
     JA: JweKeyManagementAlgorithm + Clone,
 {
     pub fn new(
@@ -79,8 +77,10 @@ where
         token_url: TokenUrl,
         redirect_uri: RedirectUrl,
     ) -> Self {
-        let inner = oauth2::Client::new(client_id, None, auth_url, Some(token_url))
-            .set_redirect_uri(redirect_uri);
+        let inner = oauth2::Client::new(client_id)
+            .set_redirect_uri(redirect_uri)
+            .set_auth_uri(auth_url)
+            .set_token_uri(token_url);
         Self {
             inner,
             issuer,
@@ -91,7 +91,6 @@ where
             credential_response_encryption: None,
             credential_configurations_supported: vec![],
             display: None,
-            _phantom_jt: PhantomData,
         }
     }
 
@@ -101,14 +100,14 @@ where
             set_credential_endpoint -> credential_endpoint[CredentialUrl],
             set_batch_credential_endpoint -> batch_credential_endpoint[Option<BatchCredentialUrl>],
             set_deferred_credential_endpoint -> deferred_credential_endpoint[Option<DeferredCredentialUrl>],
-            set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryptionMetadata<JT, JE, JA>>],
+            set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryptionMetadata<JE, JA>>],
             set_credential_configurations_supported -> credential_configurations_supported[Vec<CredentialMetadata<C::Metadata>>],
             set_display -> display[Option<Vec<CredentialIssuerMetadataDisplay>>],
         }
     ];
 
     pub fn from_issuer_metadata(
-        credential_issuer_metadata: CredentialIssuerMetadata<C::Metadata, JT, JE, JA>,
+        credential_issuer_metadata: CredentialIssuerMetadata<C::Metadata, JE, JA>,
         authorization_metadata: AuthorizationMetadata,
         client_id: ClientId,
         redirect_uri: RedirectUrl,
@@ -162,7 +161,7 @@ where
         Ok(PushedAuthorizationRequest::new(
             inner,
             self.par_auth_url.clone().unwrap(),
-            self.inner.auth_url().clone(),
+            self.inner.auth_uri().clone(),
             vec![],
             None,
             None,
@@ -182,7 +181,7 @@ where
     pub fn exchange_code(
         &self,
         code: AuthorizationCode,
-    ) -> CodeTokenRequest<'_, token::Error, token::Response, CoreTokenType> {
+    ) -> CodeTokenRequest<'_, token::Error, token::Response> {
         self.inner.exchange_code(code)
     }
 
@@ -190,7 +189,7 @@ where
         &self,
         access_token: AccessToken,
         profile_fields: C::Credential,
-    ) -> credential::RequestBuilder<C::Credential, JT, JE, JA> {
+    ) -> credential::RequestBuilder<C::Credential, JE, JA> {
         let body = credential::Request::new(profile_fields);
         credential::RequestBuilder::new(body, self.credential_endpoint().clone(), access_token)
     }
@@ -210,9 +209,6 @@ pub type Metadata = ClientMetadata<
     CoreGrantType,
     CoreJweContentEncryptionAlgorithm,
     CoreJweKeyManagementAlgorithm,
-    CoreJwsSigningAlgorithm,
-    CoreJsonWebKeyType,
-    CoreJsonWebKeyUse,
     CoreJsonWebKey,
     CoreResponseType,
     CoreSubjectIdentifierType,
