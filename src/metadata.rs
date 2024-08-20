@@ -478,7 +478,7 @@ impl AuthorizationMetadata {
             .map_err(Self::trace_and_continue)
     }
 
-    pub fn discover<LF, HC, RE, CM, JT, JE, JA>(
+    pub fn discover<HC, RE, CM, JT, JE, JA>(
         credential_issuer_metadata: &CredentialIssuerMetadata<CM, JT, JE, JA>,
         grant_type: Option<CoreGrantType>,
         http_client: HC,
@@ -559,7 +559,7 @@ impl AuthorizationMetadata {
             .map_err(Self::trace_and_continue)
     }
 
-    pub async fn discover_async<F, LF, HC, RE, CM, JT, JE, JA>(
+    pub async fn discover_async<F, HC, RE, CM, JT, JE, JA>(
         credential_issuer_metadata: &CredentialIssuerMetadata<CM, JT, JE, JA>,
         grant_type: Option<CoreGrantType>,
         http_client: HC,
