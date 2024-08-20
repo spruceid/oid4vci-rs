@@ -9,6 +9,7 @@ use crate::{
 };
 use oauth2::{
     http::{
+        self,
         header::{ACCEPT, CONTENT_TYPE},
         HeaderValue, Method, StatusCode,
     },
@@ -134,36 +135,37 @@ where
     {
         let mut auth_url = self.auth_url.url().clone();
 
-        let (http_request, req_body, token) =
-            self.prepare_request(client_assertion, client_assertion_type)?;
+        let (http_request, req_body, token) = self
+            .prepare_request(client_assertion, client_assertion_type)
+            .map_err(|err| RequestError::Other(format!("failed to prepare request: {err:?}")))?;
 
         let http_response = http_client(http_request)
             .await
             .map_err(RequestError::Request)?;
 
-        if http_response.status_code != StatusCode::OK {
+        if http_response.status() != StatusCode::OK {
             return Err(RequestError::Response(
-                http_response.status_code,
-                http_response.body,
+                http_response.status(),
+                http_response.body().to_owned(),
                 "unexpected HTTP status code".to_string(),
             ));
         }
 
         let parsed_response: PushedAuthorizationResponse = match http_response
-            .headers
+            .headers()
             .get(CONTENT_TYPE)
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| HeaderValue::from_static(MIME_TYPE_JSON))
         {
             ref content_type if content_type_has_essence(content_type, MIME_TYPE_JSON) => {
                 serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_slice(
-                    &http_response.body,
+                    &http_response.body().to_owned(),
                 ))
                 .map_err(RequestError::Parse)
             }
             ref content_type => Err(RequestError::Response(
-                http_response.status_code,
-                http_response.body,
+                http_response.status(),
+                http_response.body().to_owned(),
                 format!("unexpected response Content-Type: `{:?}`", content_type),
             )),
         }?;
@@ -179,14 +181,11 @@ where
         Ok((auth_url, token))
     }
 
-    pub fn prepare_request<RE>(
+    pub fn prepare_request(
         self,
         client_assertion: Option<String>,
         client_assertion_type: Option<String>,
-    ) -> Result<(HttpRequest, ParAuthParams, CsrfToken), RequestError<RE>>
-    where
-        RE: std::error::Error + 'static,
-    {
+    ) -> Result<(HttpRequest, ParAuthParams, CsrfToken), RequestError<http::Error>> {
         let (url, token) = self.inner.url();
 
         let body = serde_urlencoded::from_str::<ParAuthParams>(url.clone().as_str())
@@ -206,29 +205,24 @@ where
             .set_user_hint(self.user_hint)
             .set_issuer_state(self.issuer_state);
 
-        Ok((
-            HttpRequest {
-                url: self.par_auth_url.url().clone(),
-                method: Method::POST,
-                headers: vec![
-                    (
-                        CONTENT_TYPE,
-                        HeaderValue::from_static(MIME_TYPE_FORM_URLENCODED),
-                    ),
-                    (ACCEPT, HeaderValue::from_static(MIME_TYPE_JSON)),
-                ]
-                .into_iter()
-                .collect(),
-                body: serde_urlencoded::to_string(&body)
+        let request = http::Request::builder()
+            .uri(self.par_auth_url.to_string())
+            .method(Method::POST)
+            .header(
+                CONTENT_TYPE,
+                HeaderValue::from_static(MIME_TYPE_FORM_URLENCODED),
+            )
+            .header(ACCEPT, HeaderValue::from_static(MIME_TYPE_JSON))
+            .body(
+                serde_urlencoded::to_string(&body)
                     .map_err(|e| {
                         RequestError::Other(format!("unable to encode request body: {}", e))
                     })?
                     .as_bytes()
                     .to_vec(),
-            },
-            body,
-            token,
-        ))
+            )
+            .map_err(RequestError::Request)?;
+        Ok((request, body, token))
     }
 
     pub fn set_pkce_challenge(mut self, pkce_code_challenge: PkceCodeChallenge) -> Self {
@@ -250,10 +244,7 @@ mod test {
     use oauth2::{AuthUrl, ClientId, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, TokenUrl};
     use serde_json::json;
 
-    use crate::{
-        core::profiles::CoreProfilesAuthorizationDetails, metadata::CredentialUrl,
-        openidconnect::reqwest::HttpClientError,
-    };
+    use crate::{core::profiles::CoreProfilesAuthorizationDetails, metadata::CredentialUrl};
 
     use super::*;
 
@@ -288,7 +279,7 @@ mod test {
             .pushed_authorization_request::<_, CoreProfilesAuthorizationDetails>(move || state)
             .unwrap()
             .set_pkce_challenge(pkce_challenge)
-            .prepare_request::<HttpClientError>(None, None)
+            .prepare_request(None, None)
             .unwrap();
         assert_json_eq!(expected_body, body);
     }

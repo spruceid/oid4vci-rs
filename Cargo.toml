@@ -19,8 +19,8 @@ serde_json = "1.0"
 serde_with = "3.3.0"
 serde_path_to_error = "0.1.14"
 url = { version = "2.3.1", features = ["serde"] }
-openidconnect = "3.3.1"
-oauth2 = "4.4.2"
+openidconnect = { version = "4.0.0-alpha.2", features = ["timing-resistant-secret-traits"] }
+oauth2 = "5.0.0-alpha.4"
 async-signature = "0.3.0"
 rand = "0.8.5"
 time = { version = "0.3.29", features = ["serde"] }

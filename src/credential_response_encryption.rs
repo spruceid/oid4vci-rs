@@ -1,7 +1,6 @@
 #![allow(clippy::type_complexity)]
-use std::marker::PhantomData;
 
-use openidconnect::{JsonWebKeyType, JweContentEncryptionAlgorithm, JweKeyManagementAlgorithm};
+use openidconnect::{JweContentEncryptionAlgorithm, JweKeyManagementAlgorithm};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 use ssi_jwk::JWK;
@@ -11,35 +10,29 @@ pub use crate::types::{BatchCredentialUrl, CredentialUrl, DeferredCredentialUrl,
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct CredentialResponseEncryptionMetadata<JT, JE, JA>
+pub struct CredentialResponseEncryptionMetadata<JE, JA>
 where
-    JT: JsonWebKeyType,
-    JE: JweContentEncryptionAlgorithm<JT>,
+    JE: JweContentEncryptionAlgorithm,
     JA: JweKeyManagementAlgorithm + Clone,
 {
     #[serde(bound = "JA: JweKeyManagementAlgorithm")]
     alg_values_supported: Vec<JA>,
-    #[serde(bound = "JE: JweContentEncryptionAlgorithm<JT>")]
+    #[serde(bound = "JE: JweContentEncryptionAlgorithm")]
     enc_values_supported: Vec<JE>,
     encryption_required: bool,
-    #[serde(skip)]
-    _phantom_jt: PhantomData<JT>,
 }
 
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct CredentialResponseEncryption<JT, JE, JA>
+pub struct CredentialResponseEncryption<JE, JA>
 where
-    JT: JsonWebKeyType,
-    JE: JweContentEncryptionAlgorithm<JT>,
+    JE: JweContentEncryptionAlgorithm,
     JA: JweKeyManagementAlgorithm + Clone,
 {
     jwk: JWK,
     #[serde(bound = "JA: JweKeyManagementAlgorithm")]
     alg: JA,
-    #[serde(bound = "JE: JweContentEncryptionAlgorithm<JT>")]
+    #[serde(bound = "JE: JweContentEncryptionAlgorithm")]
     enc: JE,
-    #[serde(skip)]
-    _phantom_jt: PhantomData<JT>,
 }

@@ -1,9 +1,7 @@
 pub mod profiles;
 
 pub mod metadata {
-    use openidconnect::core::{
-        CoreJsonWebKeyType, CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm,
-    };
+    use openidconnect::core::{CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm};
 
     use crate::metadata;
 
@@ -11,16 +9,13 @@ pub mod metadata {
 
     pub type CredentialIssuerMetadata = metadata::CredentialIssuerMetadata<
         CoreProfilesMetadata,
-        CoreJsonWebKeyType,
         CoreJweContentEncryptionAlgorithm,
         CoreJweKeyManagementAlgorithm,
     >;
 }
 
 pub mod credential {
-    use openidconnect::core::{
-        CoreJsonWebKeyType, CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm,
-    };
+    use openidconnect::core::{CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm};
 
     use crate::credential;
 
@@ -28,13 +23,11 @@ pub mod credential {
 
     pub type Request = credential::Request<
         CoreProfilesRequest,
-        CoreJsonWebKeyType,
         CoreJweContentEncryptionAlgorithm,
         CoreJweKeyManagementAlgorithm,
     >;
     pub type BatchRequest = credential::BatchRequest<
         CoreProfilesRequest,
-        CoreJsonWebKeyType,
         CoreJweContentEncryptionAlgorithm,
         CoreJweKeyManagementAlgorithm,
     >;
@@ -50,9 +43,7 @@ pub mod authorization {
 }
 
 pub mod client {
-    use openidconnect::core::{
-        CoreJsonWebKeyType, CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm,
-    };
+    use openidconnect::core::{CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm};
 
     use crate::client;
 
@@ -60,7 +51,6 @@ pub mod client {
 
     pub type Client = client::Client<
         CoreProfiles,
-        CoreJsonWebKeyType,
         CoreJweContentEncryptionAlgorithm,
         CoreJweKeyManagementAlgorithm,
     >;
