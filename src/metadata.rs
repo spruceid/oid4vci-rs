@@ -269,7 +269,7 @@ where
     CM: CredentialMetadataProfile,
 {
     #[serde(rename = "$key$")]
-    name: Option<String>,
+    name: String,
     scope: Option<Scope>,
     cryptographic_binding_methods_supported: Option<Vec<CryptographicBindingMethod>>,
     #[serde_as(as = "Option<KeyValueMap<_>>")]
@@ -295,9 +295,9 @@ impl<CM> CredentialMetadata<CM>
 where
     CM: CredentialMetadataProfile,
 {
-    pub fn new(additional_fields: CM) -> Self {
+    pub fn new(name: String, additional_fields: CM) -> Self {
         Self {
-            name: None,
+            name,
             scope: None,
             cryptographic_binding_methods_supported: None,
             proof_types_supported: None,
@@ -502,8 +502,8 @@ impl AuthorizationMetadata {
         JA: JweKeyManagementAlgorithm + Clone,
     {
         if let Some(ref servers) = credential_issuer_metadata.authorization_servers {
-            for ref auth_server in servers {
-                let response = Self::discover_inner(&auth_server, http_client);
+            for auth_server in servers {
+                let response = Self::discover_inner(auth_server, http_client);
                 match (response, grant_type.clone()) {
                     (Ok(response), Some(grant_type)) => {
                         let gts = match response.0.grant_types_supported() {
@@ -555,7 +555,7 @@ impl AuthorizationMetadata {
                 .await
                 .map_err(DiscoveryError::Request)
                 .and_then(|http_response| {
-                    Self::discovery_response(&issuer_url, &discovery_url, http_response)
+                    Self::discovery_response(issuer_url, &discovery_url, http_response)
                 })
         })
     }
@@ -574,8 +574,8 @@ impl AuthorizationMetadata {
     {
         Box::pin(async move {
             if let Some(ref servers) = credential_issuer_metadata.authorization_servers {
-                for ref auth_server in servers {
-                    let response = Self::discover_async_inner(&auth_server, http_client).await;
+                for auth_server in servers {
+                    let response = Self::discover_async_inner(auth_server, http_client).await;
                     match (response, grant_type.clone()) {
                         (Ok(response), Some(grant_type)) => {
                             let gts = match response.0.grant_types_supported() {
@@ -787,6 +787,7 @@ mod test {
     #[test]
     fn example_credential_metadata_jwt() {
         let _: CredentialMetadata<CoreProfilesMetadata> = serde_json::from_value(json!({
+            "$key$": "name", // purely for test reason, you cannot really deserialize CredentialMetadata on its own
             "format": "jwt_vc_json",
             "id": "UniversityDegree_JWT",
             "cryptographic_binding_methods_supported": [
@@ -856,6 +857,7 @@ mod test {
     #[test]
     fn example_credential_metadata_ldp() {
         let _: CredentialMetadata<CoreProfilesMetadata> = serde_json::from_value(json!({
+            "$key$": "name", // purely for test reason, you cannot really deserialize CredentialMetadata on its own
             "format": "ldp_vc",
             "@context": [
                 "https://www.w3.org/2018/credentials/v1",
@@ -929,6 +931,7 @@ mod test {
     #[test]
     fn example_credential_metadata_isomdl() {
         let _: CredentialMetadata<CoreProfilesMetadata> = serde_json::from_value(json!({
+            "$key$": "name", // purely for test reason, you cannot really deserialize CredentialMetadata on its own
             "format": "mso_mdoc",
             "doctype": "org.iso.18013.5.1.mDL",
             "cryptographic_binding_methods_supported": [
