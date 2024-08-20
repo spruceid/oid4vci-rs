@@ -211,16 +211,6 @@ where
     c_nonce_expires_in: Option<i64>,
 }
 
-//impl<CR> PartialEq for Response<CR>
-//where
-//    CR: CredentialResponseProfile,
-//{
-//    fn eq(&self, other: &Self) -> bool {
-//        let Response {additional_profile_fields, c_nonce, c_nonce_expires_in} = self;
-//        additional_profile_fields == other.additional_profile_fields && c_nonce_expires_in == other.c_nonce_expires_in, c_non
-//    }
-//}
-
 impl<CR> Response<CR>
 where
     CR: CredentialResponseProfile,

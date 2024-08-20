@@ -122,12 +122,6 @@ where
             .and_then(|http_response| {
                 Self::discovery_response(issuer_url, &discovery_url, http_response)
             })
-        //.and_then(|provider_metadata| {
-        //    JsonWebKeySet::fetch(provider_metadata.jwks_uri(), http_client).map(|jwks| Self {
-        //        jwks,
-        //        ..provider_metadata
-        //    })
-        //})
     }
 
     pub fn discover_async<'c, C>(
@@ -154,12 +148,6 @@ where
                 .and_then(|http_response| {
                     Self::discovery_response(&issuer_url, &discovery_url, http_response)
                 })?;
-            //JsonWebKeySet::fetch_async(provider_metadata.jwks_uri(), http_client)
-            //    .await
-            //    .map(|jwks| Self {
-            //        jwks,
-            //        ..provider_metadata
-            //    })
             Ok(provider_metadata)
         })
     }
