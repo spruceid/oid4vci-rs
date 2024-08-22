@@ -296,6 +296,7 @@ where
 
     field_getters_setters![
         pub self [self] ["credential metadata value"] {
+            set_name -> name[Option<String>],
             set_scope -> scope[Option<Scope>],
             set_cryptographic_binding_methods_supported -> cryptographic_binding_methods_supported[Option<Vec<CryptographicBindingMethod>>],
             set_proof_types_supported -> proof_types_supported[Option<Vec<KeyProofTypesSupported>>],

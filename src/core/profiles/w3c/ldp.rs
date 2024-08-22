@@ -9,61 +9,29 @@ use crate::profiles::{
     CredentialRequestProfile, CredentialResponseProfile,
 };
 
-use super::{CredentialDefinition, CredentialOfferDefinition};
+use super::{CredentialDefinitionLD, CredentialOfferDefinitionLD};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Metadata {
     credential_signing_alg_values_supported: Option<Vec<String>>,
-    #[serde(rename = "@context")]
-    context: Vec<serde_json::Value>,
-    credentials_definition: CredentialDefinitionLD,
+    #[serde(flatten)]
+    credential_definition: CredentialDefinitionLD,
     order: Option<Vec<String>>,
 }
 
 impl Metadata {
-    pub fn new(
-        context: Vec<serde_json::Value>,
-        credentials_definition: CredentialDefinitionLD,
-    ) -> Self {
+    pub fn new(credential_definition: CredentialDefinitionLD) -> Self {
         Self {
             credential_signing_alg_values_supported: None,
-            context,
-            credentials_definition,
+            credential_definition,
             order: None,
         }
     }
     field_getters_setters![
         pub self [self] ["LD VC metadata value"] {
             set_credential_signing_alg_values_supported -> credential_signing_alg_values_supported[Option<Vec<String>>],
-            set_context -> context[Vec<serde_json::Value>],
-            set_credentials_definition -> credentials_definition[CredentialDefinitionLD],
+            set_credential_definition -> credential_definition[CredentialDefinitionLD],
             set_order -> order[Option<Vec<String>>],
-        }
-    ];
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct CredentialDefinitionLD {
-    #[serde(flatten)]
-    credential_definition: CredentialDefinition,
-    #[serde(rename = "@context")]
-    context: Vec<serde_json::Value>,
-}
-
-impl CredentialDefinitionLD {
-    pub fn new(
-        credential_definition: CredentialDefinition,
-        context: Vec<serde_json::Value>,
-    ) -> Self {
-        Self {
-            credential_definition,
-            context,
-        }
-    }
-    field_getters_setters![
-        pub self [self] ["LD VC credential definition value"] {
-            set_credential_definition -> credential_definition[CredentialDefinition],
-            set_context -> context[Vec<serde_json::Value>],
         }
     ];
 }
@@ -71,7 +39,7 @@ impl CredentialMetadataProfile for Metadata {
     type Request = Request;
 
     fn to_request(&self) -> Self::Request {
-        Request::new(self.credentials_definition().clone())
+        Request::new(self.credential_definition().clone())
     }
 }
 
@@ -90,32 +58,6 @@ impl Offer {
     field_getters_setters![
         pub self [self] ["LD VC credential offer value"] {
             set_credential_definition -> credential_definition[CredentialOfferDefinitionLD],
-        }
-    ];
-}
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct CredentialOfferDefinitionLD {
-    #[serde(rename = "@context")]
-    context: Vec<serde_json::Value>,
-    #[serde(flatten)]
-    credential_offer_definite: CredentialOfferDefinition,
-}
-
-impl CredentialOfferDefinitionLD {
-    pub fn new(
-        context: Vec<serde_json::Value>,
-        credential_offer_definite: CredentialOfferDefinition,
-    ) -> Self {
-        Self {
-            context,
-            credential_offer_definite,
-        }
-    }
-
-    field_getters_setters![
-        pub self [self] ["LD VC credential offer definition value"] {
-            set_context -> context[Vec<serde_json::Value>],
-            set_credential_offer_definite -> credential_offer_definite[CredentialOfferDefinition],
         }
     ];
 }
@@ -217,7 +159,7 @@ mod test {
                 "VerifiableCredential",
                 "UniversityDegreeCredential"
             ],
-            "credentials_definition": {
+            "credential_definition": {
                 "@context": [
                     "https://www.w3.org/2018/credentials/v1",
                     "https://www.w3.org/2018/credentials/examples/v1"
