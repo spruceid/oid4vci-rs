@@ -201,7 +201,7 @@ where
         &self,
         access_token: AccessToken,
         profile_fields: Vec<C::Credential>,
-    ) -> Result<credential::BatchRequestBuilder<C::Credential, JT, JE, JA>, Error> {
+    ) -> Result<credential::BatchRequestBuilder<C::Credential, JE, JA>, Error> {
         if self.batch_credential_endpoint().is_none() {
             return Err(Error::BcrUnsupported());
         }

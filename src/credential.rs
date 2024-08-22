@@ -183,27 +183,25 @@ where
     }
 }
 
-pub struct BatchRequestBuilder<CR, JT, JE, JA>
+pub struct BatchRequestBuilder<CR, JE, JA>
 where
     CR: CredentialRequestProfile,
-    JT: JsonWebKeyType,
-    JE: JweContentEncryptionAlgorithm<JT>,
+    JE: JweContentEncryptionAlgorithm,
     JA: JweKeyManagementAlgorithm + Clone,
 {
-    body: BatchRequest<CR, JT, JE, JA>,
+    body: BatchRequest<CR, JE, JA>,
     url: BatchCredentialUrl,
     access_token: AccessToken,
 }
 
-impl<CR, JT, JE, JA> BatchRequestBuilder<CR, JT, JE, JA>
+impl<CR, JE, JA> BatchRequestBuilder<CR, JE, JA>
 where
     CR: CredentialRequestProfile,
-    JT: JsonWebKeyType,
-    JE: JweContentEncryptionAlgorithm<JT>,
+    JE: JweContentEncryptionAlgorithm,
     JA: JweKeyManagementAlgorithm + Clone,
 {
     pub(crate) fn new(
-        body: BatchRequest<CR, JT, JE, JA>,
+        body: BatchRequest<CR, JE, JA>,
         url: BatchCredentialUrl,
         access_token: AccessToken,
     ) -> Self {
@@ -237,53 +235,56 @@ where
         Ok(self)
     }
 
-    pub fn request<HC, RE>(
+    pub fn request<C>(
         self,
-        http_client: HC,
-    ) -> Result<BatchResponse<CR::Response>, RequestError<RE>>
+        http_client: &C,
+    ) -> Result<BatchResponse<CR::Response>, RequestError<<C as SyncHttpClient>::Error>>
     where
-        HC: FnOnce(HttpRequest) -> Result<HttpResponse, RE>,
-        RE: std::error::Error + 'static,
+        C: SyncHttpClient,
     {
-        http_client(self.prepare_request()?)
+        http_client
+            .call(self.prepare_request().map_err(|err| {
+                RequestError::Other(format!("failed to prepare request: {err:?}"))
+            })?)
             .map_err(RequestError::Request)
             .and_then(|http_response| self.credential_response(http_response))
     }
 
-    pub async fn request_async<C, F, RE>(
+    pub fn request_async<'c, C>(
         self,
-        http_client: C,
-    ) -> Result<BatchResponse<CR::Response>, RequestError<RE>>
+        http_client: &'c C,
+    ) -> impl Future<
+        Output = Result<
+            BatchResponse<CR::Response>,
+            RequestError<<C as AsyncHttpClient<'c>>::Error>,
+        >,
+    > + 'c
     where
-        C: FnOnce(HttpRequest) -> F,
-        F: Future<Output = Result<HttpResponse, RE>>,
-        RE: std::error::Error + 'static,
+        Self: 'c,
+        C: AsyncHttpClient<'c>,
     {
-        let http_request = self.prepare_request()?;
-        let http_response = http_client(http_request)
-            .await
-            .map_err(RequestError::Request)?;
+        Box::pin(async move {
+            let http_response = http_client
+                .call(self.prepare_request().map_err(|err| {
+                    RequestError::Other(format!("failed to prepare request: {err:?}"))
+                })?)
+                .await
+                .map_err(RequestError::Request)?;
 
-        self.credential_response(http_response)
+            self.credential_response(http_response)
+        })
     }
 
-    fn prepare_request<RE>(&self) -> Result<HttpRequest, RequestError<RE>>
-    where
-        RE: std::error::Error + 'static,
-    {
+    fn prepare_request(&self) -> Result<HttpRequest, RequestError<http::Error>> {
         let (auth_header, auth_value) = auth_bearer(&self.access_token);
-        Ok(HttpRequest {
-            url: self.url.url().clone(),
-            method: Method::POST,
-            headers: vec![
-                (CONTENT_TYPE, HeaderValue::from_static(MIME_TYPE_JSON)),
-                (ACCEPT, HeaderValue::from_static(MIME_TYPE_JSON)),
-                (auth_header, auth_value),
-            ]
-            .into_iter()
-            .collect(),
-            body: serde_json::to_vec(&self.body).map_err(|e| RequestError::Other(e.to_string()))?,
-        })
+        http::Request::builder()
+            .uri(self.url.to_string())
+            .method(Method::POST)
+            .header(CONTENT_TYPE, HeaderValue::from_static(MIME_TYPE_JSON))
+            .header(ACCEPT, HeaderValue::from_static(MIME_TYPE_JSON))
+            .header(auth_header, auth_value)
+            .body(serde_json::to_vec(&self.body).map_err(|e| RequestError::Other(e.to_string()))?)
+            .map_err(RequestError::Request)
     }
 
     fn credential_response<RE>(
@@ -294,29 +295,29 @@ where
         RE: std::error::Error + 'static,
     {
         // TODO status 202 if deferred
-        if http_response.status_code != StatusCode::OK {
+        if http_response.status() != StatusCode::OK {
             return Err(RequestError::Response(
-                http_response.status_code,
-                http_response.body,
+                http_response.status(),
+                http_response.body().to_owned(),
                 "unexpected HTTP status code".to_string(),
             ));
         }
 
         match http_response
-            .headers
+            .headers()
             .get(CONTENT_TYPE)
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| HeaderValue::from_static(MIME_TYPE_JSON))
         {
             ref content_type if content_type_has_essence(content_type, MIME_TYPE_JSON) => {
                 serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_slice(
-                    &http_response.body,
+                    http_response.body(),
                 ))
                 .map_err(RequestError::Parse)
             }
             ref content_type => Err(RequestError::Response(
-                http_response.status_code,
-                http_response.body,
+                http_response.status(),
+                http_response.body().to_owned(),
                 format!("unexpected response Content-Type: `{:?}`", content_type),
             )),
         }
@@ -409,14 +410,13 @@ where
     credential_requests: Vec<Request<CR, JE, JA>>,
 }
 
-impl<CR, JT, JE, JA> BatchRequest<CR, JT, JE, JA>
+impl<CR, JE, JA> BatchRequest<CR, JE, JA>
 where
     CR: CredentialRequestProfile,
-    JT: JsonWebKeyType,
-    JE: JweContentEncryptionAlgorithm<JT>,
+    JE: JweContentEncryptionAlgorithm,
     JA: JweKeyManagementAlgorithm + Clone,
 {
-    pub fn new(credential_requests: Vec<Request<CR, JT, JE, JA>>) -> Self {
+    pub fn new(credential_requests: Vec<Request<CR, JE, JA>>) -> Self {
         Self {
             credential_requests,
         }

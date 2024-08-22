@@ -59,7 +59,7 @@ pub mod client {
 #[cfg(test)]
 mod test {
     use openidconnect::IssuerUrl;
-    use profiles::w3c::{self, ldp::CredentialDefinitionLD};
+    use profiles::w3c::{self, CredentialDefinitionLD};
 
     use crate::{credential_response_encryption::CredentialUrl, metadata::CredentialMetadata};
 
@@ -88,9 +88,6 @@ mod test {
             vec![CredentialMetadata::new(
                 "credential1".into(),
                 profiles::CoreProfilesMetadata::LDVC(w3c::ldp::Metadata::new(
-                    vec![serde_json::Value::String(
-                        "http://example.com/context".into(),
-                    )],
                     CredentialDefinitionLD::new(
                         w3c::CredentialDefinition::new(vec!["type1".into()]),
                         vec![serde_json::Value::String(
