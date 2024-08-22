@@ -15,7 +15,7 @@ pub trait CredentialMetadataProfile: Clone + Debug + DeserializeOwned + Serializ
 }
 pub trait CredentialOfferProfile: Debug + DeserializeOwned + Serialize {}
 pub trait AuthorizationDetailsProfile: Debug + DeserializeOwned + Serialize {}
-pub trait CredentialRequestProfile: Debug + DeserializeOwned + Serialize {
+pub trait CredentialRequestProfile: Clone + Debug + DeserializeOwned + Serialize {
     type Response: CredentialResponseProfile;
 }
 pub trait CredentialResponseProfile: Debug + DeserializeOwned + Serialize {}

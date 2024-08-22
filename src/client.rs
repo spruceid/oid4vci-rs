@@ -32,6 +32,9 @@ use crate::{
 pub enum Error {
     #[error("Pushed authorization request is not supported")]
     ParUnsupported(),
+
+    #[error("Batch credential request is not supported")]
+    BcrUnsupported(),
 }
 
 pub struct Client<C, JE, JA>
@@ -192,6 +195,27 @@ where
     ) -> credential::RequestBuilder<C::Credential, JE, JA> {
         let body = credential::Request::new(profile_fields);
         credential::RequestBuilder::new(body, self.credential_endpoint().clone(), access_token)
+    }
+
+    pub fn batch_request_credential(
+        &self,
+        access_token: AccessToken,
+        profile_fields: Vec<C::Credential>,
+    ) -> Result<credential::BatchRequestBuilder<C::Credential, JT, JE, JA>, Error> {
+        if self.batch_credential_endpoint().is_none() {
+            return Err(Error::BcrUnsupported());
+        }
+        let body = credential::BatchRequest::new(
+            profile_fields
+                .into_iter()
+                .map(|pf| credential::Request::new(pf))
+                .collect(),
+        );
+        Ok(credential::BatchRequestBuilder::new(
+            body,
+            self.batch_credential_endpoint().unwrap().clone(),
+            access_token,
+        ))
     }
 }
 

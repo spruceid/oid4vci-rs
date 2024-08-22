@@ -20,6 +20,7 @@ use crate::{
     metadata::CredentialUrl,
     profiles::{CredentialRequestProfile, CredentialResponseProfile},
     proof_of_possession::Proof,
+    types::BatchCredentialUrl,
 };
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -182,6 +183,146 @@ where
     }
 }
 
+pub struct BatchRequestBuilder<CR, JT, JE, JA>
+where
+    CR: CredentialRequestProfile,
+    JT: JsonWebKeyType,
+    JE: JweContentEncryptionAlgorithm<JT>,
+    JA: JweKeyManagementAlgorithm + Clone,
+{
+    body: BatchRequest<CR, JT, JE, JA>,
+    url: BatchCredentialUrl,
+    access_token: AccessToken,
+}
+
+impl<CR, JT, JE, JA> BatchRequestBuilder<CR, JT, JE, JA>
+where
+    CR: CredentialRequestProfile,
+    JT: JsonWebKeyType,
+    JE: JweContentEncryptionAlgorithm<JT>,
+    JA: JweKeyManagementAlgorithm + Clone,
+{
+    pub(crate) fn new(
+        body: BatchRequest<CR, JT, JE, JA>,
+        url: BatchCredentialUrl,
+        access_token: AccessToken,
+    ) -> Self {
+        Self {
+            body,
+            url,
+            access_token,
+        }
+    }
+
+    pub fn set_proofs<RE>(
+        mut self,
+        proofs_of_possession: Vec<Proof>,
+    ) -> Result<Self, RequestError<RE>>
+    where
+        RE: std::error::Error + 'static,
+    {
+        if self.body.credential_requests.len() != proofs_of_possession.len() {
+            return Err(RequestError::Other("invalid proof count".to_string()));
+        }
+
+        self.body.credential_requests = self
+            .body
+            .credential_requests
+            .clone()
+            .into_iter()
+            .enumerate()
+            .map(|(i, req)| req.set_proof(Some(proofs_of_possession.get(i).unwrap().to_owned())))
+            .collect();
+
+        Ok(self)
+    }
+
+    pub fn request<HC, RE>(
+        self,
+        http_client: HC,
+    ) -> Result<BatchResponse<CR::Response>, RequestError<RE>>
+    where
+        HC: FnOnce(HttpRequest) -> Result<HttpResponse, RE>,
+        RE: std::error::Error + 'static,
+    {
+        http_client(self.prepare_request()?)
+            .map_err(RequestError::Request)
+            .and_then(|http_response| self.credential_response(http_response))
+    }
+
+    pub async fn request_async<C, F, RE>(
+        self,
+        http_client: C,
+    ) -> Result<BatchResponse<CR::Response>, RequestError<RE>>
+    where
+        C: FnOnce(HttpRequest) -> F,
+        F: Future<Output = Result<HttpResponse, RE>>,
+        RE: std::error::Error + 'static,
+    {
+        let http_request = self.prepare_request()?;
+        let http_response = http_client(http_request)
+            .await
+            .map_err(RequestError::Request)?;
+
+        self.credential_response(http_response)
+    }
+
+    fn prepare_request<RE>(&self) -> Result<HttpRequest, RequestError<RE>>
+    where
+        RE: std::error::Error + 'static,
+    {
+        let (auth_header, auth_value) = auth_bearer(&self.access_token);
+        Ok(HttpRequest {
+            url: self.url.url().clone(),
+            method: Method::POST,
+            headers: vec![
+                (CONTENT_TYPE, HeaderValue::from_static(MIME_TYPE_JSON)),
+                (ACCEPT, HeaderValue::from_static(MIME_TYPE_JSON)),
+                (auth_header, auth_value),
+            ]
+            .into_iter()
+            .collect(),
+            body: serde_json::to_vec(&self.body).map_err(|e| RequestError::Other(e.to_string()))?,
+        })
+    }
+
+    fn credential_response<RE>(
+        self,
+        http_response: HttpResponse,
+    ) -> Result<BatchResponse<CR::Response>, RequestError<RE>>
+    where
+        RE: std::error::Error + 'static,
+    {
+        // TODO status 202 if deferred
+        if http_response.status_code != StatusCode::OK {
+            return Err(RequestError::Response(
+                http_response.status_code,
+                http_response.body,
+                "unexpected HTTP status code".to_string(),
+            ));
+        }
+
+        match http_response
+            .headers
+            .get(CONTENT_TYPE)
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| HeaderValue::from_static(MIME_TYPE_JSON))
+        {
+            ref content_type if content_type_has_essence(content_type, MIME_TYPE_JSON) => {
+                serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_slice(
+                    &http_response.body,
+                ))
+                .map_err(RequestError::Parse)
+            }
+            ref content_type => Err(RequestError::Response(
+                http_response.status_code,
+                http_response.body,
+                format!("unexpected response Content-Type: `{:?}`", content_type),
+            )),
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum RequestError<RE>
@@ -223,7 +364,7 @@ where
         }
     }
     field_getters_setters![
-        pub self [self] ["credential request value"] {
+        pub self [self] ["credential response value"] {
             set_additional_profile_fields -> additional_profile_fields[ResponseEnum<CR>],
             set_nonce -> c_nonce[Option<Nonce>],
             set_nonce_expiration -> c_nonce_expires_in[Option<i64>],
@@ -268,6 +409,20 @@ where
     credential_requests: Vec<Request<CR, JE, JA>>,
 }
 
+impl<CR, JT, JE, JA> BatchRequest<CR, JT, JE, JA>
+where
+    CR: CredentialRequestProfile,
+    JT: JsonWebKeyType,
+    JE: JweContentEncryptionAlgorithm<JT>,
+    JA: JweKeyManagementAlgorithm + Clone,
+{
+    pub fn new(credential_requests: Vec<Request<CR, JT, JE, JA>>) -> Self {
+        Self {
+            credential_requests,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct BatchResponse<CR>
 where
@@ -277,6 +432,26 @@ where
     credential_responses: Vec<ResponseEnum<CR>>,
     c_nonce: Option<Nonce>,
     c_nonce_expires_in: Option<i64>,
+}
+
+impl<CR> BatchResponse<CR>
+where
+    CR: CredentialResponseProfile,
+{
+    pub fn new(credential_responses: Vec<ResponseEnum<CR>>) -> Self {
+        Self {
+            credential_responses,
+            c_nonce: None,
+            c_nonce_expires_in: None,
+        }
+    }
+    field_getters_setters![
+        pub self [self] ["batch credential response value"] {
+            set_credential_responses -> credential_responses[Vec<ResponseEnum<CR>>],
+            set_nonce -> c_nonce[Option<Nonce>],
+            set_nonce_expiration -> c_nonce_expires_in[Option<i64>],
+        }
+    ];
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
