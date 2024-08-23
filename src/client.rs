@@ -202,9 +202,11 @@ where
         access_token: AccessToken,
         profile_fields: Vec<C::Credential>,
     ) -> Result<credential::BatchRequestBuilder<C::Credential, JE, JA>, Error> {
-        if self.batch_credential_endpoint().is_none() {
+        let endpoint = if let Some(endpoint) = self.batch_credential_endpoint() {
+            endpoint
+        } else {
             return Err(Error::BcrUnsupported());
-        }
+        };
         let body = credential::BatchRequest::new(
             profile_fields
                 .into_iter()
@@ -213,7 +215,7 @@ where
         );
         Ok(credential::BatchRequestBuilder::new(
             body,
-            self.batch_credential_endpoint().unwrap().clone(),
+            endpoint.clone(),
             access_token,
         ))
     }

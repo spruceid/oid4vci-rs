@@ -219,8 +219,12 @@ where
     where
         RE: std::error::Error + 'static,
     {
-        if self.body.credential_requests.len() != proofs_of_possession.len() {
-            return Err(RequestError::Other("invalid proof count".to_string()));
+        let req_count = self.body.credential_requests.len();
+        let pop_count = proofs_of_possession.len();
+        if req_count != pop_count {
+            return Err(RequestError::Other(format!(
+                "invalid proof count: expected {req_count}; found {pop_count}"
+            )));
         }
 
         self.body.credential_requests = self
