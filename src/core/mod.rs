@@ -88,6 +88,9 @@ mod test {
             vec![CredentialMetadata::new(
                 "credential1".into(),
                 profiles::CoreProfilesMetadata::LDVC(w3c::ldp::Metadata::new(
+                    vec![serde_json::Value::String(
+                        "http://example.com/context".into(),
+                    )],
                     CredentialDefinitionLD::new(
                         w3c::CredentialDefinition::new(vec!["type1".into()]),
                         vec![serde_json::Value::String(
