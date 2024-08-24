@@ -61,7 +61,7 @@ where
     batch_credential_endpoint: Option<BatchCredentialUrl>,
     deferred_credential_endpoint: Option<DeferredCredentialUrl>,
     credential_response_encryption: Option<CredentialResponseEncryptionMetadata<JE, JA>>,
-    credential_configurations_supported: Vec<CredentialMetadata<C::Metadata>>,
+    credential_configurations_supported: Vec<CredentialMetadata<C::Configuration>>,
     display: Option<Vec<CredentialIssuerMetadataDisplay>>,
 }
 
@@ -104,13 +104,13 @@ where
             set_batch_credential_endpoint -> batch_credential_endpoint[Option<BatchCredentialUrl>],
             set_deferred_credential_endpoint -> deferred_credential_endpoint[Option<DeferredCredentialUrl>],
             set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryptionMetadata<JE, JA>>],
-            set_credential_configurations_supported -> credential_configurations_supported[Vec<CredentialMetadata<C::Metadata>>],
+            set_credential_configurations_supported -> credential_configurations_supported[Vec<CredentialMetadata<C::Configuration>>],
             set_display -> display[Option<Vec<CredentialIssuerMetadataDisplay>>],
         }
     ];
 
     pub fn from_issuer_metadata(
-        credential_issuer_metadata: CredentialIssuerMetadata<C::Metadata, JE, JA>,
+        credential_issuer_metadata: CredentialIssuerMetadata<C::Configuration, JE, JA>,
         authorization_metadata: AuthorizationMetadata,
         client_id: ClientId,
         redirect_uri: RedirectUrl,

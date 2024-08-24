@@ -4,21 +4,21 @@ use isomdl::definitions::device_request::DocType;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    w3c::CredentialSubjectClaims, AuthorizationDetailsProfile, CredentialMetadataProfile,
+    w3c::CredentialSubjectClaims, AuthorizationDetailsProfile, CredentialConfigurationProfile,
     CredentialOfferProfile, CredentialRequestProfile, CredentialResponseProfile,
 };
 
 pub type Namespace = String;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct Metadata {
+pub struct Configuration {
     // credential_signing_alg_values_supported: Option<Vec<cose::Algorithm>>, // TODO cose
     doctype: DocType,
     claims: Option<HashMap<Namespace, CredentialSubjectClaims>>,
     order: Option<Vec<String>>,
 }
 
-impl Metadata {
+impl Configuration {
     pub fn new(doctype: DocType) -> Self {
         Self {
             doctype,
@@ -34,7 +34,7 @@ impl Metadata {
         }
     ];
 }
-impl CredentialMetadataProfile for Metadata {
+impl CredentialConfigurationProfile for Configuration {
     type Request = Request;
 
     fn to_request(&self) -> Self::Request {
@@ -151,7 +151,7 @@ mod test {
 
     #[test]
     fn example_metadata() {
-        let _: Metadata = serde_json::from_value(json!({
+        let _: Configuration = serde_json::from_value(json!({
             "doctype": "org.iso.18013.5.1.mDL",
             "claims": {
                 "org.iso.18013.5.1": {

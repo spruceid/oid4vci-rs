@@ -1,18 +1,18 @@
 use serde::{Deserialize, Serialize};
 
 use crate::profiles::{
-    AuthorizationDetailsProfile, CredentialMetadataProfile, CredentialOfferProfile,
+    AuthorizationDetailsProfile, CredentialConfigurationProfile, CredentialOfferProfile,
     CredentialRequestProfile, CredentialResponseProfile,
 };
 
 use super::{CredentialDefinitionLD, CredentialOfferDefinitionLD};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct Metadata {
+pub struct Configuration {
     credential_definition: CredentialDefinitionLD,
 }
 
-impl Metadata {
+impl Configuration {
     pub fn new(credential_definition: CredentialDefinitionLD) -> Self {
         Self {
             credential_definition,
@@ -26,7 +26,7 @@ impl Metadata {
     ];
 }
 
-impl CredentialMetadataProfile for Metadata {
+impl CredentialConfigurationProfile for Configuration {
     type Request = Request;
 
     fn to_request(&self) -> Self::Request {

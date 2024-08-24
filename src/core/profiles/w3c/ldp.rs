@@ -5,14 +5,14 @@ use ssi_claims::{
 };
 
 use crate::profiles::{
-    AuthorizationDetailsProfile, CredentialMetadataProfile, CredentialOfferProfile,
+    AuthorizationDetailsProfile, CredentialConfigurationProfile, CredentialOfferProfile,
     CredentialRequestProfile, CredentialResponseProfile,
 };
 
 use super::{CredentialDefinitionLD, CredentialOfferDefinitionLD};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct Metadata {
+pub struct Configuration {
     credential_signing_alg_values_supported: Option<Vec<String>>,
     #[serde(rename = "@context")]
     context: Vec<serde_json::Value>,
@@ -21,7 +21,7 @@ pub struct Metadata {
     order: Option<Vec<String>>,
 }
 
-impl Metadata {
+impl Configuration {
     pub fn new(
         context: Vec<serde_json::Value>,
         credential_definition: CredentialDefinitionLD,
@@ -42,7 +42,7 @@ impl Metadata {
         }
     ];
 }
-impl CredentialMetadataProfile for Metadata {
+impl CredentialConfigurationProfile for Configuration {
     type Request = Request;
 
     fn to_request(&self) -> Self::Request {
@@ -157,7 +157,7 @@ mod test {
 
     #[test]
     fn example_metadata() {
-        let _: Metadata = serde_json::from_value(json!({
+        let _: Configuration = serde_json::from_value(json!({
             "@context": [
                 "https://www.w3.org/2018/credentials/v1",
                 "https://www.w3.org/2018/credentials/examples/v1"

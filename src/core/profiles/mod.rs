@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use serde::{Deserialize, Serialize};
 
 use crate::profiles::{
-    AuthorizationDetailsProfile, CredentialMetadataProfile, CredentialOfferProfile,
+    AuthorizationDetailsProfile, CredentialConfigurationProfile, CredentialOfferProfile,
     CredentialRequestProfile, CredentialResponseProfile, Profile,
 };
 
@@ -12,7 +12,7 @@ pub mod w3c;
 
 pub struct CoreProfiles {}
 impl Profile for CoreProfiles {
-    type Metadata = CoreProfilesMetadata;
+    type Configuration = CoreProfilesConfiguration;
     type Offer = CoreProfilesOffer;
     type Authorization = CoreProfilesAuthorizationDetails;
     type Credential = CoreProfilesRequest;
@@ -20,31 +20,31 @@ impl Profile for CoreProfiles {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "format")]
-pub enum CoreProfilesMetadata {
+pub enum CoreProfilesConfiguration {
     #[serde(rename = "jwt_vc_json")]
-    JWTVC(w3c::jwt::Metadata),
+    JWTVC(w3c::jwt::Configuration),
     #[serde(rename = "jwt_vc_json-ld")]
-    JWTLDVC(w3c::jwtld::Metadata),
+    JWTLDVC(w3c::jwtld::Configuration),
     #[serde(rename = "ldp_vc")]
-    LDVC(w3c::ldp::Metadata),
+    LDVC(w3c::ldp::Configuration),
     #[serde(rename = "mso_mdoc")]
-    ISOmDL(isomdl::Metadata),
+    ISOmDL(isomdl::Configuration),
 }
-impl CredentialMetadataProfile for CoreProfilesMetadata {
+impl CredentialConfigurationProfile for CoreProfilesConfiguration {
     type Request = CoreProfilesRequest;
 
     fn to_request(&self) -> Self::Request {
         match self {
-            CoreProfilesMetadata::JWTVC(m) => {
+            CoreProfilesConfiguration::JWTVC(m) => {
                 Self::Request::Value(ValueRequest::JWTVC(m.to_request()))
             }
-            CoreProfilesMetadata::JWTLDVC(m) => {
+            CoreProfilesConfiguration::JWTLDVC(m) => {
                 Self::Request::Value(ValueRequest::JWTLDVC(m.to_request()))
             }
-            CoreProfilesMetadata::LDVC(m) => {
+            CoreProfilesConfiguration::LDVC(m) => {
                 Self::Request::Value(ValueRequest::LDVC(m.to_request()))
             }
-            CoreProfilesMetadata::ISOmDL(m) => {
+            CoreProfilesConfiguration::ISOmDL(m) => {
                 Self::Request::Value(ValueRequest::ISOmDL(m.to_request()))
             }
         }

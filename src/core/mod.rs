@@ -5,10 +5,10 @@ pub mod metadata {
 
     use crate::metadata;
 
-    use super::profiles::CoreProfilesMetadata;
+    use super::profiles::CoreProfilesConfiguration;
 
     pub type CredentialIssuerMetadata = metadata::CredentialIssuerMetadata<
-        CoreProfilesMetadata,
+        CoreProfilesConfiguration,
         CoreJweContentEncryptionAlgorithm,
         CoreJweKeyManagementAlgorithm,
     >;
@@ -72,7 +72,7 @@ mod test {
             CredentialUrl::from_url("https://example.com/credential".parse().unwrap()),
             vec![CredentialMetadata::new(
                 "credential1".into(),
-                profiles::CoreProfilesMetadata::JWTVC(w3c::jwt::Metadata::new(
+                profiles::CoreProfilesConfiguration::JWTVC(w3c::jwt::Configuration::new(
                     w3c::CredentialDefinition::new(vec!["type1".into()]),
                 )),
             )],
@@ -87,7 +87,7 @@ mod test {
             CredentialUrl::from_url("https://example.com/credential".parse().unwrap()),
             vec![CredentialMetadata::new(
                 "credential1".into(),
-                profiles::CoreProfilesMetadata::LDVC(w3c::ldp::Metadata::new(
+                profiles::CoreProfilesConfiguration::LDVC(w3c::ldp::Configuration::new(
                     vec![serde_json::Value::String(
                         "http://example.com/context".into(),
                     )],
