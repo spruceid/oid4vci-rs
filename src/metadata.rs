@@ -862,7 +862,7 @@ mod test {
             "credential_signing_alg_values_supported": [
                 "Ed25519Signature2018"
             ],
-            "credentials_definition": {
+            "credential_definition": {
                 "@context": [
                     "https://www.w3.org/2018/credentials/v1",
                     "https://www.w3.org/2018/credentials/examples/v1"

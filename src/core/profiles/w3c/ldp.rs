@@ -16,7 +16,6 @@ pub struct Configuration {
     credential_signing_alg_values_supported: Option<Vec<String>>,
     #[serde(rename = "@context")]
     context: Vec<serde_json::Value>,
-    #[serde(flatten)]
     credential_definition: CredentialDefinitionLD,
     order: Option<Vec<String>>,
 }
