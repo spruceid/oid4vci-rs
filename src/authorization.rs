@@ -1,19 +1,20 @@
-use oauth2::PkceCodeChallenge;
-use openidconnect::{CsrfToken, IssuerUrl};
+use std::{borrow::Cow, marker::PhantomData};
+
+use oauth2::{CsrfToken, PkceCodeChallenge};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::profiles::AuthorizationDetailsProfile;
+use crate::{
+    profiles::AuthorizationDetailsProfile,
+    types::{IssuerState, IssuerUrl, UserHint},
+};
 
 pub struct AuthorizationRequest<'a, AD>
 where
     AD: AuthorizationDetailsProfile,
 {
-    inner: oauth2::AuthorizationRequest<'a>, // TODO
-    authorization_details: Vec<AuthorizationDetail<AD>>,
-    wallet_issuer: Option<IssuerUrl>, // TODO SIOP related
-    user_hint: Option<String>,
-    issuer_state: Option<CsrfToken>,
+    inner: oauth2::AuthorizationRequest<'a>,
+    _pd: PhantomData<AD>,
 }
 
 // TODO 5.1.2 scopes
@@ -22,51 +23,58 @@ impl<'a, AD> AuthorizationRequest<'a, AD>
 where
     AD: AuthorizationDetailsProfile,
 {
-    pub(crate) fn new(
-        inner: oauth2::AuthorizationRequest<'a>,
-        authorization_details: Vec<AuthorizationDetail<AD>>,
-        wallet_issuer: Option<IssuerUrl>,
-        user_hint: Option<String>,
-        issuer_state: Option<CsrfToken>,
-    ) -> Self {
+    pub(crate) fn new(inner: oauth2::AuthorizationRequest<'a>) -> Self {
         Self {
             inner,
-            authorization_details,
-            wallet_issuer,
-            user_hint,
-            issuer_state,
+            _pd: PhantomData,
         }
     }
 
-    pub fn url(self) -> Result<(Url, CsrfToken), serde_json::Error> {
-        let (mut url, token) = self.inner.url();
-        url.query_pairs_mut().append_pair(
-            "authorization_details",
-            &serde_json::to_string(&self.authorization_details)?,
-        );
-        if let Some(w) = self.wallet_issuer {
-            url.query_pairs_mut()
-                .append_pair("wallet_issuer", &w.to_string());
-        }
-        if let Some(h) = self.user_hint {
-            url.query_pairs_mut().append_pair("user_hint", &h);
-        }
-        if let Some(s) = self.issuer_state {
-            url.query_pairs_mut()
-                .append_pair("issuer_state", s.secret());
-        }
-        Ok((url, token))
+    pub fn url(self) -> (Url, CsrfToken) {
+        self.inner.url()
     }
 
     pub fn set_pkce_challenge(mut self, pkce_code_challenge: PkceCodeChallenge) -> Self {
         self.inner = self.inner.set_pkce_challenge(pkce_code_challenge);
         self
     }
+
     pub fn set_authorization_details(
         mut self,
         authorization_details: Vec<AuthorizationDetail<AD>>,
-    ) -> Self {
-        self.authorization_details = authorization_details;
+    ) -> Result<Self, serde_json::Error> {
+        self.inner = self.inner.add_extra_param(
+            "authorization_details",
+            serde_json::to_string(&authorization_details)?,
+        );
+        Ok(self)
+    }
+
+    pub fn set_issuer_state(mut self, issuer_state: &'a IssuerState) -> Self {
+        self.inner = self
+            .inner
+            .add_extra_param("issuer_state", issuer_state.secret());
+        self
+    }
+
+    pub fn set_user_hint(mut self, user_hint: &'a UserHint) -> Self {
+        self.inner = self.inner.add_extra_param("user_hint", user_hint.secret());
+        self
+    }
+
+    pub fn set_wallet_issuer(mut self, wallet_issuer: &'a IssuerUrl) -> Self {
+        self.inner = self
+            .inner
+            .add_extra_param("wallet_issuer", wallet_issuer.as_str());
+        self
+    }
+
+    pub fn add_extra_param<N, V>(mut self, name: N, value: V) -> Self
+    where
+        N: Into<Cow<'a, str>>,
+        V: Into<Cow<'a, str>>,
+    {
+        self.inner = self.inner.add_extra_param(name, value);
         self
     }
 }
@@ -97,8 +105,12 @@ mod test {
     use serde_json::json;
 
     use crate::{
-        core::profiles::{w3c, CoreProfilesAuthorizationDetails, ValueAuthorizationDetails},
-        metadata::CredentialUrl,
+        core::{
+            metadata::CredentialIssuerMetadata,
+            profiles::{w3c, CoreProfilesAuthorizationDetails, ValueAuthorizationDetails},
+        },
+        metadata::AuthorizationServerMetadata,
+        types::CredentialUrl,
     };
 
     use super::*;
@@ -202,14 +214,26 @@ mod test {
         // Modifed the code_challenge from the example and added state and removed spaces in authorization_details
         let mut expected_url = Url::try_from("https://server.example.com/authorize?response_type=code&client_id=s6BhdRkqt3&code_challenge=MYdqq2Vt_ZLMAWpXXsjGIrlxrCF2e4ZP4SxDf7cm_tg&code_challenge_method=S256&authorization_details=%5B%7B%22type%22%3A%22openid_credential%22%2C%22format%22%3A%22jwt_vc_json%22%2C%22credential_definition%22%3A%7B%22type%22%3A%5B%22VerifiableCredential%22%2C%22UniversityDegreeCredential%22%5D%7D%7D%5D&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb&state=state").unwrap();
 
-        let client = crate::core::client::Client::new(
-            ClientId::new("s6BhdRkqt3".to_string()),
-            IssuerUrl::new("https://server.example.com".into()).unwrap(),
+        let issuer = IssuerUrl::new("https://server.example.com".into()).unwrap();
+
+        let credential_issuer_metadata = CredentialIssuerMetadata::new(
+            issuer.clone(),
             CredentialUrl::new("https://server.example.com/credential".into()).unwrap(),
-            AuthUrl::new("https://server.example.com/authorize".into()).unwrap(),
-            None,
+        );
+
+        let authorization_server_metadata = AuthorizationServerMetadata::new(
+            issuer,
             TokenUrl::new("https://server.example.com/token".into()).unwrap(),
+        )
+        .set_authorization_endpoint(Some(
+            AuthUrl::new("https://server.example.com/authorize".into()).unwrap(),
+        ));
+
+        let client = crate::core::client::Client::from_issuer_metadata(
+            ClientId::new("s6BhdRkqt3".to_string()),
             RedirectUrl::new("https://client.example.org/cb".into()).unwrap(),
+            credential_issuer_metadata,
+            authorization_server_metadata,
         );
 
         let pkce_verifier =
@@ -230,10 +254,12 @@ mod test {
         }];
         let req = client
             .authorize_url(move || state)
+            .unwrap()
             .set_authorization_details(authorization_details)
+            .unwrap()
             .set_pkce_challenge(pkce_challenge);
 
-        let (mut url, _) = req.url().unwrap();
+        let (mut url, _) = req.url();
         let expected_query: HashSet<(String, String)> =
             expected_url.query_pairs().into_owned().collect();
         expected_url.set_query(None);

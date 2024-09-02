@@ -17,4 +17,4 @@ pub mod pushed_authorization;
 pub mod token;
 mod types;
 
-pub use openidconnect;
+pub use oauth2;

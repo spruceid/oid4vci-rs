@@ -1,15 +1,15 @@
 use std::time::Duration;
 
-use oauth2::AuthorizationCode;
-use openidconnect::{
-    core::{CoreErrorResponseType, CoreTokenType},
-    ClientId, Nonce, RedirectUrl, StandardErrorResponse, StandardTokenResponse,
+use oauth2::basic::BasicTokenType;
+use oauth2::{
+    AuthorizationCode, ClientId, ExtraTokenFields, RedirectUrl, RefreshToken, StandardTokenResponse,
 };
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
-use crate::profiles::AuthorizationDetailsProfile;
+use crate::types::{Nonce, PreAuthorizedCode};
 use crate::{authorization::AuthorizationDetail, core::profiles::CoreProfilesAuthorizationDetails};
+use crate::{profiles::AuthorizationDetailsProfile, types::TxCode};
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case", tag = "grant_type")]
@@ -23,16 +23,13 @@ pub enum Request {
     PreAuthorizedCode {
         client_id: Option<ClientId>,
         #[serde(rename = "pre-authorized_code")]
-        pre_authorized_code: String,
-        #[serde(alias = "pin")]
-        user_pin: Option<String>,
+        pre_authorized_code: PreAuthorizedCode,
+        tx_code: Option<TxCode>,
     },
-    #[serde(rename = "urn:ietf:params:oauth:grant-type:refresh_token")]
+    #[serde(rename = "refresh_token")]
     RefreshToken {
         client_id: Option<ClientId>,
-        refresh_token: String,
-        #[serde(alias = "pin")]
-        user_pin: Option<String>,
+        refresh_token: RefreshToken,
     },
 }
 
@@ -51,30 +48,7 @@ where
 
 pub type Response = StandardTokenResponse<
     ExtraResponseTokenFields<CoreProfilesAuthorizationDetails>,
-    CoreTokenType,
+    BasicTokenType,
 >;
 
-/// The following additional error codes, defined in RFC8628, are
-/// mentioned and can be used as follow:
-/// ```
-/// use openidconnect::core::CoreErrorResponseType;
-/// use oid4vci::token::Error;
-///
-/// let auth_pending_err = Error::new(
-///   CoreErrorResponseType::Extension("authorization_pending".to_string()),
-///   None,
-///   None,
-/// );
-///
-/// let slow_down_err = Error::new(
-///   CoreErrorResponseType::Extension("slow_down".to_string()),
-///   None,
-///   None,
-/// );
-/// ```
-pub type Error = StandardErrorResponse<CoreErrorResponseType>;
-
-impl<AD> openidconnect::ExtraTokenFields for ExtraResponseTokenFields<AD> where
-    AD: AuthorizationDetailsProfile
-{
-}
+impl<AD> ExtraTokenFields for ExtraResponseTokenFields<AD> where AD: AuthorizationDetailsProfile {}

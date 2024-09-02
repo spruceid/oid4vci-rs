@@ -1,4 +1,3 @@
-use openidconnect::Nonce;
 use serde::{Deserialize, Serialize};
 use ssi_claims::{
     jws::{self, Header},
@@ -8,6 +7,8 @@ use ssi_dids_core::DIDURLBuf;
 use ssi_jwk::{Algorithm, JWKResolver, JWK};
 use time::{Duration, OffsetDateTime};
 use url::Url;
+
+use crate::types::Nonce;
 
 const JWS_TYPE: &str = "openid4vci-proof+jwt";
 

@@ -1,11 +1,14 @@
 #![allow(clippy::large_enum_variant)]
 
-use openidconnect::{CsrfToken, IssuerUrl, Scope};
+use oauth2::Scope;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 use url::Url;
 
-use crate::profiles::CredentialOfferProfile;
+use crate::{
+    profiles::CredentialOfferProfile,
+    types::{IssuerState, IssuerUrl, PreAuthorizedCode},
+};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
@@ -58,9 +61,9 @@ where
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CredentialOfferGrants {
-    authorization_code: Option<AuthorizationCodeGrant>,
+    pub authorization_code: Option<AuthorizationCodeGrant>,
     #[serde(rename = "urn:ietf:params:oauth:grant-type:pre-authorized_code")]
-    pre_authorized_code: Option<PreAuthorizationCodeGrant>,
+    pub pre_authorized_code: Option<PreAuthorizationCodeGrant>,
 }
 impl CredentialOfferGrants {
     pub fn new(
@@ -82,11 +85,11 @@ impl CredentialOfferGrants {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AuthorizationCodeGrant {
-    issuer_state: Option<CsrfToken>,
+    issuer_state: Option<IssuerState>,
     authorization_server: Option<IssuerUrl>,
 }
 impl AuthorizationCodeGrant {
-    pub fn new(issuer_state: Option<CsrfToken>, authorization_server: Option<IssuerUrl>) -> Self {
+    pub fn new(issuer_state: Option<IssuerState>, authorization_server: Option<IssuerUrl>) -> Self {
         Self {
             issuer_state,
             authorization_server,
@@ -94,7 +97,7 @@ impl AuthorizationCodeGrant {
     }
     field_getters_setters![
         pub self [self] ["authorization code grants"] {
-            set_issuer_state -> issuer_state[Option<CsrfToken>],
+            set_issuer_state -> issuer_state[Option<IssuerState>],
             set_authorization_server -> authorization_server[Option<IssuerUrl>],
         }
     ];
@@ -103,13 +106,14 @@ impl AuthorizationCodeGrant {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PreAuthorizationCodeGrant {
     #[serde(rename = "pre-authorized_code")]
-    pre_authorized_code: String,
-    tx_code: Option<TxCode>,
+    pre_authorized_code: PreAuthorizedCode,
+    tx_code: Option<TxCodeDefinition>,
     interval: Option<usize>,
     authorization_server: Option<IssuerUrl>,
 }
+
 impl PreAuthorizationCodeGrant {
-    pub fn new(pre_authorized_code: String) -> Self {
+    pub fn new(pre_authorized_code: PreAuthorizedCode) -> Self {
         Self {
             pre_authorized_code,
             tx_code: None,
@@ -119,8 +123,8 @@ impl PreAuthorizationCodeGrant {
     }
     field_getters_setters![
         pub self [self] ["pre-authorized_code grants"] {
-            set_pre_authorized_code -> pre_authorized_code[String],
-            set_tx_code -> tx_code[Option<TxCode>],
+            set_pre_authorized_code -> pre_authorized_code[PreAuthorizedCode],
+            set_tx_code -> tx_code[Option<TxCodeDefinition>],
             set_interval -> interval[Option<usize>],
             set_authorization_server -> authorization_server[Option<IssuerUrl>],
         }
@@ -144,12 +148,13 @@ impl Default for InputMode {
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct TxCode {
+pub struct TxCodeDefinition {
     input_mode: Option<InputMode>,
     length: Option<usize>,
     description: Option<String>,
 }
-impl TxCode {
+
+impl TxCodeDefinition {
     pub fn new(
         input_mode: Option<InputMode>,
         length: Option<usize>,

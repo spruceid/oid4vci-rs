@@ -1,6 +1,9 @@
+use std::fmt::{Debug, Error as FormatterError, Formatter};
+use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use url::Url;
 
 macro_rules! new_type {
@@ -13,18 +16,11 @@ macro_rules! new_type {
         )
     ) => {
         new_type![
-            @new_type $(#[$attr])*,
+            $(#[$attr])*
             $name(
                 $(#[$type_attr])*
                 $type
-            ),
-            concat!(
-                "Create a new `",
-                stringify!($name),
-                "` to wrap the given `",
-                stringify!($type),
-                "`."
-            ),
+            )
             impl {}
         ];
     };
@@ -96,6 +92,89 @@ macro_rules! new_type {
         }
     }
 }
+
+macro_rules! new_secret_type {
+    (
+        $(#[$attr:meta])*
+        $name:ident($type:ty)
+    ) => {
+        new_secret_type![
+            $(#[$attr])*
+            $name($type)
+            impl {}
+        ];
+    };
+    (
+        $(#[$attr:meta])*
+        $name:ident($type:ty)
+        impl {
+            $($item:tt)*
+        }
+    ) => {
+        new_secret_type![
+            $(#[$attr])*,
+            $name($type),
+            concat!(
+                "Create a new `",
+                stringify!($name),
+                "` to wrap the given `",
+                stringify!($type),
+                "`."
+            ),
+            concat!("Get the secret contained within this `", stringify!($name), "`."),
+            impl {
+                $($item)*
+            }
+        ];
+    };
+    (
+        $(#[$attr:meta])*,
+        $name:ident($type:ty),
+        $new_doc:expr,
+        $secret_doc:expr,
+        impl {
+            $($item:tt)*
+        }
+    ) => {
+        $(
+            #[$attr]
+        )*
+        pub struct $name($type);
+        impl $name {
+            $($item)*
+
+            #[doc = $new_doc]
+            pub fn new(s: $type) -> Self {
+                $name(s)
+            }
+            #[doc = $secret_doc]
+            ///
+            /// # Security Warning
+            ///
+            /// Leaking this value may compromise the security of the OAuth2 flow.
+            pub fn secret(&self) -> &$type { &self.0 }
+        }
+        impl Debug for $name {
+            fn fmt(&self, f: &mut Formatter) -> Result<(), FormatterError> {
+                write!(f, concat!(stringify!($name), "([redacted])"))
+            }
+        }
+
+        impl PartialEq for $name {
+            fn eq(&self, other: &Self) -> bool {
+                Sha256::digest(&self.0) == Sha256::digest(&other.0)
+            }
+        }
+
+        impl Hash for $name {
+            fn hash<H: Hasher>(&self, state: &mut H) {
+                Sha256::digest(&self.0).hash(state)
+            }
+        }
+
+    };
+}
+
 ///
 /// Creates a URL-specific new type
 ///
@@ -115,11 +194,8 @@ macro_rules! new_url_type {
         $name:ident
     ) => {
         new_url_type![
-            @new_type_pub $(#[$attr])*,
-            $name,
-            concat!("Create a new `", stringify!($name), "` from a `String` to wrap a URL."),
-            concat!("Create a new `", stringify!($name), "` from a `Url` to wrap a URL."),
-            concat!("Return this `", stringify!($name), "` as a parsed `Url`."),
+            $(#[$attr])*
+            $name
             impl {}
         ];
     };
@@ -244,60 +320,90 @@ macro_rules! new_url_type {
 }
 
 new_url_type![
-    ///
+    /// Base URL of the [Credential] Issuer.
+    IssuerUrl
+    impl {
+        /// Parse a string as a URL, with this URL as the base URL.
+        ///
+        /// See [`Url::parse`].
+        pub fn join(&self, suffix: &str) -> Result<Url, url::ParseError> {
+            if let Some('/') = self.1.chars().next_back() {
+                Url::parse(&(self.1.clone() + suffix))
+            } else {
+                Url::parse(&(self.1.clone() + "/" + suffix))
+            }
+        }
+    }
+];
+
+new_url_type![
     /// URL of the Credential Issuer's Credential Endpoint.
-    ///
     CredentialUrl
 ];
 
 new_url_type![
-    ///
     /// URL of the Credential Issuer's Batch Credential Endpoint.
-    ///
     BatchCredentialUrl
 ];
 
 new_url_type![
-    ///
     /// URL of the Credential Issuer's Deferred Credential Endpoint.
-    ///
     DeferredCredentialUrl
 ];
 
 new_url_type![
-    ///
     /// URL of the Pushed Authorization Request Endpoint.
-    ///
     ParUrl
 ];
 
 new_url_type![
-    ///
     /// URL of the Credential Issuer's Notification Endpoint
-    ///
     NotificationUrl
 ];
 
 new_url_type![
-    ///
-    /// URI where the Wallet can obtain an image
-    ///
-    ImageUrl
+    /// URL of the authorization server's JWK Set document
+    /// (see [RFC7517](https://datatracker.ietf.org/doc/html/rfc7517)).
+    JsonWebKeySetUrl
+];
+
+new_url_type![
+    /// URL of the authorization server's OAuth 2.0 Dynamic Client Registration endpoint
+    /// (see [RFC7591](https://datatracker.ietf.org/doc/html/rfc7591)).
+    RegistrationUrl
+];
+
+new_url_type![
+    /// A URI where the Wallet can obtain the logo of the Credential from the Credential Issuer.
+    /// The Wallet needs to determine the scheme, since the URI value could use the `https:` scheme,
+    /// the `data:` scheme, etc.
+    LogoUri
 ];
 
 new_type![
-    ///
-    /// String value of a background color of the Credential represented as numerical color values defined in CSS Color Module Level 37 [CSS-Color].
-    ///
+    /// String value that identifies the language of this object represented as a language tag taken
+    /// from values defined in [BCP47 (RFC5646)](https://www.rfc-editor.org/rfc/rfc5646.html).
+    #[derive(Deserialize, Serialize, Eq, Hash)]
+    LanguageTag(String)
+];
+
+new_type![
+    /// String value of a background color of the Credential represented as numerical color values
+    /// defined in [CSS Color Module Level 37](https://www.w3.org/TR/css-color-3).
     #[derive(Deserialize, Serialize, Eq, Hash)]
     BackgroundColor(String)
 ];
+
 new_type![
-    ///
-    /// String value of a text color of the Credential represented as numerical color values defined in CSS Color Module Level 37 [CSS-Color].
-    ///
+    /// String value of a text color of the Credential represented as numerical color values
+    /// defined in [CSS Color Module Level 37](https://www.w3.org/TR/css-color-3).
     #[derive(Deserialize, Serialize, Eq, Hash)]
     TextColor(String)
+];
+
+new_type![
+    #[derive(Deserialize, Serialize, Eq, Hash)]
+    ResponseMode(String)
 ];
 
 new_type![
@@ -308,4 +414,35 @@ new_type![
 new_type![
     #[derive(Deserialize, Eq, Hash, Ord, PartialOrd, Serialize)]
     JsonWebTokenType(String)
+];
+
+new_secret_type![
+    #[derive(Deserialize, Serialize, Clone)]
+    Nonce(String)
+    impl {
+        pub fn new_random() -> Self {
+            use base64::prelude::*;
+            Self(BASE64_URL_SAFE_NO_PAD.encode(rand::random::<[u8; 16]>()))
+        }
+    }
+];
+
+new_secret_type![
+    #[derive(Deserialize, Serialize, Clone)]
+    PreAuthorizedCode(String)
+];
+
+new_secret_type![
+    #[derive(Deserialize, Serialize, Clone)]
+    IssuerState(String)
+];
+
+new_secret_type![
+    #[derive(Deserialize, Serialize)]
+    UserHint(String)
+];
+
+new_secret_type![
+    #[derive(Deserialize, Serialize)]
+    TxCode(String)
 ];
