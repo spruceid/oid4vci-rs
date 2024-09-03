@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::metadata::CredentialIssuerMetadataDisplay;
+use crate::metadata::credential_issuer::CredentialIssuerMetadataDisplay;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]

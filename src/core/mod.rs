@@ -1,36 +1,21 @@
 pub mod profiles;
 
 pub mod metadata {
-    use openidconnect::core::{CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm};
-
     use crate::metadata;
 
     use super::profiles::CoreProfilesConfiguration;
 
-    pub type CredentialIssuerMetadata = metadata::CredentialIssuerMetadata<
-        CoreProfilesConfiguration,
-        CoreJweContentEncryptionAlgorithm,
-        CoreJweKeyManagementAlgorithm,
-    >;
+    pub type CredentialIssuerMetadata =
+        metadata::CredentialIssuerMetadata<CoreProfilesConfiguration>;
 }
 
 pub mod credential {
-    use openidconnect::core::{CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm};
-
     use crate::credential;
 
     use super::profiles::CoreProfilesRequest;
 
-    pub type Request = credential::Request<
-        CoreProfilesRequest,
-        CoreJweContentEncryptionAlgorithm,
-        CoreJweKeyManagementAlgorithm,
-    >;
-    pub type BatchRequest = credential::BatchRequest<
-        CoreProfilesRequest,
-        CoreJweContentEncryptionAlgorithm,
-        CoreJweKeyManagementAlgorithm,
-    >;
+    pub type Request = credential::Request<CoreProfilesRequest>;
+    pub type BatchRequest = credential::BatchRequest<CoreProfilesRequest>;
 }
 
 pub mod authorization {
@@ -43,25 +28,22 @@ pub mod authorization {
 }
 
 pub mod client {
-    use openidconnect::core::{CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm};
 
     use crate::client;
 
     use super::profiles::CoreProfiles;
 
-    pub type Client = client::Client<
-        CoreProfiles,
-        CoreJweContentEncryptionAlgorithm,
-        CoreJweKeyManagementAlgorithm,
-    >;
+    pub type Client = client::Client<CoreProfiles>;
 }
 
 #[cfg(test)]
 mod test {
-    use openidconnect::IssuerUrl;
     use profiles::w3c::{self, CredentialDefinitionLD};
 
-    use crate::{credential_response_encryption::CredentialUrl, metadata::CredentialMetadata};
+    use crate::{
+        credential_response_encryption::CredentialUrl,
+        metadata::credential_issuer::CredentialMetadata, types::IssuerUrl,
+    };
 
     use super::*;
 
@@ -70,13 +52,13 @@ mod test {
         let metadata = super::metadata::CredentialIssuerMetadata::new(
             IssuerUrl::from_url("https://example.com".parse().unwrap()),
             CredentialUrl::from_url("https://example.com/credential".parse().unwrap()),
-            vec![CredentialMetadata::new(
-                "credential1".into(),
-                profiles::CoreProfilesConfiguration::JWTVC(w3c::jwt::Configuration::new(
-                    w3c::CredentialDefinition::new(vec!["type1".into()]),
-                )),
-            )],
-        );
+        )
+        .set_credential_configurations_supported(vec![CredentialMetadata::new(
+            "credential1".into(),
+            profiles::CoreProfilesConfiguration::JWTVC(w3c::jwt::Configuration::new(
+                w3c::CredentialDefinition::new(vec!["type1".into()]),
+            )),
+        )]);
         serde_json::to_vec(&metadata).unwrap();
     }
 
@@ -85,21 +67,21 @@ mod test {
         let metadata = super::metadata::CredentialIssuerMetadata::new(
             IssuerUrl::from_url("https://example.com".parse().unwrap()),
             CredentialUrl::from_url("https://example.com/credential".parse().unwrap()),
-            vec![CredentialMetadata::new(
-                "credential1".into(),
-                profiles::CoreProfilesConfiguration::LDVC(w3c::ldp::Configuration::new(
+        )
+        .set_credential_configurations_supported(vec![CredentialMetadata::new(
+            "credential1".into(),
+            profiles::CoreProfilesConfiguration::LDVC(w3c::ldp::Configuration::new(
+                vec![serde_json::Value::String(
+                    "http://example.com/context".into(),
+                )],
+                CredentialDefinitionLD::new(
+                    w3c::CredentialDefinition::new(vec!["type1".into()]),
                     vec![serde_json::Value::String(
                         "http://example.com/context".into(),
                     )],
-                    CredentialDefinitionLD::new(
-                        w3c::CredentialDefinition::new(vec!["type1".into()]),
-                        vec![serde_json::Value::String(
-                            "http://example.com/context".into(),
-                        )],
-                    ),
-                )),
-            )],
-        );
+                ),
+            )),
+        )]);
         serde_json::to_vec(&metadata).unwrap();
     }
 }

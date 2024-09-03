@@ -6,42 +6,33 @@ use oauth2::{
         header::{ACCEPT, CONTENT_TYPE},
         HeaderValue, Method, StatusCode,
     },
-    AccessToken, AsyncHttpClient, HttpRequest, HttpResponse, StandardErrorResponse, SyncHttpClient,
-};
-use openidconnect::{
-    ClaimsVerificationError, ErrorResponseType, JweContentEncryptionAlgorithm,
-    JweKeyManagementAlgorithm, Nonce,
+    AccessToken, AsyncHttpClient, ErrorResponseType, HttpRequest, HttpResponse,
+    StandardErrorResponse, SyncHttpClient,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{
     credential_response_encryption::CredentialResponseEncryption,
     http_utils::{auth_bearer, content_type_has_essence, MIME_TYPE_JSON},
-    metadata::CredentialUrl,
     profiles::{CredentialRequestProfile, CredentialResponseProfile},
     proof_of_possession::Proof,
-    types::BatchCredentialUrl,
+    types::{BatchCredentialUrl, CredentialUrl, Nonce},
 };
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct Request<CR, JE, JA>
+pub struct Request<CR>
 where
     CR: CredentialRequestProfile,
-    JE: JweContentEncryptionAlgorithm,
-    JA: JweKeyManagementAlgorithm + Clone,
 {
     #[serde(flatten, bound = "CR: CredentialRequestProfile")]
     additional_profile_fields: CR,
     proof: Option<Proof>,
-    #[serde(bound = "JA: JweKeyManagementAlgorithm, JE: JweContentEncryptionAlgorithm")]
-    credential_response_encryption: Option<CredentialResponseEncryption<JE, JA>>,
+    credential_response_encryption: Option<CredentialResponseEncryption>,
 }
 
-impl<CR, JE, JA> Request<CR, JE, JA>
+impl<CR> Request<CR>
 where
     CR: CredentialRequestProfile,
-    JE: JweContentEncryptionAlgorithm,
-    JA: JweKeyManagementAlgorithm + Clone,
 {
     pub(crate) fn new(additional_profile_fields: CR) -> Self {
         Self {
@@ -55,33 +46,25 @@ where
         pub self [self] ["credential request value"] {
             set_additional_profile_fields -> additional_profile_fields[CR],
             set_proof -> proof[Option<Proof>],
-            set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryption<JE, JA>>],
+            set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryption>],
         }
     ];
 }
 
-pub struct RequestBuilder<CR, JE, JA>
+pub struct RequestBuilder<CR>
 where
     CR: CredentialRequestProfile,
-    JE: JweContentEncryptionAlgorithm,
-    JA: JweKeyManagementAlgorithm + Clone,
 {
-    body: Request<CR, JE, JA>,
+    body: Request<CR>,
     url: CredentialUrl,
     access_token: AccessToken,
 }
 
-impl<CR, JE, JA> RequestBuilder<CR, JE, JA>
+impl<CR> RequestBuilder<CR>
 where
     CR: CredentialRequestProfile,
-    JE: JweContentEncryptionAlgorithm,
-    JA: JweKeyManagementAlgorithm + Clone,
 {
-    pub(crate) fn new(
-        body: Request<CR, JE, JA>,
-        url: CredentialUrl,
-        access_token: AccessToken,
-    ) -> Self {
+    pub(crate) fn new(body: Request<CR>, url: CredentialUrl, access_token: AccessToken) -> Self {
         Self {
             body,
             url,
@@ -93,7 +76,7 @@ where
         pub self [self.body] ["credential request value"] {
             set_additional_profile_fields -> additional_profile_fields[CR],
             set_proof -> proof[Option<Proof>],
-            set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryption<JE, JA>>],
+            set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryption>],
         }
     ];
 
@@ -183,25 +166,21 @@ where
     }
 }
 
-pub struct BatchRequestBuilder<CR, JE, JA>
+pub struct BatchRequestBuilder<CR>
 where
     CR: CredentialRequestProfile,
-    JE: JweContentEncryptionAlgorithm,
-    JA: JweKeyManagementAlgorithm + Clone,
 {
-    body: BatchRequest<CR, JE, JA>,
+    body: BatchRequest<CR>,
     url: BatchCredentialUrl,
     access_token: AccessToken,
 }
 
-impl<CR, JE, JA> BatchRequestBuilder<CR, JE, JA>
+impl<CR> BatchRequestBuilder<CR>
 where
     CR: CredentialRequestProfile,
-    JE: JweContentEncryptionAlgorithm,
-    JA: JweKeyManagementAlgorithm + Clone,
 {
     pub(crate) fn new(
-        body: BatchRequest<CR, JE, JA>,
+        body: BatchRequest<CR>,
         url: BatchCredentialUrl,
         access_token: AccessToken,
     ) -> Self {
@@ -334,8 +313,6 @@ pub enum RequestError<RE>
 where
     RE: std::error::Error + 'static,
 {
-    #[error("Failed to verify claims")]
-    ClaimsVerification(#[source] ClaimsVerificationError),
     #[error("Failed to parse server response")]
     Parse(#[source] serde_path_to_error::Error<serde_json::Error>),
     #[error("Request failed")]
@@ -346,7 +323,7 @@ where
     Other(String),
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct Response<CR>
 where
     CR: CredentialResponseProfile,
@@ -404,23 +381,19 @@ impl ErrorResponseType for ErrorType {}
 pub type Error = StandardErrorResponse<ErrorType>;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct BatchRequest<CR, JE, JA>
+pub struct BatchRequest<CR>
 where
     CR: CredentialRequestProfile,
-    JE: JweContentEncryptionAlgorithm,
-    JA: JweKeyManagementAlgorithm + Clone,
 {
     #[serde(bound = "CR: CredentialRequestProfile")]
-    credential_requests: Vec<Request<CR, JE, JA>>,
+    credential_requests: Vec<Request<CR>>,
 }
 
-impl<CR, JE, JA> BatchRequest<CR, JE, JA>
+impl<CR> BatchRequest<CR>
 where
     CR: CredentialRequestProfile,
-    JE: JweContentEncryptionAlgorithm,
-    JA: JweKeyManagementAlgorithm + Clone,
 {
-    pub fn new(credential_requests: Vec<Request<CR, JE, JA>>) -> Self {
+    pub fn new(credential_requests: Vec<Request<CR>>) -> Self {
         Self {
             credential_requests,
         }

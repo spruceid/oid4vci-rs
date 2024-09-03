@@ -1,3 +1,4 @@
+use anyhow::{bail, Result};
 use oauth2::{
     http::{
         header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE},
@@ -24,7 +25,7 @@ pub fn content_type_has_essence(content_type: &HeaderValue, expected_essence: &s
         .is_some()
 }
 
-pub fn check_content_type(headers: &HeaderMap, expected_content_type: &str) -> Result<(), String> {
+pub fn check_content_type(headers: &HeaderMap, expected_content_type: &str) -> Result<()> {
     headers
         .get(CONTENT_TYPE)
         .map_or(Ok(()), |content_type|
@@ -32,13 +33,11 @@ pub fn check_content_type(headers: &HeaderMap, expected_content_type: &str) -> R
             // may be followed by optional whitespace and/or a parameter (e.g., charset).
             // See https://tools.ietf.org/html/rfc7231#section-3.1.1.1.
             if !content_type_has_essence(content_type, expected_content_type) {
-                Err(
-                    format!(
+                    bail!(
                         "Unexpected response Content-Type: {:?}, should be `{}`",
                         content_type,
                         expected_content_type
                     )
-                )
             } else {
                 Ok(())
             }
