@@ -65,21 +65,15 @@ pub struct PushedAuthorizationResponse {
     pub expires_in: u64,
 }
 
-pub struct PushedAuthorizationRequest<'a, AD>
-where
-    AD: AuthorizationDetailsProfile,
-{
-    inner: AuthorizationRequest<'a, AD>,
+pub struct PushedAuthorizationRequest<'a> {
+    inner: AuthorizationRequest<'a>,
     par_auth_url: ParUrl,
     auth_url: AuthUrl,
 }
 
-impl<'a, AD> PushedAuthorizationRequest<'a, AD>
-where
-    AD: AuthorizationDetailsProfile,
-{
+impl<'a> PushedAuthorizationRequest<'a> {
     pub(crate) fn new(
-        inner: AuthorizationRequest<'a, AD>,
+        inner: AuthorizationRequest<'a>,
         par_auth_url: ParUrl,
         auth_url: AuthUrl,
     ) -> Self {
@@ -129,7 +123,6 @@ where
     where
         'a: 'c,
         C: AsyncHttpClient<'c>,
-        AD: 'c,
     {
         Box::pin(async move {
             let mut auth_url = self.auth_url.url().clone();
@@ -221,7 +214,7 @@ where
         self
     }
 
-    pub fn set_authorization_details(
+    pub fn set_authorization_details<AD: AuthorizationDetailsProfile>(
         mut self,
         authorization_details: Vec<AuthorizationDetail<AD>>,
     ) -> Result<Self, serde_json::Error> {
@@ -321,10 +314,10 @@ mod test {
         let state = CsrfToken::new("state".into());
 
         let (_, body, _) = client
-            .pushed_authorization_request::<_, CoreProfilesAuthorizationDetails>(move || state)
+            .pushed_authorization_request(move || state)
             .unwrap()
             .set_pkce_challenge(pkce_challenge)
-            .set_authorization_details(vec![])
+            .set_authorization_details::<CoreProfilesAuthorizationDetails>(vec![])
             .unwrap()
             .prepare_request()
             .unwrap();

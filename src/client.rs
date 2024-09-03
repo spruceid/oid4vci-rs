@@ -13,7 +13,7 @@ use crate::{
         credential_issuer::{CredentialIssuerMetadataDisplay, CredentialMetadata},
         AuthorizationServerMetadata, CredentialIssuerMetadata,
     },
-    profiles::{AuthorizationDetailsProfile, Profile},
+    profiles::Profile,
     pushed_authorization::PushedAuthorizationRequest,
     token,
     types::{BatchCredentialUrl, CredentialUrl, DeferredCredentialUrl, IssuerUrl, ParUrl},
@@ -117,13 +117,12 @@ where
         }
     }
 
-    pub fn pushed_authorization_request<S, AD>(
+    pub fn pushed_authorization_request<S>(
         &self,
         state_fn: S,
-    ) -> Result<PushedAuthorizationRequest<AD>, Error>
+    ) -> Result<PushedAuthorizationRequest, Error>
     where
         S: FnOnce() -> CsrfToken,
-        AD: AuthorizationDetailsProfile,
     {
         let Some(par_url) = self.par_auth_url.as_ref() else {
             return Err(Error::ParUnsupported);
@@ -141,10 +140,9 @@ where
         ))
     }
 
-    pub fn authorize_url<S, AD>(&self, state_fn: S) -> Result<AuthorizationRequest<AD>, Error>
+    pub fn authorize_url<S>(&self, state_fn: S) -> Result<AuthorizationRequest, Error>
     where
         S: FnOnce() -> CsrfToken,
-        AD: AuthorizationDetailsProfile,
     {
         let inner = self
             .inner

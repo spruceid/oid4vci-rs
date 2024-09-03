@@ -1,4 +1,4 @@
-use std::{borrow::Cow, marker::PhantomData};
+use std::borrow::Cow;
 
 use oauth2::{CsrfToken, PkceCodeChallenge};
 use serde::{Deserialize, Serialize};
@@ -9,25 +9,15 @@ use crate::{
     types::{IssuerState, IssuerUrl, UserHint},
 };
 
-pub struct AuthorizationRequest<'a, AD>
-where
-    AD: AuthorizationDetailsProfile,
-{
+pub struct AuthorizationRequest<'a> {
     inner: oauth2::AuthorizationRequest<'a>,
-    _pd: PhantomData<AD>,
 }
 
 // TODO 5.1.2 scopes
 
-impl<'a, AD> AuthorizationRequest<'a, AD>
-where
-    AD: AuthorizationDetailsProfile,
-{
+impl<'a> AuthorizationRequest<'a> {
     pub(crate) fn new(inner: oauth2::AuthorizationRequest<'a>) -> Self {
-        Self {
-            inner,
-            _pd: PhantomData,
-        }
+        Self { inner }
     }
 
     pub fn url(self) -> (Url, CsrfToken) {
@@ -39,7 +29,7 @@ where
         self
     }
 
-    pub fn set_authorization_details(
+    pub fn set_authorization_details<AD: AuthorizationDetailsProfile>(
         mut self,
         authorization_details: Vec<AuthorizationDetail<AD>>,
     ) -> Result<Self, serde_json::Error> {
