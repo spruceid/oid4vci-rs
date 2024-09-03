@@ -61,9 +61,9 @@ where
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CredentialOfferGrants {
-    pub authorization_code: Option<AuthorizationCodeGrant>,
+    authorization_code: Option<AuthorizationCodeGrant>,
     #[serde(rename = "urn:ietf:params:oauth:grant-type:pre-authorized_code")]
-    pub pre_authorized_code: Option<PreAuthorizationCodeGrant>,
+    pre_authorized_code: Option<PreAuthorizationCodeGrant>,
 }
 impl CredentialOfferGrants {
     pub fn new(
