@@ -38,7 +38,7 @@ pub enum Request {
 
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct ExtraResponseTokenFields<AD>
 where
     AD: AuthorizationDetailsProfile,

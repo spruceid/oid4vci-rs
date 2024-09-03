@@ -159,7 +159,7 @@ impl ProofOfPossession {
         }
     }
 
-    pub fn to_jwt(&self) -> Result<String, ConversionError> {
+    fn to_unsigned_jwt(&self) -> Result<(Header, String), ConversionError> {
         let jwk = &self.controller.jwk;
         let alg = if let Some(a) = jwk.get_algorithm() {
             a
@@ -179,6 +179,24 @@ impl ProofOfPossession {
             type_: Some(JWS_TYPE.to_string()),
             ..Default::default()
         };
+        Ok((header, payload))
+    }
+
+    pub fn to_jwt_signing_input(&self) -> Result<Vec<u8>, ConversionError> {
+        use base64::prelude::*;
+
+        let (header, payload) = self.to_unsigned_jwt()?;
+        let json = serde_json::to_string(&header)?;
+        let header = BASE64_URL_SAFE_NO_PAD.encode(json);
+        let signing_input = [header.as_bytes(), b".", payload.as_bytes()]
+            .concat()
+            .to_vec();
+        Ok(signing_input)
+    }
+
+    pub fn to_jwt(&self) -> Result<String, ConversionError> {
+        let jwk = &self.controller.jwk;
+        let (header, payload) = self.to_unsigned_jwt()?;
         Ok(jws::encode_sign_custom_header(&payload, jwk, &header)?)
     }
 

@@ -32,6 +32,9 @@ use crate::{
 pub enum Error {
     #[error("Pushed authorization request is not supported")]
     ParUnsupported(),
+
+    #[error("Batch credential request is not supported")]
+    BcrUnsupported(),
 }
 
 pub struct Client<C, JE, JA>
@@ -58,7 +61,7 @@ where
     batch_credential_endpoint: Option<BatchCredentialUrl>,
     deferred_credential_endpoint: Option<DeferredCredentialUrl>,
     credential_response_encryption: Option<CredentialResponseEncryptionMetadata<JE, JA>>,
-    credential_configurations_supported: Vec<CredentialMetadata<C::Metadata>>,
+    credential_configurations_supported: Vec<CredentialMetadata<C::Configuration>>,
     display: Option<Vec<CredentialIssuerMetadataDisplay>>,
 }
 
@@ -101,13 +104,13 @@ where
             set_batch_credential_endpoint -> batch_credential_endpoint[Option<BatchCredentialUrl>],
             set_deferred_credential_endpoint -> deferred_credential_endpoint[Option<DeferredCredentialUrl>],
             set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryptionMetadata<JE, JA>>],
-            set_credential_configurations_supported -> credential_configurations_supported[Vec<CredentialMetadata<C::Metadata>>],
+            set_credential_configurations_supported -> credential_configurations_supported[Vec<CredentialMetadata<C::Configuration>>],
             set_display -> display[Option<Vec<CredentialIssuerMetadataDisplay>>],
         }
     ];
 
     pub fn from_issuer_metadata(
-        credential_issuer_metadata: CredentialIssuerMetadata<C::Metadata, JE, JA>,
+        credential_issuer_metadata: CredentialIssuerMetadata<C::Configuration, JE, JA>,
         authorization_metadata: AuthorizationMetadata,
         client_id: ClientId,
         redirect_uri: RedirectUrl,
@@ -192,6 +195,29 @@ where
     ) -> credential::RequestBuilder<C::Credential, JE, JA> {
         let body = credential::Request::new(profile_fields);
         credential::RequestBuilder::new(body, self.credential_endpoint().clone(), access_token)
+    }
+
+    pub fn batch_request_credential(
+        &self,
+        access_token: AccessToken,
+        profile_fields: Vec<C::Credential>,
+    ) -> Result<credential::BatchRequestBuilder<C::Credential, JE, JA>, Error> {
+        let endpoint = if let Some(endpoint) = self.batch_credential_endpoint() {
+            endpoint
+        } else {
+            return Err(Error::BcrUnsupported());
+        };
+        let body = credential::BatchRequest::new(
+            profile_fields
+                .into_iter()
+                .map(|pf| credential::Request::new(pf))
+                .collect(),
+        );
+        Ok(credential::BatchRequestBuilder::new(
+            body,
+            endpoint.clone(),
+            access_token,
+        ))
     }
 }
 

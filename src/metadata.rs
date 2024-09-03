@@ -22,7 +22,7 @@ use tracing::{debug, info, warn};
 use crate::{
     credential_response_encryption::CredentialResponseEncryptionMetadata,
     http_utils::{check_content_type, MIME_TYPE_JSON},
-    profiles::CredentialMetadataProfile,
+    profiles::CredentialConfigurationProfile,
     proof_of_possession::KeyProofTypesSupported,
     types::ImageUrl,
 };
@@ -39,7 +39,7 @@ const AUTHORIZATION_METADATA_URL_SUFFIX: &str = ".well-known/oauth-authorization
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CredentialIssuerMetadata<CM, JE, JA>
 where
-    CM: CredentialMetadataProfile,
+    CM: CredentialConfigurationProfile,
     JE: JweContentEncryptionAlgorithm,
     JA: JweKeyManagementAlgorithm + Clone,
 {
@@ -54,14 +54,14 @@ where
     credential_identifiers_supported: Option<bool>,
     signed_metadata: Option<String>,
     display: Option<Vec<CredentialIssuerMetadataDisplay>>,
-    #[serde(bound = "CM: CredentialMetadataProfile")]
+    #[serde(bound = "CM: CredentialConfigurationProfile")]
     #[serde_as(as = "KeyValueMap<_>")]
     credential_configurations_supported: Vec<CredentialMetadata<CM>>,
 }
 
 impl<CM, JE, JA> CredentialIssuerMetadata<CM, JE, JA>
 where
-    CM: CredentialMetadataProfile,
+    CM: CredentialConfigurationProfile,
     JE: JweContentEncryptionAlgorithm,
     JA: JweKeyManagementAlgorithm + Clone,
 {
@@ -254,7 +254,7 @@ impl MetadataDisplayLogo {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CredentialMetadata<CM>
 where
-    CM: CredentialMetadataProfile,
+    CM: CredentialConfigurationProfile,
 {
     #[serde(rename = "$key$")]
     name: String,
@@ -263,7 +263,7 @@ where
     #[serde_as(as = "Option<KeyValueMap<_>>")]
     proof_types_supported: Option<Vec<KeyProofTypesSupported>>,
     display: Option<Vec<CredentialMetadataDisplay>>,
-    #[serde(bound = "CM: CredentialMetadataProfile")]
+    #[serde(bound = "CM: CredentialConfigurationProfile")]
     #[serde(flatten)]
     additional_fields: CM,
 }
@@ -281,7 +281,7 @@ where
 
 impl<CM> CredentialMetadata<CM>
 where
-    CM: CredentialMetadataProfile,
+    CM: CredentialConfigurationProfile,
 {
     pub fn new(name: String, additional_fields: CM) -> Self {
         Self {
@@ -296,6 +296,7 @@ where
 
     field_getters_setters![
         pub self [self] ["credential metadata value"] {
+            set_name -> name[String],
             set_scope -> scope[Option<Scope>],
             set_cryptographic_binding_methods_supported -> cryptographic_binding_methods_supported[Option<Vec<CryptographicBindingMethod>>],
             set_proof_types_supported -> proof_types_supported[Option<Vec<KeyProofTypesSupported>>],
@@ -485,7 +486,7 @@ impl AuthorizationMetadata {
     ) -> Result<Self, DiscoveryError<<C as SyncHttpClient>::Error>>
     where
         C: SyncHttpClient,
-        CM: CredentialMetadataProfile,
+        CM: CredentialConfigurationProfile,
         JE: JweContentEncryptionAlgorithm,
         JA: JweKeyManagementAlgorithm + Clone,
     {
@@ -556,7 +557,7 @@ impl AuthorizationMetadata {
     where
         Self: 'c,
         C: AsyncHttpClient<'c>,
-        CM: CredentialMetadataProfile,
+        CM: CredentialConfigurationProfile,
         JE: JweContentEncryptionAlgorithm,
         JA: JweKeyManagementAlgorithm + Clone,
     {
@@ -667,7 +668,7 @@ impl AuthorizationMetadata {
 
 #[cfg(test)]
 mod test {
-    use crate::core::profiles::CoreProfilesMetadata;
+    use crate::core::profiles::CoreProfilesConfiguration;
     use serde_json::json;
 
     use super::*;
@@ -675,7 +676,7 @@ mod test {
     #[test]
     fn example_credential_issuer_metadata() {
         let _: CredentialIssuerMetadata<
-            CoreProfilesMetadata,
+            CoreProfilesConfiguration,
             CoreJweContentEncryptionAlgorithm,
             CoreJweKeyManagementAlgorithm,
         > = serde_json::from_value(json!({
@@ -774,7 +775,7 @@ mod test {
 
     #[test]
     fn example_credential_metadata_jwt() {
-        let _: CredentialMetadata<CoreProfilesMetadata> = serde_json::from_value(json!({
+        let _: CredentialMetadata<CoreProfilesConfiguration> = serde_json::from_value(json!({
             "$key$": "name", // purely for test reason, you cannot really deserialize CredentialMetadata on its own
             "format": "jwt_vc_json",
             "id": "UniversityDegree_JWT",
@@ -844,7 +845,7 @@ mod test {
 
     #[test]
     fn example_credential_metadata_ldp() {
-        let _: CredentialMetadata<CoreProfilesMetadata> = serde_json::from_value(json!({
+        let _: CredentialMetadata<CoreProfilesConfiguration> = serde_json::from_value(json!({
             "$key$": "name", // purely for test reason, you cannot really deserialize CredentialMetadata on its own
             "format": "ldp_vc",
             "@context": [
@@ -861,7 +862,7 @@ mod test {
             "credential_signing_alg_values_supported": [
                 "Ed25519Signature2018"
             ],
-            "credentials_definition": {
+            "credential_definition": {
                 "@context": [
                     "https://www.w3.org/2018/credentials/v1",
                     "https://www.w3.org/2018/credentials/examples/v1"
@@ -918,7 +919,7 @@ mod test {
 
     #[test]
     fn example_credential_metadata_isomdl() {
-        let _: CredentialMetadata<CoreProfilesMetadata> = serde_json::from_value(json!({
+        let _: CredentialMetadata<CoreProfilesConfiguration> = serde_json::from_value(json!({
             "$key$": "name", // purely for test reason, you cannot really deserialize CredentialMetadata on its own
             "format": "mso_mdoc",
             "doctype": "org.iso.18013.5.1.mDL",

@@ -9,9 +9,13 @@ use crate::profiles::CredentialOfferProfile;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
-pub enum CredentialOffer {
+pub enum CredentialOffer<CO>
+where
+    CO: CredentialOfferProfile,
+{
     Value {
-        credential_offer: CredentialOfferParameters,
+        #[serde(bound = "CO: CredentialOfferProfile")]
+        credential_offer: CredentialOfferParameters<CO>,
     },
     Reference {
         credential_offer_uri: Url,
@@ -21,10 +25,22 @@ pub enum CredentialOffer {
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct CredentialOfferParameters {
-    credential_issuer: IssuerUrl,
-    credential_configuration_ids: Vec<String>,
-    grants: Option<CredentialOfferGrants>,
+#[serde(untagged)]
+pub enum CredentialOfferParameters<CO>
+where
+    CO: CredentialOfferProfile,
+{
+    Value {
+        credential_issuer: IssuerUrl,
+        #[serde(bound = "CO: CredentialOfferProfile")]
+        credentials: Vec<CredentialOfferFormat<CO>>,
+        grants: Option<CredentialOfferGrants>,
+    },
+    Reference {
+        credential_issuer: IssuerUrl,
+        credential_configuration_ids: Vec<String>,
+        grants: Option<CredentialOfferGrants>,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -46,11 +62,42 @@ pub struct CredentialOfferGrants {
     #[serde(rename = "urn:ietf:params:oauth:grant-type:pre-authorized_code")]
     pre_authorized_code: Option<PreAuthorizationCodeGrant>,
 }
+impl CredentialOfferGrants {
+    pub fn new(
+        authorization_code: Option<AuthorizationCodeGrant>,
+        pre_authorized_code: Option<PreAuthorizationCodeGrant>,
+    ) -> Self {
+        Self {
+            authorization_code,
+            pre_authorized_code,
+        }
+    }
+    field_getters_setters![
+        pub self [self] ["credential offer grants"] {
+            set_authorization_code -> authorization_code[Option<AuthorizationCodeGrant>],
+            set_pre_authorized_code -> pre_authorized_code[Option<PreAuthorizationCodeGrant>],
+        }
+    ];
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AuthorizationCodeGrant {
     issuer_state: Option<CsrfToken>,
     authorization_server: Option<IssuerUrl>,
+}
+impl AuthorizationCodeGrant {
+    pub fn new(issuer_state: Option<CsrfToken>, authorization_server: Option<IssuerUrl>) -> Self {
+        Self {
+            issuer_state,
+            authorization_server,
+        }
+    }
+    field_getters_setters![
+        pub self [self] ["authorization code grants"] {
+            set_issuer_state -> issuer_state[Option<CsrfToken>],
+            set_authorization_server -> authorization_server[Option<IssuerUrl>],
+        }
+    ];
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -60,6 +107,24 @@ pub struct PreAuthorizationCodeGrant {
     tx_code: Option<TxCode>,
     interval: Option<usize>,
     authorization_server: Option<IssuerUrl>,
+}
+impl PreAuthorizationCodeGrant {
+    pub fn new(pre_authorized_code: String) -> Self {
+        Self {
+            pre_authorized_code,
+            tx_code: None,
+            interval: None,
+            authorization_server: None,
+        }
+    }
+    field_getters_setters![
+        pub self [self] ["pre-authorized_code grants"] {
+            set_pre_authorized_code -> pre_authorized_code[String],
+            set_tx_code -> tx_code[Option<TxCode>],
+            set_interval -> interval[Option<usize>],
+            set_authorization_server -> authorization_server[Option<IssuerUrl>],
+        }
+    ];
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -84,7 +149,6 @@ pub struct TxCode {
     length: Option<usize>,
     description: Option<String>,
 }
-
 impl TxCode {
     pub fn new(
         input_mode: Option<InputMode>,
@@ -97,7 +161,6 @@ impl TxCode {
             description,
         }
     }
-
     field_getters_setters![
         pub self [self] ["transaction code value"] {
             set_input_mode -> input_mode[Option<InputMode>],
@@ -111,11 +174,13 @@ impl TxCode {
 mod test {
     use serde_json::json;
 
+    use crate::core::profiles::CoreProfilesOffer;
+
     use super::*;
 
     #[test]
-    fn example_credential_offer_object() {
-        let _: CredentialOfferParameters = serde_json::from_value(json!({
+    fn example_credential_offer_object_reference() {
+        let _: CredentialOfferParameters<CoreProfilesOffer> = serde_json::from_value(json!({
            "credential_issuer": "https://credential-issuer.example.com",
            "credential_configuration_ids": [
               "UniversityDegreeCredential",
@@ -134,6 +199,43 @@ mod test {
                  }
               }
            }
+        }))
+        .unwrap();
+    }
+
+    #[test]
+    fn example_credential_offer_object_value() {
+        let _: CredentialOfferParameters<CoreProfilesOffer> = serde_json::from_value(json!({
+            "credential_issuer": "https://credential-issuer.example.com",
+            "credentials": [{
+                "format": "jwt_vc_json-ld",
+                "credential_definition": {
+                    "@context": [
+                        "https://www.w3.org/2018/credentials/v1",
+                        "https://www.w3.org/2018/credentials/examples/v1"
+                    ],
+                    "type": [
+                        "VerifiableCredential",
+                        "UniversityDegreeCredential"
+                    ]
+                }
+            }, {
+                "format": "mso_mdoc",
+                "doctype": "org.iso.18013.5.1.mDL",
+            }],
+            "grants": {
+                "authorization_code": {
+                    "issuer_state": "eyJhbGciOiJSU0Et...FYUaBy"
+                },
+                "urn:ietf:params:oauth:grant-type:pre-authorized_code": {
+                    "pre-authorized_code": "adhjhdjajkdkhjhdj",
+                    "tx_code": {
+                        "length": 4,
+                        "input_mode": "numeric",
+                        "description": "Please provide the one-time code that was sent via e-mail"
+                    }
+                }
+            }
         }))
         .unwrap();
     }

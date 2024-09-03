@@ -33,6 +33,32 @@ impl CredentialDefinition {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct CredentialDefinitionLD {
+    #[serde(flatten)]
+    credential_definition: CredentialDefinition,
+    #[serde(rename = "@context")]
+    context: Vec<serde_json::Value>,
+}
+
+impl CredentialDefinitionLD {
+    pub fn new(
+        credential_definition: CredentialDefinition,
+        context: Vec<serde_json::Value>,
+    ) -> Self {
+        Self {
+            credential_definition,
+            context,
+        }
+    }
+    field_getters_setters![
+        pub self [self] ["LD VC credential definition value"] {
+            set_credential_definition -> credential_definition[CredentialDefinition],
+            set_context -> context[Vec<serde_json::Value>],
+        }
+    ];
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CredentialOfferDefinition {
     r#type: Vec<String>,
 }
@@ -45,6 +71,33 @@ impl CredentialOfferDefinition {
     field_getters_setters![
         pub self [self] ["credential offer definition value"] {
             set_type -> r#type[Vec<String>],
+        }
+    ];
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct CredentialOfferDefinitionLD {
+    #[serde(flatten)]
+    credential_offer_definition: CredentialOfferDefinition,
+    #[serde(rename = "@context")]
+    context: Vec<serde_json::Value>,
+}
+
+impl CredentialOfferDefinitionLD {
+    pub fn new(
+        context: Vec<serde_json::Value>,
+        credential_offer_definition: CredentialOfferDefinition,
+    ) -> Self {
+        Self {
+            context,
+            credential_offer_definition,
+        }
+    }
+
+    field_getters_setters![
+        pub self [self] ["LD VC credential offer definition value"] {
+            set_context -> context[Vec<serde_json::Value>],
+            set_credential_offer_definition -> credential_offer_definition[CredentialOfferDefinition],
         }
     ];
 }

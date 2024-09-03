@@ -2,20 +2,20 @@ use serde::{Deserialize, Serialize};
 use ssi_claims::CompactJWSString;
 
 use crate::profiles::{
-    AuthorizationDetailsProfile, CredentialMetadataProfile, CredentialOfferProfile,
+    AuthorizationDetailsProfile, CredentialConfigurationProfile, CredentialOfferProfile,
     CredentialRequestProfile, CredentialResponseProfile,
 };
 
 use super::{CredentialDefinition, CredentialOfferDefinition};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct Metadata {
+pub struct Configuration {
     credential_signing_alg_values_supported: Option<Vec<ssi_jwk::Algorithm>>,
     credential_definition: CredentialDefinition,
     order: Option<Vec<String>>,
 }
 
-impl Metadata {
+impl Configuration {
     pub fn new(credential_definition: CredentialDefinition) -> Self {
         Self {
             credential_signing_alg_values_supported: None,
@@ -31,7 +31,7 @@ impl Metadata {
         }
     ];
 }
-impl CredentialMetadataProfile for Metadata {
+impl CredentialConfigurationProfile for Configuration {
     type Request = Request;
 
     fn to_request(&self) -> Self::Request {
@@ -141,7 +141,7 @@ mod test {
 
     #[test]
     fn example_metadata() {
-        let _: Metadata = serde_json::from_value(json!({
+        let _: Configuration = serde_json::from_value(json!({
             "credential_definition":{
                 "type": [
                     "VerifiableCredential",
