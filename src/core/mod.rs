@@ -18,6 +18,14 @@ pub mod credential {
     pub type BatchRequest = credential::BatchRequest<CoreProfilesRequest>;
 }
 
+pub mod credential_offer {
+    use crate::credential_offer;
+
+    use super::profiles::CoreProfilesOffer;
+
+    pub type CredentialOffer = credential_offer::CredentialOffer<CoreProfilesOffer>;
+}
+
 pub mod authorization {
     use crate::authorization;
 

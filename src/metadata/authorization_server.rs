@@ -1,14 +1,18 @@
 use anyhow::{bail, Result};
 use oauth2::{
-    AuthUrl, IntrospectionUrl, PkceCodeChallengeMethod, ResponseType, RevocationUrl, Scope,
-    TokenUrl,
+    AsyncHttpClient, AuthUrl, IntrospectionUrl, PkceCodeChallengeMethod, ResponseType,
+    RevocationUrl, Scope, SyncHttpClient, TokenUrl,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value as Json};
+use tracing::{info, warn};
 
-use crate::types::{IssuerUrl, JsonWebKeySetUrl, ParUrl, RegistrationUrl, ResponseMode};
+use crate::{
+    profiles::CredentialConfigurationProfile,
+    types::{IssuerUrl, JsonWebKeySetUrl, ParUrl, RegistrationUrl, ResponseMode},
+};
 
-use super::MetadataDiscovery;
+use super::{CredentialIssuerMetadata, MetadataDiscovery};
 
 /// Authorization Server Metadata according to
 /// [RFC8414](https://datatracker.ietf.org/doc/html/rfc8414) with the following modifications:
@@ -104,6 +108,92 @@ impl AuthorizationServerMetadata {
 
     pub fn additional_fields_mut(&mut self) -> &mut Map<String, Json> {
         &mut self.additional_fields
+    }
+
+    pub fn discover_from_credential_issuer_metadata<C, CM>(
+        http_client: &C,
+        credential_issuer_metadata: &CredentialIssuerMetadata<CM>,
+        grant_type: Option<&GrantType>,
+    ) -> Result<Self, anyhow::Error>
+    where
+        C: SyncHttpClient,
+        C::Error: Send + Sync,
+        CM: CredentialConfigurationProfile,
+    {
+        if let Some(servers) = credential_issuer_metadata.authorization_servers() {
+            for auth_server in servers {
+                let response = Self::discover(auth_server, http_client);
+                match (response, grant_type) {
+                    (Ok(response), Some(grant_type)) => {
+                        if response
+                            .grant_types_supported()
+                            .0
+                            .iter()
+                            .any(|gt| gt == grant_type)
+                        {
+                            return Ok(response);
+                        } else {
+                            info!("Auth server not supporting grant type, trying the next one");
+                        }
+                    }
+                    (Ok(response), None) => {
+                        return Ok(response);
+                    }
+                    (Err(e), _) => {
+                        warn!("Error fetching auth server metadata, trying the next one: {e:?}");
+                    }
+                }
+            }
+        }
+        Self::discover(&credential_issuer_metadata.credential_issuer(), http_client)
+    }
+
+    pub async fn discover_from_credential_issuer_metadata_async<'c, C, CM>(
+        http_client: &'c C,
+        credential_issuer_metadata: &CredentialIssuerMetadata<CM>,
+        grant_type: Option<&GrantType>,
+    ) -> Result<Self, anyhow::Error>
+    where
+        C: AsyncHttpClient<'c>,
+        C::Error: Send + Sync,
+        CM: CredentialConfigurationProfile,
+    {
+        let credential_issuer_authorization_server_metadata =
+            Self::discover_async(&credential_issuer_metadata.credential_issuer(), http_client)
+                .await;
+        let Some(grant_type) = grant_type else {
+            // If grants is not present or is empty, the Wallet MUST determine the Grant Types the
+            // Credential Issuer's Authorization Server supports using the respective metadata.
+            // When multiple grants are present, it is at the Wallet's discretion which one to use.
+            // https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#section-4.1.1-2.3
+            return credential_issuer_authorization_server_metadata;
+        };
+
+        if let Some(servers) = credential_issuer_metadata.authorization_servers() {
+            for auth_server in servers {
+                let response = Self::discover_async(auth_server, http_client).await;
+                match response {
+                    Ok(response) => {
+                        if response
+                            .grant_types_supported()
+                            .0
+                            .iter()
+                            .any(|gt| gt == grant_type)
+                        {
+                            return Ok(response);
+                        } else {
+                            info!("Auth server not supporting grant type, trying the next one");
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Error fetching auth server metadata, trying the next one: {e:?}");
+                    }
+                }
+            }
+        }
+
+        // Fallback to credential issuer authorization server.
+        credential_issuer_authorization_server_metadata
     }
 }
 

@@ -32,7 +32,7 @@ where
     credential_identifiers_supported: Option<bool>,
     signed_metadata: Option<String>,
     display: Option<Vec<CredentialIssuerMetadataDisplay>>,
-    #[serde(bound = "CM: CredentialConfigurationProfile")]
+    #[serde(default = "Vec::new", bound = "CM: CredentialConfigurationProfile")]
     #[serde_as(as = "KeyValueMap<_>")]
     credential_configurations_supported: Vec<CredentialMetadata<CM>>,
 }

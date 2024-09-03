@@ -2,6 +2,7 @@ use std::fmt::{Debug, Error as FormatterError, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 
+use anyhow::bail;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use url::Url;
@@ -332,6 +333,31 @@ new_url_type![
             } else {
                 Url::parse(&(self.1.clone() + "/" + suffix))
             }
+        }
+    }
+];
+
+new_url_type![
+    /// The credential offer request as a URL, as represented in a QR code or deep link.
+    CredentialOfferRequest
+    impl {
+        const DEFAULT_URL_SCHEME: &'static str = "openid-credential-offer";
+
+        /// Parse the credential offer request from a URL, and validate that the URL scheme is
+        /// `scheme`.
+        pub fn from_url_checked_with_scheme(url: Url, expected_scheme: &str) -> Result<Self, anyhow::Error> {
+            let this = Self::from_url(url);
+            let this_scheme = this.url().scheme();
+            if this_scheme != expected_scheme {
+                bail!("unexpected URL scheme '{this_scheme}', expected '{expected_scheme}'")
+            }
+            Ok(this)
+        }
+
+        /// Parse the credential offer request from a URL, and validate that the URL scheme is
+        /// `openid-credential-offer`.
+        pub fn from_url_checked(url: Url) -> Result<Self, anyhow::Error> {
+            Self::from_url_checked_with_scheme(url, Self::DEFAULT_URL_SCHEME)
         }
     }
 ];

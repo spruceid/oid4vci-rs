@@ -1,13 +1,18 @@
-#![allow(clippy::large_enum_variant)]
+#![allow(clippy::large_enum_variant, deprecated)]
 
-use oauth2::Scope;
+use anyhow::{bail, Context, Result};
+use oauth2::{
+    http::{self, header::ACCEPT, HeaderValue, Method, StatusCode},
+    AsyncHttpClient, Scope, SyncHttpClient,
+};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 use url::Url;
 
 use crate::{
+    http_utils::{check_content_type, MIME_TYPE_JSON},
     profiles::CredentialOfferProfile,
-    types::{IssuerState, IssuerUrl, PreAuthorizedCode},
+    types::{CredentialOfferRequest, IssuerState, IssuerUrl, PreAuthorizedCode},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -25,6 +30,107 @@ where
     },
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+enum CredentialOfferFlat {
+    Value { credential_offer: String },
+    Reference { credential_offer_uri: Url },
+}
+
+impl<CO> CredentialOffer<CO>
+where
+    CO: CredentialOfferProfile,
+{
+    pub fn from_request(uri: CredentialOfferRequest) -> Result<Self> {
+        match serde_path_to_error::deserialize(serde_urlencoded::Deserializer::new(
+            form_urlencoded::parse(uri.url().query().unwrap_or_default().as_bytes()),
+        ))? {
+            CredentialOfferFlat::Reference {
+                credential_offer_uri,
+            } => Ok(CredentialOffer::Reference {
+                credential_offer_uri,
+            }),
+            CredentialOfferFlat::Value { credential_offer } => Ok(CredentialOffer::Value {
+                credential_offer: serde_json::from_str(
+                    &percent_encoding::percent_decode_str(&credential_offer)
+                        .decode_utf8()
+                        .context("could not percent decode credential offer JSON")?,
+                )
+                .context("could not decode inner JSON")?,
+            }),
+        }
+    }
+
+    pub fn resolve<C>(self, http_client: &C) -> Result<CredentialOfferParameters<CO>>
+    where
+        C: SyncHttpClient,
+        C::Error: Send + Sync,
+    {
+        let uri = match self {
+            CredentialOffer::Value { credential_offer } => return Ok(credential_offer),
+            CredentialOffer::Reference {
+                credential_offer_uri,
+            } => credential_offer_uri,
+        };
+
+        let request = Self::build_request(&uri)?;
+
+        let response = http_client
+            .call(request)
+            .context("error occurred when making the request")?;
+
+        Self::handle_response(response, &uri)
+    }
+
+    pub async fn resolve_async<'c, C>(
+        self,
+        http_client: &'c C,
+    ) -> Result<CredentialOfferParameters<CO>>
+    where
+        C: AsyncHttpClient<'c>,
+        C::Error: Send + Sync,
+    {
+        let uri = match self {
+            CredentialOffer::Value { credential_offer } => return Ok(credential_offer),
+            CredentialOffer::Reference {
+                credential_offer_uri,
+            } => credential_offer_uri,
+        };
+
+        let request = Self::build_request(&uri)?;
+
+        let response = http_client
+            .call(request)
+            .await
+            .context("error occurred when making the request")?;
+
+        Self::handle_response(response, &uri)
+    }
+
+    fn build_request(url: &Url) -> Result<http::Request<Vec<u8>>> {
+        http::Request::builder()
+            .uri(url.as_str())
+            .method(Method::GET)
+            .header(ACCEPT, HeaderValue::from_static(MIME_TYPE_JSON))
+            .body(Vec::new())
+            .context("failed to prepare request")
+    }
+
+    fn handle_response(
+        response: http::Response<Vec<u8>>,
+        url: &Url,
+    ) -> Result<CredentialOfferParameters<CO>> {
+        if response.status() != StatusCode::OK {
+            bail!("HTTP status code {} at {}", response.status(), url)
+        }
+
+        check_content_type(response.headers(), MIME_TYPE_JSON)?;
+
+        serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_slice(response.body()))
+            .context("failed to parse response body")
+    }
+}
+
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -33,6 +139,7 @@ pub enum CredentialOfferParameters<CO>
 where
     CO: CredentialOfferProfile,
 {
+    #[deprecated = "no longer supported in OID4VCI draft 13 onwards"]
     Value {
         credential_issuer: IssuerUrl,
         #[serde(bound = "CO: CredentialOfferProfile")]
@@ -46,14 +153,47 @@ where
     },
 }
 
+impl<CO> CredentialOfferParameters<CO>
+where
+    CO: CredentialOfferProfile,
+{
+    pub fn issuer(&self) -> &IssuerUrl {
+        match self {
+            CredentialOfferParameters::Value {
+                credential_issuer, ..
+            }
+            | CredentialOfferParameters::Reference {
+                credential_issuer, ..
+            } => credential_issuer,
+        }
+    }
+
+    pub fn grants(&self) -> Option<&CredentialOfferGrants> {
+        match self {
+            CredentialOfferParameters::Value { grants, .. }
+            | CredentialOfferParameters::Reference { grants, .. } => grants.as_ref(),
+        }
+    }
+
+    pub fn authorization_code_grant(&self) -> Option<&AuthorizationCodeGrant> {
+        self.grants()?.authorization_code()
+    }
+
+    pub fn pre_authorized_code_grant(&self) -> Option<&PreAuthorizedCodeGrant> {
+        self.grants()?.pre_authorized_code()
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
+#[deprecated = "no longer supported in OID4VCI draft 13 onwards"]
 pub enum CredentialOfferFormat<CO>
 where
     CO: CredentialOfferProfile,
 {
     Reference(Scope),
     #[serde(bound = "CO: CredentialOfferProfile")]
+    #[deprecated = "no longer supported in OID4VCI draft 12 onwards"]
     Value(CO),
 }
 
@@ -63,12 +203,13 @@ where
 pub struct CredentialOfferGrants {
     authorization_code: Option<AuthorizationCodeGrant>,
     #[serde(rename = "urn:ietf:params:oauth:grant-type:pre-authorized_code")]
-    pre_authorized_code: Option<PreAuthorizationCodeGrant>,
+    pre_authorized_code: Option<PreAuthorizedCodeGrant>,
 }
+
 impl CredentialOfferGrants {
     pub fn new(
         authorization_code: Option<AuthorizationCodeGrant>,
-        pre_authorized_code: Option<PreAuthorizationCodeGrant>,
+        pre_authorized_code: Option<PreAuthorizedCodeGrant>,
     ) -> Self {
         Self {
             authorization_code,
@@ -78,7 +219,7 @@ impl CredentialOfferGrants {
     field_getters_setters![
         pub self [self] ["credential offer grants"] {
             set_authorization_code -> authorization_code[Option<AuthorizationCodeGrant>],
-            set_pre_authorized_code -> pre_authorized_code[Option<PreAuthorizationCodeGrant>],
+            set_pre_authorized_code -> pre_authorized_code[Option<PreAuthorizedCodeGrant>],
         }
     ];
 }
@@ -88,6 +229,7 @@ pub struct AuthorizationCodeGrant {
     issuer_state: Option<IssuerState>,
     authorization_server: Option<IssuerUrl>,
 }
+
 impl AuthorizationCodeGrant {
     pub fn new(issuer_state: Option<IssuerState>, authorization_server: Option<IssuerUrl>) -> Self {
         Self {
@@ -104,7 +246,7 @@ impl AuthorizationCodeGrant {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct PreAuthorizationCodeGrant {
+pub struct PreAuthorizedCodeGrant {
     #[serde(rename = "pre-authorized_code")]
     pre_authorized_code: PreAuthorizedCode,
     tx_code: Option<TxCodeDefinition>,
@@ -112,7 +254,7 @@ pub struct PreAuthorizationCodeGrant {
     authorization_server: Option<IssuerUrl>,
 }
 
-impl PreAuthorizationCodeGrant {
+impl PreAuthorizedCodeGrant {
     pub fn new(pre_authorized_code: PreAuthorizedCode) -> Self {
         Self {
             pre_authorized_code,

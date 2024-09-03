@@ -73,14 +73,6 @@ where
         }
     ];
 
-    pub fn from_credential_offer() -> Result<Self, Error> {
-        todo!()
-    }
-
-    pub async fn from_credential_offer_async() -> Result<Self, Error> {
-        todo!()
-    }
-
     pub fn from_issuer_metadata(
         client_id: ClientId,
         redirect_uri: RedirectUrl,
