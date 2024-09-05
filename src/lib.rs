@@ -45,7 +45,7 @@ mod test {
         let http_client = oauth2::reqwest::Client::new();
 
         // Get a credential offer from vc-playground.org.
-        let credential_offer_request: Url = "openid-credential-offer://?credential_offer_uri=https%3A%2F%2Fqa.veresexchanger.dev%2Fexchangers%2Fz1A68iKqcX2HbQGQfVSfFnjkM%2Fexchanges%2Fz1ABDfKgaxAuj37DPkqa1Qtxf%2Fopenid%2Fcredential-offer".parse().unwrap();
+        let credential_offer_request: Url = "".parse().unwrap();
 
         let credential_offer = CredentialOffer::from_request(
             CredentialOfferRequest::from_url_checked(credential_offer_request).unwrap(),
