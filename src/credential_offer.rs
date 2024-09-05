@@ -141,6 +141,10 @@ impl CredentialOfferParameters {
         self.grants.as_ref()
     }
 
+    pub fn credential_configuration_ids(&self) -> &[CredentialConfigurationId] {
+        &self.credential_configuration_ids
+    }
+
     pub fn authorization_code_grant(&self) -> Option<&AuthorizationCodeGrant> {
         self.grants()?.authorization_code()
     }

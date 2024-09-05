@@ -148,7 +148,7 @@ where
     CM: CredentialConfigurationProfile,
 {
     #[serde(rename = "$key$")]
-    name: CredentialConfigurationId,
+    id: CredentialConfigurationId,
     scope: Option<Scope>,
     cryptographic_binding_methods_supported: Option<Vec<CryptographicBindingMethod>>,
     #[serde_as(as = "Option<KeyValueMap<_>>")]
@@ -163,9 +163,9 @@ impl<CM> CredentialConfiguration<CM>
 where
     CM: CredentialConfigurationProfile,
 {
-    pub fn new(name: CredentialConfigurationId, profile_specific_fields: CM) -> Self {
+    pub fn new(id: CredentialConfigurationId, profile_specific_fields: CM) -> Self {
         Self {
-            name,
+            id,
             scope: None,
             cryptographic_binding_methods_supported: None,
             proof_types_supported: None,
@@ -176,7 +176,7 @@ where
 
     field_getters_setters![
         pub self [self] ["credential metadata value"] {
-            set_name -> name[CredentialConfigurationId],
+            set_id -> id[CredentialConfigurationId],
             set_scope -> scope[Option<Scope>],
             set_cryptographic_binding_methods_supported -> cryptographic_binding_methods_supported[Option<Vec<CryptographicBindingMethod>>],
             set_proof_types_supported -> proof_types_supported[Option<Vec<KeyProofTypesSupported>>],

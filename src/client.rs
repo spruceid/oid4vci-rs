@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use oauth2::{
     basic::{BasicErrorResponse, BasicRevocationErrorResponse, BasicTokenIntrospectionResponse},
     AccessToken, AuthUrl, AuthorizationCode, ClientId, CodeTokenRequest, ConfigurationError,
@@ -13,10 +15,14 @@ use crate::{
         credential_issuer::{CredentialConfiguration, CredentialIssuerMetadataDisplay},
         AuthorizationServerMetadata, CredentialIssuerMetadata,
     },
+    pre_authorized_code::PreAuthorizedCodeTokenRequest,
     profiles::Profile,
     pushed_authorization::PushedAuthorizationRequest,
     token,
-    types::{BatchCredentialUrl, CredentialUrl, DeferredCredentialUrl, IssuerUrl, ParUrl},
+    types::{
+        BatchCredentialUrl, CredentialUrl, DeferredCredentialUrl, IssuerUrl, ParUrl,
+        PreAuthorizedCode,
+    },
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -150,9 +156,21 @@ where
         self.inner.exchange_code(code)
     }
 
-    // pub fn exchange_pre_authorized_code(&self, pre_authorized_code: PreAuthorizedCode) -> () {
-    //     todo!()
-    // }
+    pub fn exchange_pre_authorized_code(
+        &self,
+        pre_authorized_code: PreAuthorizedCode,
+    ) -> PreAuthorizedCodeTokenRequest<'_, BasicErrorResponse, token::Response> {
+        PreAuthorizedCodeTokenRequest {
+            auth_type: &self.inner.auth_type(),
+            client_id: Some(self.inner.client_id()),
+            client_secret: None,
+            code: pre_authorized_code,
+            extra_params: Vec::new(),
+            token_url: &self.inner.token_uri(),
+            tx_code: None,
+            _phantom: PhantomData,
+        }
+    }
 
     pub fn request_credential(
         &self,
