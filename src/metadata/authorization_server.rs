@@ -190,8 +190,7 @@ impl AuthorizationServerMetadata {
         CM: CredentialConfigurationProfile,
     {
         let credential_issuer_authorization_server_metadata =
-            Self::discover_async(credential_issuer_metadata.credential_issuer(), http_client)
-                .await;
+            Self::discover_async(credential_issuer_metadata.credential_issuer(), http_client).await;
         let Some(grant_type) = grant_type else {
             // If grants is not present or is empty, the Wallet MUST determine the Grant Types the
             // Credential Issuer's Authorization Server supports using the respective metadata.
