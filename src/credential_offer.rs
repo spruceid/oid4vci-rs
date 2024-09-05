@@ -3,7 +3,7 @@
 use anyhow::{bail, Context, Result};
 use oauth2::{
     http::{self, header::ACCEPT, HeaderValue, Method, StatusCode},
-    AsyncHttpClient, Scope, SyncHttpClient,
+    AsyncHttpClient, SyncHttpClient,
 };
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
@@ -11,19 +11,17 @@ use url::Url;
 
 use crate::{
     http_utils::{check_content_type, MIME_TYPE_JSON},
-    profiles::CredentialOfferProfile,
-    types::{CredentialOfferRequest, IssuerState, IssuerUrl, PreAuthorizedCode},
+    types::{
+        CredentialConfigurationId, CredentialOfferRequest, IssuerState, IssuerUrl,
+        PreAuthorizedCode,
+    },
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
-pub enum CredentialOffer<CO>
-where
-    CO: CredentialOfferProfile,
-{
+pub enum CredentialOffer {
     Value {
-        #[serde(bound = "CO: CredentialOfferProfile")]
-        credential_offer: CredentialOfferParameters<CO>,
+        credential_offer: CredentialOfferParameters,
     },
     Reference {
         credential_offer_uri: Url,
@@ -37,10 +35,7 @@ enum CredentialOfferFlat {
     Reference { credential_offer_uri: Url },
 }
 
-impl<CO> CredentialOffer<CO>
-where
-    CO: CredentialOfferProfile,
-{
+impl CredentialOffer {
     pub fn from_request(uri: CredentialOfferRequest) -> Result<Self> {
         match serde_path_to_error::deserialize(serde_urlencoded::Deserializer::new(
             form_urlencoded::parse(uri.url().query().unwrap_or_default().as_bytes()),
@@ -61,7 +56,7 @@ where
         }
     }
 
-    pub fn resolve<C>(self, http_client: &C) -> Result<CredentialOfferParameters<CO>>
+    pub fn resolve<C>(self, http_client: &C) -> Result<CredentialOfferParameters>
     where
         C: SyncHttpClient,
         C::Error: Send + Sync,
@@ -82,10 +77,7 @@ where
         Self::handle_response(response, &uri)
     }
 
-    pub async fn resolve_async<'c, C>(
-        self,
-        http_client: &'c C,
-    ) -> Result<CredentialOfferParameters<CO>>
+    pub async fn resolve_async<'c, C>(self, http_client: &'c C) -> Result<CredentialOfferParameters>
     where
         C: AsyncHttpClient<'c>,
         C::Error: Send + Sync,
@@ -119,7 +111,7 @@ where
     fn handle_response(
         response: http::Response<Vec<u8>>,
         url: &Url,
-    ) -> Result<CredentialOfferParameters<CO>> {
+    ) -> Result<CredentialOfferParameters> {
         if response.status() != StatusCode::OK {
             bail!("HTTP status code {} at {}", response.status(), url)
         }
@@ -134,45 +126,19 @@ where
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum CredentialOfferParameters<CO>
-where
-    CO: CredentialOfferProfile,
-{
-    #[deprecated = "no longer supported in OID4VCI draft 13 onwards"]
-    Value {
-        credential_issuer: IssuerUrl,
-        #[serde(bound = "CO: CredentialOfferProfile")]
-        credentials: Vec<CredentialOfferFormat<CO>>,
-        grants: Option<CredentialOfferGrants>,
-    },
-    Reference {
-        credential_issuer: IssuerUrl,
-        credential_configuration_ids: Vec<String>,
-        grants: Option<CredentialOfferGrants>,
-    },
+pub struct CredentialOfferParameters {
+    credential_issuer: IssuerUrl,
+    credential_configuration_ids: Vec<CredentialConfigurationId>,
+    grants: Option<CredentialOfferGrants>,
 }
 
-impl<CO> CredentialOfferParameters<CO>
-where
-    CO: CredentialOfferProfile,
-{
+impl CredentialOfferParameters {
     pub fn issuer(&self) -> &IssuerUrl {
-        match self {
-            CredentialOfferParameters::Value {
-                credential_issuer, ..
-            }
-            | CredentialOfferParameters::Reference {
-                credential_issuer, ..
-            } => credential_issuer,
-        }
+        &self.credential_issuer
     }
 
     pub fn grants(&self) -> Option<&CredentialOfferGrants> {
-        match self {
-            CredentialOfferParameters::Value { grants, .. }
-            | CredentialOfferParameters::Reference { grants, .. } => grants.as_ref(),
-        }
+        self.grants.as_ref()
     }
 
     pub fn authorization_code_grant(&self) -> Option<&AuthorizationCodeGrant> {
@@ -182,19 +148,6 @@ where
     pub fn pre_authorized_code_grant(&self) -> Option<&PreAuthorizedCodeGrant> {
         self.grants()?.pre_authorized_code()
     }
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(untagged)]
-#[deprecated = "no longer supported in OID4VCI draft 13 onwards"]
-pub enum CredentialOfferFormat<CO>
-where
-    CO: CredentialOfferProfile,
-{
-    Reference(Scope),
-    #[serde(bound = "CO: CredentialOfferProfile")]
-    #[deprecated = "no longer supported in OID4VCI draft 12 onwards"]
-    Value(CO),
 }
 
 #[serde_as]
@@ -321,13 +274,11 @@ impl TxCodeDefinition {
 mod test {
     use serde_json::json;
 
-    use crate::core::profiles::CoreProfilesOffer;
-
     use super::*;
 
     #[test]
-    fn example_credential_offer_object_reference() {
-        let _: CredentialOfferParameters<CoreProfilesOffer> = serde_json::from_value(json!({
+    fn example_credential_offer_object() {
+        let _: CredentialOfferParameters = serde_json::from_value(json!({
            "credential_issuer": "https://credential-issuer.example.com",
            "credential_configuration_ids": [
               "UniversityDegreeCredential",
@@ -346,43 +297,6 @@ mod test {
                  }
               }
            }
-        }))
-        .unwrap();
-    }
-
-    #[test]
-    fn example_credential_offer_object_value() {
-        let _: CredentialOfferParameters<CoreProfilesOffer> = serde_json::from_value(json!({
-            "credential_issuer": "https://credential-issuer.example.com",
-            "credentials": [{
-                "format": "jwt_vc_json-ld",
-                "credential_definition": {
-                    "@context": [
-                        "https://www.w3.org/2018/credentials/v1",
-                        "https://www.w3.org/2018/credentials/examples/v1"
-                    ],
-                    "type": [
-                        "VerifiableCredential",
-                        "UniversityDegreeCredential"
-                    ]
-                }
-            }, {
-                "format": "mso_mdoc",
-                "doctype": "org.iso.18013.5.1.mDL",
-            }],
-            "grants": {
-                "authorization_code": {
-                    "issuer_state": "eyJhbGciOiJSU0Et...FYUaBy"
-                },
-                "urn:ietf:params:oauth:grant-type:pre-authorized_code": {
-                    "pre-authorized_code": "adhjhdjajkdkhjhdj",
-                    "tx_code": {
-                        "length": 4,
-                        "input_mode": "numeric",
-                        "description": "Please provide the one-time code that was sent via e-mail"
-                    }
-                }
-            }
         }))
         .unwrap();
     }

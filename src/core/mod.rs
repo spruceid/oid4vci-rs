@@ -3,36 +3,28 @@ pub mod profiles;
 pub mod metadata {
     use crate::metadata;
 
-    use super::profiles::CoreProfilesConfiguration;
+    use super::profiles::CoreProfilesCredentialConfiguration;
 
     pub type CredentialIssuerMetadata =
-        metadata::CredentialIssuerMetadata<CoreProfilesConfiguration>;
+        metadata::CredentialIssuerMetadata<CoreProfilesCredentialConfiguration>;
 }
 
 pub mod credential {
     use crate::credential;
 
-    use super::profiles::CoreProfilesRequest;
+    use super::profiles::CoreProfilesCredentialRequest;
 
-    pub type Request = credential::Request<CoreProfilesRequest>;
-    pub type BatchRequest = credential::BatchRequest<CoreProfilesRequest>;
-}
-
-pub mod credential_offer {
-    use crate::credential_offer;
-
-    use super::profiles::CoreProfilesOffer;
-
-    pub type CredentialOffer = credential_offer::CredentialOffer<CoreProfilesOffer>;
+    pub type Request = credential::Request<CoreProfilesCredentialRequest>;
+    pub type BatchRequest = credential::BatchRequest<CoreProfilesCredentialRequest>;
 }
 
 pub mod authorization {
     use crate::authorization;
 
-    use super::profiles::CoreProfilesAuthorizationDetails;
+    use super::profiles::CoreProfilesAuthorizationDetail;
 
     pub type AuthorizationDetail =
-        authorization::AuthorizationDetail<CoreProfilesAuthorizationDetails>;
+        authorization::AuthorizationDetail<CoreProfilesAuthorizationDetail>;
 }
 
 pub mod client {
@@ -42,54 +34,4 @@ pub mod client {
     use super::profiles::CoreProfiles;
 
     pub type Client = client::Client<CoreProfiles>;
-}
-
-#[cfg(test)]
-mod test {
-    use profiles::w3c::{self, CredentialDefinitionLD};
-
-    use crate::{
-        credential_response_encryption::CredentialUrl,
-        metadata::credential_issuer::CredentialMetadata, types::IssuerUrl,
-    };
-
-    use super::*;
-
-    #[test]
-    fn serialize_issuer_metadata_jwtvc() {
-        let metadata = super::metadata::CredentialIssuerMetadata::new(
-            IssuerUrl::from_url("https://example.com".parse().unwrap()),
-            CredentialUrl::from_url("https://example.com/credential".parse().unwrap()),
-        )
-        .set_credential_configurations_supported(vec![CredentialMetadata::new(
-            "credential1".into(),
-            profiles::CoreProfilesConfiguration::JWTVC(w3c::jwt::Configuration::new(
-                w3c::CredentialDefinition::new(vec!["type1".into()]),
-            )),
-        )]);
-        serde_json::to_vec(&metadata).unwrap();
-    }
-
-    #[test]
-    fn serialize_issuer_metadata_ldpvc() {
-        let metadata = super::metadata::CredentialIssuerMetadata::new(
-            IssuerUrl::from_url("https://example.com".parse().unwrap()),
-            CredentialUrl::from_url("https://example.com/credential".parse().unwrap()),
-        )
-        .set_credential_configurations_supported(vec![CredentialMetadata::new(
-            "credential1".into(),
-            profiles::CoreProfilesConfiguration::LDVC(w3c::ldp::Configuration::new(
-                vec![serde_json::Value::String(
-                    "http://example.com/context".into(),
-                )],
-                CredentialDefinitionLD::new(
-                    w3c::CredentialDefinition::new(vec!["type1".into()]),
-                    vec![serde_json::Value::String(
-                        "http://example.com/context".into(),
-                    )],
-                ),
-            )),
-        )]);
-        serde_json::to_vec(&metadata).unwrap();
-    }
 }

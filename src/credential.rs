@@ -26,7 +26,9 @@ where
 {
     #[serde(flatten, bound = "CR: CredentialRequestProfile")]
     additional_profile_fields: CR,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     proof: Option<Proof>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     credential_response_encryption: Option<CredentialResponseEncryption>,
 }
 
@@ -440,7 +442,7 @@ pub struct DeferredRequest {
 mod test {
     use serde_json::json;
 
-    use crate::core::profiles::CoreProfilesResponse;
+    use crate::core::profiles::CoreProfilesCredentialResponse;
 
     use super::*;
 
@@ -500,7 +502,7 @@ mod test {
 
     #[test]
     fn example_credential_response_object() {
-        let _: Response<CoreProfilesResponse> = serde_json::from_value(json!({
+        let _: Response<CoreProfilesCredentialResponse> = serde_json::from_value(json!({
             "format": "jwt_vc_json",
             "credential": "LUpixVCWJk0eOt4CXQe1NXK....WZwmhmn9OQp6YxX0a2L",
             "c_nonce": "fGFF7UkhLa",
@@ -511,7 +513,7 @@ mod test {
 
     #[test]
     fn example_credential_deferred_response_object() {
-        let _: Response<CoreProfilesResponse> = serde_json::from_value(json!({
+        let _: Response<CoreProfilesCredentialResponse> = serde_json::from_value(json!({
             "transaction_id": "8xLOxBtZp8",
             "c_nonce": "wlbQc6pCJp",
             "c_nonce_expires_in": 86400
@@ -562,7 +564,7 @@ mod test {
 
     #[test]
     fn example_batch_response() {
-        let _: BatchResponse<CoreProfilesResponse> = serde_json::from_value(json!({
+        let _: BatchResponse<CoreProfilesCredentialResponse> = serde_json::from_value(json!({
             "credential_responses": [{
                 "format": "jwt_vc_json",
                 "credential": "eyJraWQiOiJkaWQ6ZXhhbXBsZTpl...C_aZKPxgihac0aW9EkL1nOzM"
@@ -579,7 +581,7 @@ mod test {
 
     #[test]
     fn example_batch_response_with_deferred() {
-        let _: BatchResponse<CoreProfilesResponse> = serde_json::from_value(json!({
+        let _: BatchResponse<CoreProfilesCredentialResponse> = serde_json::from_value(json!({
             "credential_responses":[
               {
                  "transaction_id":"8xLOxBtZp8"

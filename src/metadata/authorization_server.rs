@@ -56,6 +56,7 @@ pub struct AuthorizationServerMetadata {
     pushed_authorization_request_endpoint: Option<ParUrl>,
     #[serde(default)]
     require_pushed_authorization_requests: bool,
+    #[serde(flatten)]
     additional_fields: Map<String, Json>,
 }
 

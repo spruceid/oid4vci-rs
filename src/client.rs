@@ -10,7 +10,7 @@ use crate::{
     credential,
     credential_response_encryption::CredentialResponseEncryptionMetadata,
     metadata::{
-        credential_issuer::{CredentialIssuerMetadataDisplay, CredentialMetadata},
+        credential_issuer::{CredentialConfiguration, CredentialIssuerMetadataDisplay},
         AuthorizationServerMetadata, CredentialIssuerMetadata,
     },
     profiles::Profile,
@@ -53,7 +53,7 @@ where
     batch_credential_endpoint: Option<BatchCredentialUrl>,
     deferred_credential_endpoint: Option<DeferredCredentialUrl>,
     credential_response_encryption: Option<CredentialResponseEncryptionMetadata>,
-    credential_configurations_supported: Vec<CredentialMetadata<C::Configuration>>,
+    credential_configurations_supported: Vec<CredentialConfiguration<C::CredentialConfiguration>>,
     display: Option<Vec<CredentialIssuerMetadataDisplay>>,
 }
 
@@ -68,7 +68,7 @@ where
             set_batch_credential_endpoint -> batch_credential_endpoint[Option<BatchCredentialUrl>],
             set_deferred_credential_endpoint -> deferred_credential_endpoint[Option<DeferredCredentialUrl>],
             set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryptionMetadata>],
-            set_credential_configurations_supported -> credential_configurations_supported[Vec<CredentialMetadata<C::Configuration>>],
+            set_credential_configurations_supported -> credential_configurations_supported[Vec<CredentialConfiguration<C::CredentialConfiguration>>],
             set_display -> display[Option<Vec<CredentialIssuerMetadataDisplay>>],
         }
     ];
@@ -76,7 +76,7 @@ where
     pub fn from_issuer_metadata(
         client_id: ClientId,
         redirect_uri: RedirectUrl,
-        credential_issuer_metadata: CredentialIssuerMetadata<C::Configuration>,
+        credential_issuer_metadata: CredentialIssuerMetadata<C::CredentialConfiguration>,
         authorization_metadata: AuthorizationServerMetadata,
     ) -> Self {
         let inner = Self::new_inner_client(
@@ -157,8 +157,8 @@ where
     pub fn request_credential(
         &self,
         access_token: AccessToken,
-        profile_fields: C::Credential,
-    ) -> credential::RequestBuilder<C::Credential> {
+        profile_fields: C::CredentialRequest,
+    ) -> credential::RequestBuilder<C::CredentialRequest> {
         let body = credential::Request::new(profile_fields);
         credential::RequestBuilder::new(body, self.credential_endpoint().clone(), access_token)
     }
@@ -166,8 +166,8 @@ where
     pub fn batch_request_credential(
         &self,
         access_token: AccessToken,
-        profile_fields: Vec<C::Credential>,
-    ) -> Result<credential::BatchRequestBuilder<C::Credential>, Error> {
+        profile_fields: Vec<C::CredentialRequest>,
+    ) -> Result<credential::BatchRequestBuilder<C::CredentialRequest>, Error> {
         let Some(endpoint) = self.batch_credential_endpoint() else {
             return Err(Error::BcrUnsupported);
         };

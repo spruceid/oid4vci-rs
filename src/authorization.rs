@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::{
-    profiles::AuthorizationDetailsProfile,
+    profiles::AuthorizationDetailProfile,
     types::{IssuerState, IssuerUrl, UserHint},
 };
 
@@ -29,7 +29,7 @@ impl<'a> AuthorizationRequest<'a> {
         self
     }
 
-    pub fn set_authorization_details<AD: AuthorizationDetailsProfile>(
+    pub fn set_authorization_details<AD: AuthorizationDetailProfile>(
         mut self,
         authorization_details: Vec<AuthorizationDetail<AD>>,
     ) -> Result<Self, serde_json::Error> {
@@ -72,18 +72,39 @@ impl<'a> AuthorizationRequest<'a> {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AuthorizationDetail<AD>
 where
-    AD: AuthorizationDetailsProfile,
+    AD: AuthorizationDetailProfile,
 {
     r#type: AuthorizationDetailType,
-    #[serde(flatten, bound = "AD: AuthorizationDetailsProfile")]
-    addition_profile_fields: AD,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    locations: Option<Vec<IssuerUrl>>,
+    #[serde(flatten, bound = "AD: AuthorizationDetailProfile")]
+    additional_profile_fields: AD,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    locations: Vec<IssuerUrl>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+impl<AD> AuthorizationDetail<AD>
+where
+    AD: AuthorizationDetailProfile,
+{
+    pub fn new(additional_profile_fields: AD) -> Self {
+        Self {
+            r#type: AuthorizationDetailType::OpenidCredential,
+            additional_profile_fields,
+            locations: Vec::new(),
+        }
+    }
+
+    field_getters_setters![
+        pub self [self] ["authorization detail value"] {
+            set_additional_profile_fields -> additional_profile_fields[AD],
+            set_locations -> locations[Vec<IssuerUrl>],
+        }
+    ];
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub enum AuthorizationDetailType {
+    #[default]
+    #[serde(rename = "openid_credential")]
     OpenidCredential,
 }
 
@@ -97,7 +118,7 @@ mod test {
     use crate::{
         core::{
             metadata::CredentialIssuerMetadata,
-            profiles::{w3c, CoreProfilesAuthorizationDetails, ValueAuthorizationDetails},
+            profiles::{jwt_vc_json, CoreProfilesAuthorizationDetail},
         },
         metadata::AuthorizationServerMetadata,
         types::CredentialUrl,
@@ -107,7 +128,7 @@ mod test {
 
     #[test]
     fn example_authorization_details() {
-        let _: Vec<AuthorizationDetail<CoreProfilesAuthorizationDetails>> =
+        let _: Vec<AuthorizationDetail<CoreProfilesAuthorizationDetail>> =
             serde_json::from_value(json!([
                 {
                   "type": "openid_credential",
@@ -125,7 +146,7 @@ mod test {
 
     #[test]
     fn example_authorization_details_credential_configuration_id() {
-        let _: Vec<AuthorizationDetail<CoreProfilesAuthorizationDetails>> =
+        let _: Vec<AuthorizationDetail<CoreProfilesAuthorizationDetail>> =
             serde_json::from_value(json!([
                 {
                   "type": "openid_credential",
@@ -138,7 +159,7 @@ mod test {
     #[test]
     fn example_authorization_details_credential_configuration_id_deny() {
         assert!(
-            serde_json::from_value::<Vec<AuthorizationDetail<CoreProfilesAuthorizationDetails>>>(
+            serde_json::from_value::<Vec<AuthorizationDetail<CoreProfilesAuthorizationDetail>>>(
                 json!([
                     {
                       "type": "openid_credential",
@@ -153,7 +174,7 @@ mod test {
 
     #[test]
     fn example_authorization_details_locations() {
-        let _: Vec<AuthorizationDetail<CoreProfilesAuthorizationDetails>> =
+        let _: Vec<AuthorizationDetail<CoreProfilesAuthorizationDetail>> =
             serde_json::from_value(json!([
                 {
                   "type": "openid_credential",
@@ -230,17 +251,22 @@ mod test {
             PkceCodeVerifier::new("challengechallengechallengechallengechallenge".into());
         let pkce_challenge = PkceCodeChallenge::from_code_verifier_sha256(&pkce_verifier);
         let state = CsrfToken::new("state".into());
+        let authorization_detail = jwt_vc_json::AuthorizationDetailWithFormat::default()
+            .set_credential_definition(
+                jwt_vc_json::authorization_detail::CredentialDefinition::default().set_type(vec![
+                    "VerifiableCredential".into(),
+                    "UniversityDegreeCredential".into(),
+                ]),
+            );
         let authorization_details = vec![AuthorizationDetail {
             r#type: AuthorizationDetailType::OpenidCredential,
-            addition_profile_fields: CoreProfilesAuthorizationDetails::Value(
-                ValueAuthorizationDetails::JWTVC(w3c::jwt::AuthorizationDetails::new(
-                    w3c::CredentialDefinition::new(vec![
-                        "VerifiableCredential".into(),
-                        "UniversityDegreeCredential".into(),
-                    ]),
-                )),
-            ),
-            locations: None,
+            additional_profile_fields: CoreProfilesAuthorizationDetail::WithFormat {
+                inner: crate::core::profiles::AuthorizationDetailWithFormat::JwtVcJson(
+                    authorization_detail,
+                ),
+                _credential_identifier: (),
+            },
+            locations: vec![],
         }];
         let req = client
             .authorize_url(move || state)

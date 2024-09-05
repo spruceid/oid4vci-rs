@@ -407,6 +407,24 @@ new_url_type![
 ];
 
 new_type![
+    /// A unique identifier of the supported Credential being described.
+    /// This identifier is used in the Credential Offer to communicate to the Wallet which
+    /// Credential is being offered.
+    #[derive(Deserialize, Serialize, Eq, Hash)]
+    CredentialConfigurationId(String)
+];
+
+new_type![
+    /// String value determining the type of value of the claim. Valid values defined by OID4VCI
+    /// are `string`, `number`, and image media types such as `image/jpeg` as defined in [IANA media
+    /// type registry for images](
+    /// https://www.iana.org/assignments/media-types/media-types.xhtml#image).
+    /// Other values MAY also be used.
+    #[derive(Deserialize, Serialize, Eq, Hash)]
+    ClaimValueType(String)
+];
+
+new_type![
     /// String value that identifies the language of this object represented as a language tag taken
     /// from values defined in [BCP47 (RFC5646)](https://www.rfc-editor.org/rfc/rfc5646.html).
     #[derive(Deserialize, Serialize, Eq, Hash)]
