@@ -161,12 +161,12 @@ where
         pre_authorized_code: PreAuthorizedCode,
     ) -> PreAuthorizedCodeTokenRequest<'_, BasicErrorResponse, token::Response> {
         PreAuthorizedCodeTokenRequest {
-            auth_type: &self.inner.auth_type(),
+            auth_type: self.inner.auth_type(),
             client_id: Some(self.inner.client_id()),
             client_secret: None,
             code: pre_authorized_code,
             extra_params: Vec::new(),
-            token_url: &self.inner.token_uri(),
+            token_url: self.inner.token_uri(),
             tx_code: None,
             _phantom: PhantomData,
         }

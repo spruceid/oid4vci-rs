@@ -43,6 +43,12 @@ pub struct CredentialRequest {
     claims: Claims<CredentialConfigurationClaim>,
 }
 
+impl Default for CredentialRequest {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CredentialRequest {
     pub fn new() -> Self {
         Self {

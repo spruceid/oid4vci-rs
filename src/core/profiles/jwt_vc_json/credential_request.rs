@@ -31,6 +31,12 @@ impl CredentialRequestProfile for CredentialRequestWithFormat {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CredentialRequest {}
 
+impl Default for CredentialRequest {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CredentialRequest {
     pub fn new() -> Self {
         Self {}
