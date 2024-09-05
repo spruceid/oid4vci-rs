@@ -325,13 +325,13 @@ where
     Other(String),
 }
 
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Response<CR>
 where
     CR: CredentialResponseProfile,
 {
     #[serde(flatten, bound = "CR: CredentialResponseProfile")]
-    additional_profile_fields: ResponseEnum<CR>,
+    response_kind: ResponseEnum<CR>,
     c_nonce: Option<Nonce>,
     c_nonce_expires_in: Option<i64>,
 }
@@ -340,32 +340,39 @@ impl<CR> Response<CR>
 where
     CR: CredentialResponseProfile,
 {
-    pub fn new(additional_profile_fields: ResponseEnum<CR>) -> Self {
+    pub fn new(response_kind: ResponseEnum<CR>) -> Self {
         Self {
-            additional_profile_fields,
+            response_kind,
             c_nonce: None,
             c_nonce_expires_in: None,
         }
     }
     field_getters_setters![
         pub self [self] ["credential response value"] {
-            set_additional_profile_fields -> additional_profile_fields[ResponseEnum<CR>],
+            set_response_kind -> response_kind[ResponseEnum<CR>],
             set_nonce -> c_nonce[Option<Nonce>],
             set_nonce_expiration -> c_nonce_expires_in[Option<i64>],
         }
     ];
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum ResponseEnum<CR>
 where
     CR: CredentialResponseProfile,
 {
     #[serde(bound = "CR: CredentialResponseProfile")]
-    Immediate(CR),
+    Immediate {
+        credential: CR::Type,
+    },
+    /// Support for multiple credentials of a specific type from the latest working draft versions.
+    #[serde(bound = "CR: CredentialResponseProfile")]
+    ImmediateMany {
+        credentials: Vec<CR::Type>,
+    },
     Deferred {
-        transaction_id: Option<String>, // must be present if credential is None (is the profile)
+        transaction_id: Option<String>,
     },
 }
 
@@ -402,7 +409,7 @@ where
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BatchResponse<CR>
 where
     CR: CredentialResponseProfile,

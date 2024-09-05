@@ -4,23 +4,11 @@ use serde_json::Value;
 use crate::profiles::CredentialResponseProfile;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct CredentialResponse {
-    credential: Value,
+pub struct CredentialResponse;
+
+impl CredentialResponseProfile for CredentialResponse {
+    type Type = Value;
 }
-
-impl CredentialResponse {
-    pub fn new(credential: Value) -> Self {
-        Self { credential }
-    }
-
-    field_getters_setters![
-        pub self [self] ["credential response value"] {
-            set_credential -> credential[Value],
-        }
-    ];
-}
-
-impl CredentialResponseProfile for CredentialResponse {}
 
 #[cfg(test)]
 mod test {

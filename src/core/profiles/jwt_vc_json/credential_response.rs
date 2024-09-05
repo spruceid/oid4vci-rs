@@ -4,23 +4,11 @@ use ssi_claims::CompactJWSString;
 use crate::profiles::CredentialResponseProfile;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct CredentialResponse {
-    credential: CompactJWSString,
+pub struct CredentialResponse;
+
+impl CredentialResponseProfile for CredentialResponse {
+    type Type = CompactJWSString;
 }
-
-impl CredentialResponse {
-    pub fn new(credential: CompactJWSString) -> Self {
-        Self { credential }
-    }
-
-    field_getters_setters![
-        pub self [self] ["JWT VC credential response value"] {
-            set_credential -> credential[CompactJWSString],
-        }
-    ];
-}
-
-impl CredentialResponseProfile for CredentialResponse {}
 
 #[cfg(test)]
 mod test {

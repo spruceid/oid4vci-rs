@@ -160,14 +160,20 @@ pub enum CredentialRequestWithCredentialIdentifier {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct CoreProfilesCredentialResponse;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
-pub enum CoreProfilesCredentialResponse {
-    JwtVcJson(jwt_vc_json::CredentialResponse),
-    JwtVcJsonLd(jwt_vc_json_ld::CredentialResponse),
-    LdpVc(ldp_vc::CredentialResponse),
-    MsoMdoc(mso_mdoc::CredentialResponse),
+pub enum CoreProfilesCredentialResponseType {
+    JwtVcJson(<jwt_vc_json::CredentialResponse as CredentialResponseProfile>::Type),
+    JwtVcJsonLd(<jwt_vc_json_ld::CredentialResponse as CredentialResponseProfile>::Type),
+    LdpVc(<ldp_vc::CredentialResponse as CredentialResponseProfile>::Type),
+    MsoMdoc(<mso_mdoc::CredentialResponse as CredentialResponseProfile>::Type),
 }
-impl CredentialResponseProfile for CoreProfilesCredentialResponse {}
+
+impl CredentialResponseProfile for CoreProfilesCredentialResponse {
+    type Type = CoreProfilesCredentialResponseType;
+}
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct AuthorizationDetailClaim {
