@@ -21,10 +21,10 @@ pub mod credential {
 pub mod authorization {
     use crate::authorization;
 
-    use super::profiles::CoreProfilesAuthorizationDetail;
+    use super::profiles::CoreProfilesAuthorizationDetailsObject;
 
-    pub type AuthorizationDetail =
-        authorization::AuthorizationDetail<CoreProfilesAuthorizationDetail>;
+    pub type AuthorizationDetailsObject =
+        authorization::AuthorizationDetailsObject<CoreProfilesAuthorizationDetailsObject>;
 }
 
 pub mod client {

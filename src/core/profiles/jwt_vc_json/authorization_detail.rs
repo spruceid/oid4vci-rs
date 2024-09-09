@@ -2,17 +2,19 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{core::profiles::AuthorizationDetailClaim, profiles::AuthorizationDetailProfile};
+use crate::{
+    core::profiles::AuthorizationDetailsObjectClaim, profiles::AuthorizationDetailsObjectProfile,
+};
 
 use super::{CredentialSubjectClaims, Format};
 
 #[derive(Clone, Debug, Deserialize, Default, PartialEq, Serialize)]
-pub struct AuthorizationDetailWithFormat {
+pub struct AuthorizationDetailsObjectWithFormat {
     format: Format,
     credential_definition: CredentialDefinition,
 }
 
-impl AuthorizationDetailWithFormat {
+impl AuthorizationDetailsObjectWithFormat {
     field_getters_setters![
         pub self [self] ["JWT VC authorization detail value"] {
             set_credential_definition -> credential_definition[CredentialDefinition],
@@ -20,14 +22,14 @@ impl AuthorizationDetailWithFormat {
     ];
 }
 
-impl AuthorizationDetailProfile for AuthorizationDetailWithFormat {}
+impl AuthorizationDetailsObjectProfile for AuthorizationDetailsObjectWithFormat {}
 
 #[derive(Clone, Debug, Deserialize, Default, PartialEq, Serialize)]
-pub struct AuthorizationDetail {
+pub struct AuthorizationDetailsObject {
     credential_definition: CredentialDefinitionWithoutType,
 }
 
-impl AuthorizationDetail {
+impl AuthorizationDetailsObject {
     field_getters_setters![
         pub self [self] ["JWT VC authorization detail value"] {
             set_credential_definition -> credential_definition[CredentialDefinitionWithoutType],
@@ -35,7 +37,7 @@ impl AuthorizationDetail {
     ];
 }
 
-impl AuthorizationDetailProfile for AuthorizationDetail {}
+impl AuthorizationDetailsObjectProfile for AuthorizationDetailsObject {}
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct CredentialDefinition {
@@ -45,14 +47,14 @@ pub struct CredentialDefinition {
         skip_serializing_if = "HashMap::is_empty",
         rename = "credentialSubject"
     )]
-    credential_subject: CredentialSubjectClaims<AuthorizationDetailClaim>,
+    credential_subject: CredentialSubjectClaims<AuthorizationDetailsObjectClaim>,
 }
 
 impl CredentialDefinition {
     field_getters_setters![
         pub self [self] ["credential definition value"] {
             set_type -> r#type[Vec<String>],
-            set_credential_subject -> credential_subject[CredentialSubjectClaims<AuthorizationDetailClaim>],
+            set_credential_subject -> credential_subject[CredentialSubjectClaims<AuthorizationDetailsObjectClaim>],
         }
     ];
 }
@@ -64,13 +66,13 @@ pub struct CredentialDefinitionWithoutType {
         skip_serializing_if = "HashMap::is_empty",
         rename = "credentialSubject"
     )]
-    credential_subject: CredentialSubjectClaims<AuthorizationDetailClaim>,
+    credential_subject: CredentialSubjectClaims<AuthorizationDetailsObjectClaim>,
 }
 
 impl CredentialDefinitionWithoutType {
     field_getters_setters![
         pub self [self] ["credential definition value"] {
-            set_credential_subject -> credential_subject[CredentialSubjectClaims<AuthorizationDetailClaim>],
+            set_credential_subject -> credential_subject[CredentialSubjectClaims<AuthorizationDetailsObjectClaim>],
         }
     ];
 }
@@ -80,7 +82,8 @@ mod test {
     use serde_json::json;
 
     use crate::{
-        authorization::AuthorizationDetail, core::profiles::CoreProfilesAuthorizationDetail,
+        authorization::AuthorizationDetailsObject,
+        core::profiles::CoreProfilesAuthorizationDetailsObject,
     };
 
     #[test]
@@ -100,11 +103,12 @@ mod test {
             }
         );
 
-        let authorization_detail: AuthorizationDetail<super::AuthorizationDetailWithFormat> =
-            serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(
-                &serde_json::to_string(&expected_json).unwrap(),
-            ))
-            .unwrap();
+        let authorization_detail: AuthorizationDetailsObject<
+            super::AuthorizationDetailsObjectWithFormat,
+        > = serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(
+            &serde_json::to_string(&expected_json).unwrap(),
+        ))
+        .unwrap();
 
         let roundtripped = serde_json::to_value(authorization_detail).unwrap();
         assert_json_diff::assert_json_eq!(expected_json, roundtripped)
@@ -126,11 +130,12 @@ mod test {
             }
         );
 
-        let authorization_detail: AuthorizationDetail<CoreProfilesAuthorizationDetail> =
-            serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(
-                &serde_json::to_string(&expected_json).unwrap(),
-            ))
-            .unwrap();
+        let authorization_detail: AuthorizationDetailsObject<
+            CoreProfilesAuthorizationDetailsObject,
+        > = serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(
+            &serde_json::to_string(&expected_json).unwrap(),
+        ))
+        .unwrap();
 
         let roundtripped = serde_json::to_value(authorization_detail).unwrap();
         assert_json_diff::assert_json_eq!(expected_json, roundtripped)

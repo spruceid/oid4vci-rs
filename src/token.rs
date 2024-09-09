@@ -8,8 +8,11 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
 use crate::types::{Nonce, PreAuthorizedCode};
-use crate::{authorization::AuthorizationDetail, core::profiles::CoreProfilesAuthorizationDetail};
-use crate::{profiles::AuthorizationDetailProfile, types::TxCode};
+use crate::{
+    authorization::AuthorizationDetailsObject,
+    core::profiles::CoreProfilesAuthorizationDetailsObject,
+};
+use crate::{profiles::AuthorizationDetailsObjectProfile, types::TxCode};
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case", tag = "grant_type")]
@@ -38,17 +41,20 @@ pub enum Request {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct ExtraResponseTokenFields<AD>
 where
-    AD: AuthorizationDetailProfile,
+    AD: AuthorizationDetailsObjectProfile,
 {
     pub c_nonce: Option<Nonce>,
     pub c_nonce_expires_in: Option<Duration>,
-    #[serde(bound = "AD: AuthorizationDetailProfile")]
-    pub authorization_details: Option<Vec<AuthorizationDetail<AD>>>,
+    #[serde(bound = "AD: AuthorizationDetailsObjectProfile")]
+    pub authorization_details: Option<Vec<AuthorizationDetailsObject<AD>>>,
 }
 
 pub type Response = StandardTokenResponse<
-    ExtraResponseTokenFields<CoreProfilesAuthorizationDetail>,
+    ExtraResponseTokenFields<CoreProfilesAuthorizationDetailsObject>,
     BasicTokenType,
 >;
 
-impl<AD> ExtraTokenFields for ExtraResponseTokenFields<AD> where AD: AuthorizationDetailProfile {}
+impl<AD> ExtraTokenFields for ExtraResponseTokenFields<AD> where
+    AD: AuthorizationDetailsObjectProfile
+{
+}

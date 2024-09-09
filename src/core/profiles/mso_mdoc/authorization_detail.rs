@@ -3,20 +3,22 @@ use std::collections::HashMap;
 use isomdl::definitions::device_request::DocType;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::profiles::AuthorizationDetailClaim, profiles::AuthorizationDetailProfile};
+use crate::{
+    core::profiles::AuthorizationDetailsObjectClaim, profiles::AuthorizationDetailsObjectProfile,
+};
 
 use super::{Claims, Format};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct AuthorizationDetailWithFormat {
+pub struct AuthorizationDetailsObjectWithFormat {
     format: Format,
     doctype: DocType,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    claims: Claims<AuthorizationDetailClaim>,
+    claims: Claims<AuthorizationDetailsObjectClaim>,
 }
 
-impl AuthorizationDetailWithFormat {
-    pub fn new(doctype: DocType, claims: Claims<AuthorizationDetailClaim>) -> Self {
+impl AuthorizationDetailsObjectWithFormat {
+    pub fn new(doctype: DocType, claims: Claims<AuthorizationDetailsObjectClaim>) -> Self {
         Self {
             format: Format::MsoMdoc,
             doctype,
@@ -26,38 +28,39 @@ impl AuthorizationDetailWithFormat {
     field_getters_setters![
         pub self [self] ["ISO mDL authorization detail value"] {
             set_doctype -> doctype[DocType],
-            set_claims -> claims[Claims<AuthorizationDetailClaim>],
+            set_claims -> claims[Claims<AuthorizationDetailsObjectClaim>],
         }
     ];
 }
 
-impl AuthorizationDetailProfile for AuthorizationDetailWithFormat {}
+impl AuthorizationDetailsObjectProfile for AuthorizationDetailsObjectWithFormat {}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct AuthorizationDetail {
+pub struct AuthorizationDetailsObject {
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    claims: Claims<AuthorizationDetailClaim>,
+    claims: Claims<AuthorizationDetailsObjectClaim>,
 }
 
-impl AuthorizationDetail {
-    pub fn new(claims: Claims<AuthorizationDetailClaim>) -> Self {
+impl AuthorizationDetailsObject {
+    pub fn new(claims: Claims<AuthorizationDetailsObjectClaim>) -> Self {
         Self { claims }
     }
     field_getters_setters![
         pub self [self] ["ISO mDL authorization detail value"] {
-            set_claims -> claims[ Claims<AuthorizationDetailClaim>],
+            set_claims -> claims[ Claims<AuthorizationDetailsObjectClaim>],
         }
     ];
 }
 
-impl AuthorizationDetailProfile for AuthorizationDetail {}
+impl AuthorizationDetailsObjectProfile for AuthorizationDetailsObject {}
 
 #[cfg(test)]
 mod test {
     use serde_json::json;
 
     use crate::{
-        authorization::AuthorizationDetail, core::profiles::CoreProfilesAuthorizationDetail,
+        authorization::AuthorizationDetailsObject,
+        core::profiles::CoreProfilesAuthorizationDetailsObject,
     };
 
     #[test]
@@ -80,11 +83,12 @@ mod test {
             }
         );
 
-        let authorization_detail: AuthorizationDetail<super::AuthorizationDetailWithFormat> =
-            serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(
-                &serde_json::to_string(&expected_json).unwrap(),
-            ))
-            .unwrap();
+        let authorization_detail: AuthorizationDetailsObject<
+            super::AuthorizationDetailsObjectWithFormat,
+        > = serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(
+            &serde_json::to_string(&expected_json).unwrap(),
+        ))
+        .unwrap();
 
         let roundtripped = serde_json::to_value(authorization_detail).unwrap();
         assert_json_diff::assert_json_eq!(expected_json, roundtripped)
@@ -109,11 +113,12 @@ mod test {
             }
         );
 
-        let authorization_detail: AuthorizationDetail<CoreProfilesAuthorizationDetail> =
-            serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(
-                &serde_json::to_string(&expected_json).unwrap(),
-            ))
-            .unwrap();
+        let authorization_detail: AuthorizationDetailsObject<
+            CoreProfilesAuthorizationDetailsObject,
+        > = serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(
+            &serde_json::to_string(&expected_json).unwrap(),
+        ))
+        .unwrap();
 
         let roundtripped = serde_json::to_value(authorization_detail).unwrap();
         assert_json_diff::assert_json_eq!(expected_json, roundtripped)

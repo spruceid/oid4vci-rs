@@ -22,12 +22,8 @@ pub use oauth2;
 
 #[cfg(test)]
 mod test {
-    use crate::core::profiles::ldp_vc::{
-        authorization_detail::CredentialDefinition,
-        CredentialRequestWithFormat as LdpVcCredentialRequest,
-    };
     use crate::core::profiles::{
-        CoreProfilesCredentialConfiguration, CoreProfilesCredentialRequest,
+        jwt_vc_json_ld, ldp_vc, CoreProfilesCredentialConfiguration, CoreProfilesCredentialRequest,
         CredentialRequestWithFormat,
     };
     use crate::core::{client::Client, metadata::CredentialIssuerMetadata};
@@ -111,12 +107,22 @@ mod test {
         let credential_configuration = &targeted_credentials[0];
         let request_inner = match credential_configuration.profile_specific_fields() {
             CoreProfilesCredentialConfiguration::LdpVc(config) => {
-                let credential_definition = CredentialDefinition::default()
-                    .set_context(config.credential_definition().context().clone())
-                    .set_type(config.credential_definition().r#type().clone());
-                CredentialRequestWithFormat::LdpVc(LdpVcCredentialRequest::new(
+                let credential_definition =
+                    ldp_vc::authorization_detail::CredentialDefinition::default()
+                        .set_context(config.credential_definition().context().clone())
+                        .set_type(config.credential_definition().r#type().clone());
+                CredentialRequestWithFormat::LdpVc(ldp_vc::CredentialRequestWithFormat::new(
                     credential_definition,
                 ))
+            }
+            CoreProfilesCredentialConfiguration::JwtVcJsonLd(config) => {
+                let credential_definition =
+                    ldp_vc::authorization_detail::CredentialDefinition::default()
+                        .set_context(config.credential_definition().context().clone())
+                        .set_type(config.credential_definition().r#type().clone());
+                CredentialRequestWithFormat::JwtVcJsonLd(
+                    jwt_vc_json_ld::CredentialRequestWithFormat::new(credential_definition),
+                )
             }
             x => unimplemented!("{x:?}"),
         };

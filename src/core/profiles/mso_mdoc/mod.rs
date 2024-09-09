@@ -8,7 +8,7 @@ pub mod credential_configuration;
 pub mod credential_request;
 pub mod credential_response;
 
-pub use authorization_detail::{AuthorizationDetail, AuthorizationDetailWithFormat};
+pub use authorization_detail::{AuthorizationDetailsObject, AuthorizationDetailsObjectWithFormat};
 pub use credential_configuration::CredentialConfiguration;
 pub use credential_request::{CredentialRequest, CredentialRequestWithFormat};
 pub use credential_response::CredentialResponse;

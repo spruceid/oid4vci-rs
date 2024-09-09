@@ -5,8 +5,8 @@ use serde_json::Value;
 
 use crate::{
     profiles::{
-        AuthorizationDetailProfile, CredentialConfigurationProfile, CredentialRequestProfile,
-        CredentialResponseProfile, Profile,
+        AuthorizationDetailsObjectProfile, CredentialConfigurationProfile,
+        CredentialRequestProfile, CredentialResponseProfile, Profile,
     },
     types::{ClaimValueType, CredentialConfigurationId, LanguageTag},
 };
@@ -19,7 +19,7 @@ pub mod mso_mdoc;
 pub struct CoreProfiles;
 impl Profile for CoreProfiles {
     type CredentialConfiguration = CoreProfilesCredentialConfiguration;
-    type AuthorizationDetail = CoreProfilesAuthorizationDetail;
+    type AuthorizationDetailsObject = CoreProfilesAuthorizationDetailsObject;
     type CredentialRequest = CoreProfilesCredentialRequest;
     type CredentialResponse = CoreProfilesCredentialResponse;
 }
@@ -37,10 +37,10 @@ impl CredentialConfigurationProfile for CoreProfilesCredentialConfiguration {}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
-pub enum CoreProfilesAuthorizationDetail {
+pub enum CoreProfilesAuthorizationDetailsObject {
     WithFormat {
         #[serde(flatten)]
-        inner: AuthorizationDetailWithFormat,
+        inner: AuthorizationDetailsObjectWithFormat,
         #[serde(
             default,
             skip_serializing,
@@ -65,7 +65,7 @@ pub enum CoreProfilesAuthorizationDetail {
     WithId {
         credential_configuration_id: CredentialConfigurationId,
         #[serde(flatten)]
-        inner: AuthorizationDetailWithCredentialConfigurationId,
+        inner: AuthorizationDetailsObjectWithCredentialConfigurationId,
         #[serde(
             default,
             skip_serializing,
@@ -78,23 +78,23 @@ pub enum CoreProfilesAuthorizationDetail {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
-pub enum AuthorizationDetailWithFormat {
-    JwtVcJson(jwt_vc_json::AuthorizationDetailWithFormat),
+pub enum AuthorizationDetailsObjectWithFormat {
+    JwtVcJson(jwt_vc_json::AuthorizationDetailsObjectWithFormat),
     JwtVcJsonLd(jwt_vc_json_ld::AuthorizationDetailWithFormat),
     LdpVc(ldp_vc::AuthorizationDetailWithFormat),
-    MsoMdoc(mso_mdoc::AuthorizationDetailWithFormat),
+    MsoMdoc(mso_mdoc::AuthorizationDetailsObjectWithFormat),
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
-pub enum AuthorizationDetailWithCredentialConfigurationId {
-    JwtVcJson(jwt_vc_json::AuthorizationDetail),
-    JwtVcJsonLd(jwt_vc_json_ld::AuthorizationDetail),
-    LdpVc(ldp_vc::AuthorizationDetail),
-    MsoMdoc(mso_mdoc::AuthorizationDetail),
+pub enum AuthorizationDetailsObjectWithCredentialConfigurationId {
+    JwtVcJson(jwt_vc_json::AuthorizationDetailsObject),
+    JwtVcJsonLd(jwt_vc_json_ld::AuthorizationDetailsObject),
+    LdpVc(ldp_vc::AuthorizationDetailsObject),
+    MsoMdoc(mso_mdoc::AuthorizationDetailsObject),
 }
 
-impl AuthorizationDetailProfile for CoreProfilesAuthorizationDetail {}
+impl AuthorizationDetailsObjectProfile for CoreProfilesAuthorizationDetailsObject {}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
@@ -176,7 +176,7 @@ impl CredentialResponseProfile for CoreProfilesCredentialResponse {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub struct AuthorizationDetailClaim {
+pub struct AuthorizationDetailsObjectClaim {
     #[serde(default, skip_serializing_if = "is_false")]
     mandatory: bool,
 }

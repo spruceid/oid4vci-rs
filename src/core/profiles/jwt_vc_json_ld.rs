@@ -4,11 +4,11 @@ use serde::{Deserialize, Serialize};
 
 pub const FORMAT_IDENTIFIER: &str = "jwt_vc_json-ld";
 pub use super::jwt_vc_json::credential_response::CredentialResponse;
-pub use super::ldp_vc::authorization_detail::AuthorizationDetail;
+pub use super::ldp_vc::authorization_detail::AuthorizationDetailsObject;
 pub use super::ldp_vc::credential_request::CredentialRequest;
 
 pub type AuthorizationDetailWithFormat =
-    super::ldp_vc::authorization_detail::AuthorizationDetailWithFormat<Format>;
+    super::ldp_vc::authorization_detail::AuthorizationDetailsObjectWithFormat<Format>;
 pub type CredentialConfiguration =
     super::ldp_vc::credential_configuration::CredentialConfiguration<Format>;
 pub type CredentialRequestWithFormat =
