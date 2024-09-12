@@ -1,10 +1,10 @@
 use std::{borrow::Cow, collections::HashMap, future::Future};
 
 use crate::{
-    authorization::{AuthorizationDetail, AuthorizationRequest},
+    authorization::{AuthorizationDetailsObject, AuthorizationRequest},
     credential::RequestError,
     http_utils::{content_type_has_essence, MIME_TYPE_FORM_URLENCODED, MIME_TYPE_JSON},
-    profiles::AuthorizationDetailsProfile,
+    profiles::AuthorizationDetailsObjectProfile,
     types::{IssuerState, IssuerUrl, Nonce, ParUrl, UserHint},
 };
 use oauth2::{
@@ -214,9 +214,9 @@ impl<'a> PushedAuthorizationRequest<'a> {
         self
     }
 
-    pub fn set_authorization_details<AD: AuthorizationDetailsProfile>(
+    pub fn set_authorization_details<AD: AuthorizationDetailsObjectProfile>(
         mut self,
-        authorization_details: Vec<AuthorizationDetail<AD>>,
+        authorization_details: Vec<AuthorizationDetailsObject<AD>>,
     ) -> Result<Self, serde_json::Error> {
         self.inner = self
             .inner
@@ -264,7 +264,9 @@ mod test {
     use serde_json::json;
 
     use crate::{
-        core::{metadata::CredentialIssuerMetadata, profiles::CoreProfilesAuthorizationDetails},
+        core::{
+            metadata::CredentialIssuerMetadata, profiles::CoreProfilesAuthorizationDetailsObject,
+        },
         metadata::AuthorizationServerMetadata,
         types::CredentialUrl,
     };
@@ -317,7 +319,7 @@ mod test {
             .pushed_authorization_request(move || state)
             .unwrap()
             .set_pkce_challenge(pkce_challenge)
-            .set_authorization_details::<CoreProfilesAuthorizationDetails>(vec![])
+            .set_authorization_details::<CoreProfilesAuthorizationDetailsObject>(vec![])
             .unwrap()
             .prepare_request()
             .unwrap();

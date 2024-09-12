@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use ssi_claims::{
     jws::{self, Header},
     jwt,
@@ -27,15 +28,19 @@ pub enum KeyProofType {
     Jwt,
     #[serde(rename = "cwt")]
     Cwt,
+    #[serde(rename = "ldp_vp")]
+    LdpVp,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(tag = "proof_type")]
 pub enum Proof {
     #[serde(rename = "jwt")]
-    JWT { jwt: String },
+    Jwt { jwt: String },
     #[serde(rename = "cwt")]
-    CWT { cwt: String },
+    Cwt { cwt: String },
+    #[serde(rename = "ldp_vp")]
+    LdpVp { ldp_vp: Value },
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -206,8 +211,9 @@ impl ProofOfPossession {
         resolver: impl JWKResolver,
     ) -> Result<Self, ParsingError> {
         match proof {
-            Proof::JWT { jwt } => Self::from_jwt(jwt, resolver).await,
-            Proof::CWT { .. } => todo!(),
+            Proof::Jwt { jwt } => Self::from_jwt(jwt, resolver).await,
+            Proof::Cwt { .. } => todo!(),
+            Proof::LdpVp { .. } => todo!(),
         }
     }
 

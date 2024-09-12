@@ -26,7 +26,9 @@ where
 {
     #[serde(flatten, bound = "CR: CredentialRequestProfile")]
     additional_profile_fields: CR,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     proof: Option<Proof>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     credential_response_encryption: Option<CredentialResponseEncryption>,
 }
 
@@ -323,13 +325,13 @@ where
     Other(String),
 }
 
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Response<CR>
 where
     CR: CredentialResponseProfile,
 {
     #[serde(flatten, bound = "CR: CredentialResponseProfile")]
-    additional_profile_fields: ResponseEnum<CR>,
+    response_kind: ResponseEnum<CR>,
     c_nonce: Option<Nonce>,
     c_nonce_expires_in: Option<i64>,
 }
@@ -338,32 +340,39 @@ impl<CR> Response<CR>
 where
     CR: CredentialResponseProfile,
 {
-    pub fn new(additional_profile_fields: ResponseEnum<CR>) -> Self {
+    pub fn new(response_kind: ResponseEnum<CR>) -> Self {
         Self {
-            additional_profile_fields,
+            response_kind,
             c_nonce: None,
             c_nonce_expires_in: None,
         }
     }
     field_getters_setters![
         pub self [self] ["credential response value"] {
-            set_additional_profile_fields -> additional_profile_fields[ResponseEnum<CR>],
+            set_response_kind -> response_kind[ResponseEnum<CR>],
             set_nonce -> c_nonce[Option<Nonce>],
             set_nonce_expiration -> c_nonce_expires_in[Option<i64>],
         }
     ];
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum ResponseEnum<CR>
 where
     CR: CredentialResponseProfile,
 {
     #[serde(bound = "CR: CredentialResponseProfile")]
-    Immediate(CR),
+    Immediate {
+        credential: CR::Type,
+    },
+    /// Support for multiple credentials of a specific type from the latest working draft versions.
+    #[serde(bound = "CR: CredentialResponseProfile")]
+    ImmediateMany {
+        credentials: Vec<CR::Type>,
+    },
     Deferred {
-        transaction_id: Option<String>, // must be present if credential is None (is the profile)
+        transaction_id: Option<String>,
     },
 }
 
@@ -400,7 +409,7 @@ where
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BatchResponse<CR>
 where
     CR: CredentialResponseProfile,
@@ -440,7 +449,7 @@ pub struct DeferredRequest {
 mod test {
     use serde_json::json;
 
-    use crate::core::profiles::CoreProfilesResponse;
+    use crate::core::profiles::CoreProfilesCredentialResponse;
 
     use super::*;
 
@@ -500,7 +509,7 @@ mod test {
 
     #[test]
     fn example_credential_response_object() {
-        let _: Response<CoreProfilesResponse> = serde_json::from_value(json!({
+        let _: Response<CoreProfilesCredentialResponse> = serde_json::from_value(json!({
             "format": "jwt_vc_json",
             "credential": "LUpixVCWJk0eOt4CXQe1NXK....WZwmhmn9OQp6YxX0a2L",
             "c_nonce": "fGFF7UkhLa",
@@ -511,7 +520,7 @@ mod test {
 
     #[test]
     fn example_credential_deferred_response_object() {
-        let _: Response<CoreProfilesResponse> = serde_json::from_value(json!({
+        let _: Response<CoreProfilesCredentialResponse> = serde_json::from_value(json!({
             "transaction_id": "8xLOxBtZp8",
             "c_nonce": "wlbQc6pCJp",
             "c_nonce_expires_in": 86400
@@ -562,7 +571,7 @@ mod test {
 
     #[test]
     fn example_batch_response() {
-        let _: BatchResponse<CoreProfilesResponse> = serde_json::from_value(json!({
+        let _: BatchResponse<CoreProfilesCredentialResponse> = serde_json::from_value(json!({
             "credential_responses": [{
                 "format": "jwt_vc_json",
                 "credential": "eyJraWQiOiJkaWQ6ZXhhbXBsZTpl...C_aZKPxgihac0aW9EkL1nOzM"
@@ -579,7 +588,7 @@ mod test {
 
     #[test]
     fn example_batch_response_with_deferred() {
-        let _: BatchResponse<CoreProfilesResponse> = serde_json::from_value(json!({
+        let _: BatchResponse<CoreProfilesCredentialResponse> = serde_json::from_value(json!({
             "credential_responses":[
               {
                  "transaction_id":"8xLOxBtZp8"

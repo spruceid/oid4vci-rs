@@ -7,6 +7,9 @@ license = "Apache-2.0 OR MIT"
 description = "OpenID for Verifiable Credentials Issuance"
 repository = "https://github.com/spruceid/oidc4vci-rs/"
 
+[features]
+reqwest = ["oauth2/reqwest"]
+
 [dependencies]
 # TODO feature-gate
 isomdl = { git = "https://github.com/spruceid/isomdl", rev = "90ce218" }
@@ -31,6 +34,8 @@ base64 = "0.21.4"
 serde_urlencoded = "0.7.1"
 anyhow = "1.0.86"
 sha2 = "0.10.8"
+form_urlencoded = "1.2.1"
+percent-encoding = "2.3.1"
 
 [dev-dependencies]
 assert-json-diff = "2.0.2"
@@ -38,3 +43,4 @@ did-jwk = "0.2.0"
 did-method-key = "0.3.0"
 ssi-verification-methods = "0.1.1"
 tokio = { version = "1.25.0", features = ["macros"] }
+oid4vci = { path = ".", features = ["reqwest"] }

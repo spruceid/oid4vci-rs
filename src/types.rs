@@ -2,6 +2,7 @@ use std::fmt::{Debug, Error as FormatterError, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 
+use anyhow::bail;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use url::Url;
@@ -337,6 +338,31 @@ new_url_type![
 ];
 
 new_url_type![
+    /// The credential offer request as a URL, as represented in a QR code or deep link.
+    CredentialOfferRequest
+    impl {
+        const DEFAULT_URL_SCHEME: &'static str = "openid-credential-offer";
+
+        /// Parse the credential offer request from a URL, and validate that the URL scheme is
+        /// `scheme`.
+        pub fn from_url_checked_with_scheme(url: Url, expected_scheme: &str) -> Result<Self, anyhow::Error> {
+            let this = Self::from_url(url);
+            let this_scheme = this.url().scheme();
+            if this_scheme != expected_scheme {
+                bail!("unexpected URL scheme '{this_scheme}', expected '{expected_scheme}'")
+            }
+            Ok(this)
+        }
+
+        /// Parse the credential offer request from a URL, and validate that the URL scheme is
+        /// `openid-credential-offer`.
+        pub fn from_url_checked(url: Url) -> Result<Self, anyhow::Error> {
+            Self::from_url_checked_with_scheme(url, Self::DEFAULT_URL_SCHEME)
+        }
+    }
+];
+
+new_url_type![
     /// URL of the Credential Issuer's Credential Endpoint.
     CredentialUrl
 ];
@@ -378,6 +404,24 @@ new_url_type![
     /// The Wallet needs to determine the scheme, since the URI value could use the `https:` scheme,
     /// the `data:` scheme, etc.
     LogoUri
+];
+
+new_type![
+    /// A unique identifier of the supported Credential being described.
+    /// This identifier is used in the Credential Offer to communicate to the Wallet which
+    /// Credential is being offered.
+    #[derive(Deserialize, Serialize, Eq, Hash)]
+    CredentialConfigurationId(String)
+];
+
+new_type![
+    /// String value determining the type of value of the claim. Valid values defined by OID4VCI
+    /// are `string`, `number`, and image media types such as `image/jpeg` as defined in [IANA media
+    /// type registry for images](
+    /// https://www.iana.org/assignments/media-types/media-types.xhtml#image).
+    /// Other values MAY also be used.
+    #[derive(Deserialize, Serialize, Eq, Hash)]
+    ClaimValueType(String)
 ];
 
 new_type![

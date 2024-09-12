@@ -1,181 +1,206 @@
-use std::fmt::Debug;
+use std::{collections::HashMap, fmt::Debug};
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
-use crate::profiles::{
-    AuthorizationDetailsProfile, CredentialConfigurationProfile, CredentialOfferProfile,
-    CredentialRequestProfile, CredentialResponseProfile, Profile,
+use crate::{
+    profiles::{
+        AuthorizationDetailsObjectProfile, CredentialConfigurationProfile,
+        CredentialRequestProfile, CredentialResponseProfile, Profile,
+    },
+    types::{ClaimValueType, CredentialConfigurationId, LanguageTag},
 };
 
-pub mod isomdl;
-pub mod w3c;
+pub mod jwt_vc_json;
+pub mod jwt_vc_json_ld;
+pub mod ldp_vc;
+pub mod mso_mdoc;
 
-pub struct CoreProfiles {}
+pub struct CoreProfiles;
 impl Profile for CoreProfiles {
-    type Configuration = CoreProfilesConfiguration;
-    type Offer = CoreProfilesOffer;
-    type Authorization = CoreProfilesAuthorizationDetails;
-    type Credential = CoreProfilesRequest;
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "format")]
-pub enum CoreProfilesConfiguration {
-    #[serde(rename = "jwt_vc_json")]
-    JWTVC(w3c::jwt::Configuration),
-    #[serde(rename = "jwt_vc_json-ld")]
-    JWTLDVC(w3c::jwtld::Configuration),
-    #[serde(rename = "ldp_vc")]
-    LDVC(w3c::ldp::Configuration),
-    #[serde(rename = "mso_mdoc")]
-    ISOmDL(isomdl::Configuration),
-}
-impl CredentialConfigurationProfile for CoreProfilesConfiguration {
-    type Request = CoreProfilesRequest;
-
-    fn to_request(&self) -> Self::Request {
-        match self {
-            CoreProfilesConfiguration::JWTVC(m) => {
-                Self::Request::Value(ValueRequest::JWTVC(m.to_request()))
-            }
-            CoreProfilesConfiguration::JWTLDVC(m) => {
-                Self::Request::Value(ValueRequest::JWTLDVC(m.to_request()))
-            }
-            CoreProfilesConfiguration::LDVC(m) => {
-                Self::Request::Value(ValueRequest::LDVC(m.to_request()))
-            }
-            CoreProfilesConfiguration::ISOmDL(m) => {
-                Self::Request::Value(ValueRequest::ISOmDL(m.to_request()))
-            }
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "format")]
-pub enum CoreProfilesOffer {
-    #[serde(rename = "jwt_vc_json")]
-    JWTVC(w3c::jwt::Offer),
-    #[serde(rename = "jwt_vc_json-ld")]
-    JWTLDVC(w3c::jwtld::Offer),
-    #[serde(rename = "ldp_vc")]
-    LDVC(w3c::ldp::Offer),
-    #[serde(rename = "mso_mdoc")]
-    ISOmDL(isomdl::Offer),
-}
-impl CredentialOfferProfile for CoreProfilesOffer {}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct ReferencedAuthorizationDetails {
-    credential_configuration_id: String,
-
-    #[serde(
-        default,
-        skip_serializing,
-        deserialize_with = "crate::deny_field::deny_field",
-        rename = "format"
-    )]
-    _format: (),
-}
-
-impl ReferencedAuthorizationDetails {
-    pub fn new(credential_configuration_id: String) -> Self {
-        Self {
-            credential_configuration_id,
-            _format: (),
-        }
-    }
-
-    field_getters_setters![
-        pub self [self] ["Authorization Details definition value"] {
-            set_credential_configuration_id -> credential_configuration_id[String],
-        }
-    ];
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "format")]
-pub enum ValueAuthorizationDetails {
-    #[serde(rename = "jwt_vc_json")]
-    JWTVC(w3c::jwt::AuthorizationDetails),
-    #[serde(rename = "jwt_vc_json-ld")]
-    JWTLDVC(w3c::jwtld::AuthorizationDetails),
-    #[serde(rename = "ldp_vc")]
-    LDVC(w3c::ldp::AuthorizationDetails),
-    #[serde(rename = "mso_mdoc")]
-    ISOmDL(isomdl::AuthorizationDetails),
+    type CredentialConfiguration = CoreProfilesCredentialConfiguration;
+    type AuthorizationDetailsObject = CoreProfilesAuthorizationDetailsObject;
+    type CredentialRequest = CoreProfilesCredentialRequest;
+    type CredentialResponse = CoreProfilesCredentialResponse;
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
-pub enum CoreProfilesAuthorizationDetails {
-    Value(ValueAuthorizationDetails),
-    Referenced(ReferencedAuthorizationDetails),
+pub enum CoreProfilesCredentialConfiguration {
+    JwtVcJson(jwt_vc_json::CredentialConfiguration),
+    JwtVcJsonLd(jwt_vc_json_ld::CredentialConfiguration),
+    LdpVc(ldp_vc::CredentialConfiguration),
+    MsoMdoc(mso_mdoc::CredentialConfiguration),
 }
-impl AuthorizationDetailsProfile for CoreProfilesAuthorizationDetails {}
+
+impl CredentialConfigurationProfile for CoreProfilesCredentialConfiguration {}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct ReferencedRequest {
-    credential_identifier: String,
-
-    #[serde(
-        default,
-        skip_serializing,
-        deserialize_with = "crate::deny_field::deny_field",
-        rename = "format"
-    )]
-    _format: (),
-}
-
-impl ReferencedRequest {
-    pub fn new(credential_identifier: String) -> Self {
-        Self {
-            credential_identifier,
-            _format: (),
-        }
-    }
-
-    field_getters_setters![
-        pub self [self] ["Authorization Details definition value"] {
-            set_credential_identifier -> credential_identifier[String],
-        }
-    ];
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "format")]
-pub enum ValueRequest {
-    #[serde(rename = "jwt_vc_json")]
-    JWTVC(w3c::jwt::Request),
-    #[serde(rename = "jwt_vc_json-ld")]
-    JWTLDVC(w3c::jwtld::Request),
-    #[serde(rename = "ldp_vc")]
-    LDVC(w3c::ldp::Request),
-    #[serde(rename = "mso_mdoc")]
-    ISOmDL(isomdl::Request),
+#[serde(untagged)]
+pub enum CoreProfilesAuthorizationDetailsObject {
+    WithFormat {
+        #[serde(flatten)]
+        inner: AuthorizationDetailsObjectWithFormat,
+        #[serde(
+            default,
+            skip_serializing,
+            deserialize_with = "crate::deny_field::deny_field",
+            rename = "credential_identifier"
+        )]
+        _credential_identifier: (),
+    },
+    WithIdAndUnresolvedProfile {
+        credential_configuration_id: CredentialConfigurationId,
+        #[serde(flatten)]
+        inner: HashMap<String, Value>,
+        #[serde(
+            default,
+            skip_serializing,
+            deserialize_with = "crate::deny_field::deny_field",
+            rename = "format"
+        )]
+        _format: (),
+    },
+    #[serde(skip_deserializing)]
+    WithId {
+        credential_configuration_id: CredentialConfigurationId,
+        #[serde(flatten)]
+        inner: AuthorizationDetailsObjectWithCredentialConfigurationId,
+        #[serde(
+            default,
+            skip_serializing,
+            deserialize_with = "crate::deny_field::deny_field",
+            rename = "format"
+        )]
+        _format: (),
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
-pub enum CoreProfilesRequest {
-    Value(ValueRequest),
-    Referenced(ReferencedRequest),
+pub enum AuthorizationDetailsObjectWithFormat {
+    JwtVcJson(jwt_vc_json::AuthorizationDetailsObjectWithFormat),
+    JwtVcJsonLd(jwt_vc_json_ld::AuthorizationDetailWithFormat),
+    LdpVc(ldp_vc::AuthorizationDetailWithFormat),
+    MsoMdoc(mso_mdoc::AuthorizationDetailsObjectWithFormat),
 }
 
-impl CredentialRequestProfile for CoreProfilesRequest {
-    type Response = CoreProfilesResponse;
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum AuthorizationDetailsObjectWithCredentialConfigurationId {
+    JwtVcJson(jwt_vc_json::AuthorizationDetailsObject),
+    JwtVcJsonLd(jwt_vc_json_ld::AuthorizationDetailsObject),
+    LdpVc(ldp_vc::AuthorizationDetailsObject),
+    MsoMdoc(mso_mdoc::AuthorizationDetailsObject),
+}
+
+impl AuthorizationDetailsObjectProfile for CoreProfilesAuthorizationDetailsObject {}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum CoreProfilesCredentialRequest {
+    WithFormat {
+        #[serde(flatten)]
+        inner: CredentialRequestWithFormat,
+        #[serde(
+            default,
+            skip_serializing,
+            deserialize_with = "crate::deny_field::deny_field",
+            rename = "credential_identifier"
+        )]
+        _credential_identifier: (),
+    },
+    WithIdAndUnresolvedProfile {
+        credential_identifier: CredentialConfigurationId,
+        #[serde(flatten)]
+        inner: HashMap<String, Value>,
+        #[serde(
+            default,
+            skip_serializing,
+            deserialize_with = "crate::deny_field::deny_field",
+            rename = "format"
+        )]
+        _format: (),
+    },
+    #[serde(skip_deserializing)]
+    WithId {
+        credential_identifier: CredentialConfigurationId,
+        #[serde(flatten)]
+        inner: CredentialRequestWithCredentialIdentifier,
+        #[serde(
+            default,
+            skip_serializing,
+            deserialize_with = "crate::deny_field::deny_field",
+            rename = "format"
+        )]
+        _format: (),
+    },
+}
+
+impl CredentialRequestProfile for CoreProfilesCredentialRequest {
+    type Response = CoreProfilesCredentialResponse;
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum CredentialRequestWithFormat {
+    JwtVcJson(jwt_vc_json::CredentialRequestWithFormat),
+    JwtVcJsonLd(jwt_vc_json_ld::CredentialRequestWithFormat),
+    LdpVc(ldp_vc::CredentialRequestWithFormat),
+    MsoMdoc(mso_mdoc::CredentialRequestWithFormat),
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum CredentialRequestWithCredentialIdentifier {
+    JwtVcJson(jwt_vc_json::CredentialRequest),
+    JwtVcJsonLd(jwt_vc_json_ld::CredentialRequest),
+    LdpVc(ldp_vc::CredentialRequest),
+    MsoMdoc(mso_mdoc::CredentialRequest),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "format")]
-pub enum CoreProfilesResponse {
-    #[serde(rename = "jwt_vc_json")]
-    JWTVC(w3c::jwt::Response),
-    #[serde(rename = "jwt_vc_json-ld")]
-    JWTLDVC(w3c::jwtld::Response),
-    #[serde(rename = "ldp_vc")]
-    LDVC(w3c::ldp::Response),
-    #[serde(rename = "mso_mdoc")]
-    ISOmDL(isomdl::Response),
+pub struct CoreProfilesCredentialResponse;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum CoreProfilesCredentialResponseType {
+    JwtVcJson(<jwt_vc_json::CredentialResponse as CredentialResponseProfile>::Type),
+    JwtVcJsonLd(<jwt_vc_json_ld::CredentialResponse as CredentialResponseProfile>::Type),
+    LdpVc(<ldp_vc::CredentialResponse as CredentialResponseProfile>::Type),
+    MsoMdoc(<mso_mdoc::CredentialResponse as CredentialResponseProfile>::Type),
 }
-impl CredentialResponseProfile for CoreProfilesResponse {}
+
+impl CredentialResponseProfile for CoreProfilesCredentialResponse {
+    type Type = CoreProfilesCredentialResponseType;
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct AuthorizationDetailsObjectClaim {
+    #[serde(default, skip_serializing_if = "is_false")]
+    mandatory: bool,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct CredentialConfigurationClaim {
+    #[serde(default, skip_serializing_if = "is_false")]
+    mandatory: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    value_type: Option<ClaimValueType>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    display: Vec<ClaimDisplay>,
+}
+
+fn is_false(b: &bool) -> bool {
+    !b
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct ClaimDisplay {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    locale: Option<LanguageTag>,
+    #[serde(flatten)]
+    additional_fields: HashMap<String, Value>,
+}

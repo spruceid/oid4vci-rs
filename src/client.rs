@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use oauth2::{
     basic::{BasicErrorResponse, BasicRevocationErrorResponse, BasicTokenIntrospectionResponse},
     AccessToken, AuthUrl, AuthorizationCode, ClientId, CodeTokenRequest, ConfigurationError,
@@ -10,13 +12,17 @@ use crate::{
     credential,
     credential_response_encryption::CredentialResponseEncryptionMetadata,
     metadata::{
-        credential_issuer::{CredentialIssuerMetadataDisplay, CredentialMetadata},
+        credential_issuer::{CredentialConfiguration, CredentialIssuerMetadataDisplay},
         AuthorizationServerMetadata, CredentialIssuerMetadata,
     },
+    pre_authorized_code::PreAuthorizedCodeTokenRequest,
     profiles::Profile,
     pushed_authorization::PushedAuthorizationRequest,
     token,
-    types::{BatchCredentialUrl, CredentialUrl, DeferredCredentialUrl, IssuerUrl, ParUrl},
+    types::{
+        BatchCredentialUrl, CredentialUrl, DeferredCredentialUrl, IssuerUrl, ParUrl,
+        PreAuthorizedCode,
+    },
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -53,7 +59,7 @@ where
     batch_credential_endpoint: Option<BatchCredentialUrl>,
     deferred_credential_endpoint: Option<DeferredCredentialUrl>,
     credential_response_encryption: Option<CredentialResponseEncryptionMetadata>,
-    credential_configurations_supported: Vec<CredentialMetadata<C::Configuration>>,
+    credential_configurations_supported: Vec<CredentialConfiguration<C::CredentialConfiguration>>,
     display: Option<Vec<CredentialIssuerMetadataDisplay>>,
 }
 
@@ -68,23 +74,15 @@ where
             set_batch_credential_endpoint -> batch_credential_endpoint[Option<BatchCredentialUrl>],
             set_deferred_credential_endpoint -> deferred_credential_endpoint[Option<DeferredCredentialUrl>],
             set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryptionMetadata>],
-            set_credential_configurations_supported -> credential_configurations_supported[Vec<CredentialMetadata<C::Configuration>>],
+            set_credential_configurations_supported -> credential_configurations_supported[Vec<CredentialConfiguration<C::CredentialConfiguration>>],
             set_display -> display[Option<Vec<CredentialIssuerMetadataDisplay>>],
         }
     ];
 
-    pub fn from_credential_offer() -> Result<Self, Error> {
-        todo!()
-    }
-
-    pub async fn from_credential_offer_async() -> Result<Self, Error> {
-        todo!()
-    }
-
     pub fn from_issuer_metadata(
         client_id: ClientId,
         redirect_uri: RedirectUrl,
-        credential_issuer_metadata: CredentialIssuerMetadata<C::Configuration>,
+        credential_issuer_metadata: CredentialIssuerMetadata<C::CredentialConfiguration>,
         authorization_metadata: AuthorizationServerMetadata,
     ) -> Self {
         let inner = Self::new_inner_client(
@@ -158,15 +156,27 @@ where
         self.inner.exchange_code(code)
     }
 
-    // pub fn exchange_pre_authorized_code(&self, pre_authorized_code: PreAuthorizedCode) -> () {
-    //     todo!()
-    // }
+    pub fn exchange_pre_authorized_code(
+        &self,
+        pre_authorized_code: PreAuthorizedCode,
+    ) -> PreAuthorizedCodeTokenRequest<'_, BasicErrorResponse, token::Response> {
+        PreAuthorizedCodeTokenRequest {
+            auth_type: self.inner.auth_type(),
+            client_id: Some(self.inner.client_id()),
+            client_secret: None,
+            code: pre_authorized_code,
+            extra_params: Vec::new(),
+            token_url: self.inner.token_uri(),
+            tx_code: None,
+            _phantom: PhantomData,
+        }
+    }
 
     pub fn request_credential(
         &self,
         access_token: AccessToken,
-        profile_fields: C::Credential,
-    ) -> credential::RequestBuilder<C::Credential> {
+        profile_fields: C::CredentialRequest,
+    ) -> credential::RequestBuilder<C::CredentialRequest> {
         let body = credential::Request::new(profile_fields);
         credential::RequestBuilder::new(body, self.credential_endpoint().clone(), access_token)
     }
@@ -174,8 +184,8 @@ where
     pub fn batch_request_credential(
         &self,
         access_token: AccessToken,
-        profile_fields: Vec<C::Credential>,
-    ) -> Result<credential::BatchRequestBuilder<C::Credential>, Error> {
+        profile_fields: Vec<C::CredentialRequest>,
+    ) -> Result<credential::BatchRequestBuilder<C::CredentialRequest>, Error> {
         let Some(endpoint) = self.batch_credential_endpoint() else {
             return Err(Error::BcrUnsupported);
         };
