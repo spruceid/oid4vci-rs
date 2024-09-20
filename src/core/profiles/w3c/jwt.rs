@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use ssi_claims::CompactJWSString;
+use ssi_claims::JwsBuf;
 
 use crate::profiles::{
     AuthorizationDetailsProfile, CredentialConfigurationProfile, CredentialOfferProfile,
@@ -118,16 +118,16 @@ impl CredentialRequestProfile for Request {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Response {
-    credential: CompactJWSString,
+    credential: JwsBuf,
 }
 
 impl Response {
-    pub fn new(credential: CompactJWSString) -> Self {
+    pub fn new(credential: JwsBuf) -> Self {
         Self { credential }
     }
     field_getters_setters![
         pub self [self] ["JWT VC response value"] {
-            set_credential -> credential[CompactJWSString],
+            set_credential -> credential[JwsBuf],
         }
     ];
 }
