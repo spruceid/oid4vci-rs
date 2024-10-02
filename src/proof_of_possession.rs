@@ -194,6 +194,7 @@ impl ProofOfPossession {
         let (header, payload) = self.to_unsigned_jwt()?;
         let json = serde_json::to_string(&header)?;
         let header = BASE64_URL_SAFE_NO_PAD.encode(json);
+        let payload = BASE64_URL_SAFE_NO_PAD.encode(&payload);
         let signing_input = [header.as_bytes(), b".", payload.as_bytes()]
             .concat()
             .to_vec();
