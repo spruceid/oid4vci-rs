@@ -14,9 +14,9 @@ reqwest = ["oauth2/reqwest"]
 # TODO feature-gate
 isomdl = { git = "https://github.com/spruceid/isomdl", rev = "90ce218" }
 
-ssi-claims = "0.1.0"
-ssi-dids-core = "0.1.0"
-ssi-jwk = "0.2.1"
+ssi-claims = "0.1.1"
+ssi-dids-core = "0.1.1"
+ssi-jwk = "0.3.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_with = "3.3.0"
@@ -39,8 +39,8 @@ percent-encoding = "2.3.1"
 
 [dev-dependencies]
 assert-json-diff = "2.0.2"
-did-jwk = "0.2.0"
-did-method-key = "0.3.0"
-ssi-verification-methods = "0.1.1"
+did-jwk = "0.2.1"
+did-method-key = "0.3.1"
+ssi-verification-methods = "0.1.2"
 tokio = { version = "1.25.0", features = ["macros"] }
 oid4vci = { path = ".", features = ["reqwest"] }

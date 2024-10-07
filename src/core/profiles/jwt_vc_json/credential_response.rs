@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use ssi_claims::CompactJWSString;
+use ssi_claims::JwsBuf;
 
 use crate::profiles::CredentialResponseProfile;
 
@@ -7,7 +7,7 @@ use crate::profiles::CredentialResponseProfile;
 pub struct CredentialResponse;
 
 impl CredentialResponseProfile for CredentialResponse {
-    type Type = CompactJWSString;
+    type Type = JwsBuf;
 }
 
 #[cfg(test)]
