@@ -332,7 +332,9 @@ where
 {
     #[serde(flatten, bound = "CR: CredentialResponseProfile")]
     response_kind: ResponseEnum<CR>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     c_nonce: Option<Nonce>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     c_nonce_expires_in: Option<i64>,
 }
 
@@ -416,7 +418,9 @@ where
 {
     #[serde(bound = "CR: CredentialResponseProfile")]
     credential_responses: Vec<ResponseEnum<CR>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     c_nonce: Option<Nonce>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     c_nonce_expires_in: Option<i64>,
 }
 

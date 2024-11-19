@@ -7,6 +7,7 @@ pub mod core;
 pub mod credential;
 pub mod credential_offer;
 pub mod credential_response_encryption;
+pub mod custom;
 mod deny_field;
 mod http_utils;
 pub mod metadata;
