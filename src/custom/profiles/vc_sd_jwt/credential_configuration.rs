@@ -19,6 +19,13 @@ pub struct CredentialConfiguration {
 }
 
 impl CredentialConfiguration {
+    pub fn new(vct: String) -> Self {
+        Self {
+            vct,
+            ..Default::default()
+        }
+    }
+
     field_getters_setters![
         pub self [self] ["VC SD-JWT metadata value"] {
             set_credential_signing_alg_values_supported -> credential_signing_alg_values_supported[Vec<ssi_jwk::Algorithm>],

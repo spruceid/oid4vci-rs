@@ -61,7 +61,6 @@ pub struct AuthorizationServerMetadata {
 }
 
 impl AuthorizationServerMetadata {
-    #[cfg(test)]
     pub fn new(issuer: IssuerUrl, token_endpoint: TokenUrl) -> Self {
         Self {
             issuer,
