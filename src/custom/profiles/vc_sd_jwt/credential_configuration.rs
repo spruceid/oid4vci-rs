@@ -49,7 +49,7 @@ mod test {
         let expected_json = json!(
             {
               "$key$": "SD_JWT_VC_example_in_OpenID4VCI",
-              "format": "vc+sd-jwt",
+              "format": "spruce-vc+sd-jwt",
               "scope": "SD_JWT_VC_example_in_OpenID4VCI",
               "cryptographic_binding_methods_supported": [
                 "jwk"

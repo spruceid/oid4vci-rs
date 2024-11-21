@@ -68,7 +68,7 @@ mod test {
     fn roundtrip_with_format() {
         let expected_json = json!(
             {
-                "format": "vc+sd-jwt",
+                "format": "spruce-vc+sd-jwt",
                 "vct": "SD_JWT_VC_example_in_OpenID4VCI",
                 "proof": {
                   "proof_type": "jwt",
