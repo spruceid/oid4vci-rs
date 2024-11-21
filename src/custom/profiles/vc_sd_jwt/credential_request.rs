@@ -32,20 +32,11 @@ impl CredentialRequestProfile for CredentialRequestWithFormat {
     type Response = CredentialResponse;
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct CredentialRequest {
     vct: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     claims: Option<Claims<CredentialConfigurationClaim>>,
-}
-
-impl Default for CredentialRequest {
-    fn default() -> Self {
-        Self {
-            vct: String::new(),
-            claims: Default::default(),
-        }
-    }
 }
 
 impl CredentialRequest {
