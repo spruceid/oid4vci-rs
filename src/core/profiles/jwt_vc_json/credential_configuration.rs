@@ -12,7 +12,7 @@ use super::{CredentialSubjectClaims, Format};
 pub struct CredentialConfiguration {
     format: Format,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    credential_signing_alg_values_supported: Vec<ssi_jwk::Algorithm>,
+    credential_signing_alg_values_supported: Vec<ssi::jwk::Algorithm>,
     credential_definition: CredentialDefinition,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     order: Vec<String>,
@@ -21,7 +21,7 @@ pub struct CredentialConfiguration {
 impl CredentialConfiguration {
     field_getters_setters![
         pub self [self] ["JWT VC metadata value"] {
-            set_credential_signing_alg_values_supported -> credential_signing_alg_values_supported[Vec<ssi_jwk::Algorithm>],
+            set_credential_signing_alg_values_supported -> credential_signing_alg_values_supported[Vec<ssi::jwk::Algorithm>],
             set_credential_definition -> credential_definition[CredentialDefinition],
             set_order -> order[Vec<String>],
         }
