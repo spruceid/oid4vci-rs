@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use ssi_claims::JwsBuf;
+use ssi::claims::JwsBuf;
 
 use crate::profiles::CredentialResponseProfile;
 
