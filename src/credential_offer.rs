@@ -133,6 +133,18 @@ pub struct CredentialOfferParameters {
 }
 
 impl CredentialOfferParameters {
+    pub fn new(
+        credential_issuer: IssuerUrl,
+        credential_configuration_ids: Vec<CredentialConfigurationId>,
+        grants: Option<CredentialOfferGrants>,
+    ) -> Self {
+        Self {
+            credential_issuer,
+            credential_configuration_ids,
+            grants,
+        }
+    }
+
     pub fn issuer(&self) -> &IssuerUrl {
         &self.credential_issuer
     }
