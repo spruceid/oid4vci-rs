@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    core::profiles::CredentialConfigurationClaim, profiles::AuthorizationDetailsObjectProfile,
+use crate::profiles::custom::profiles::{
+    AuthorizationDetailsObjectProfile, CredentialConfigurationClaim,
 };
 
 use super::{Claims, Format};

@@ -4,7 +4,8 @@ use isomdl::definitions::device_request::DocType;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    core::profiles::AuthorizationDetailsObjectClaim, profiles::AuthorizationDetailsObjectProfile,
+    profiles::core::profiles::AuthorizationDetailsObjectClaim,
+    profiles::AuthorizationDetailsObjectProfile,
 };
 
 use super::{Claims, Format};
@@ -60,7 +61,7 @@ mod test {
 
     use crate::{
         authorization::AuthorizationDetailsObject,
-        core::profiles::CoreProfilesAuthorizationDetailsObject,
+        profiles::core::profiles::CoreProfilesAuthorizationDetailsObject,
     };
 
     #[test]

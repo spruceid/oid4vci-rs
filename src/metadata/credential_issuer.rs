@@ -269,7 +269,7 @@ impl MetadataBackgroundImage {
 
 #[cfg(test)]
 mod test {
-    use crate::core::profiles::CoreProfilesCredentialConfiguration;
+    use crate::profiles::core::profiles::CoreProfilesCredentialConfiguration;
     use serde_json::json;
 
     use super::*;

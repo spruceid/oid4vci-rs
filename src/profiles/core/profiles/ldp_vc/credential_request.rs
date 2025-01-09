@@ -60,8 +60,8 @@ mod test {
     use serde_json::json;
 
     use crate::{
-        core::profiles::{ldp_vc::Format, CoreProfilesCredentialRequest},
         credential::Request,
+        profiles::core::profiles::{ldp_vc::Format, CoreProfilesCredentialRequest},
     };
 
     #[test]

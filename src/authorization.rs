@@ -116,11 +116,11 @@ mod test {
     use serde_json::json;
 
     use crate::{
-        core::{
+        metadata::AuthorizationServerMetadata,
+        profiles::core::{
             metadata::CredentialIssuerMetadata,
             profiles::{jwt_vc_json, CoreProfilesAuthorizationDetailsObject},
         },
-        metadata::AuthorizationServerMetadata,
         types::CredentialUrl,
     };
 
@@ -193,7 +193,7 @@ mod test {
 
     #[test]
     fn example_authorization_details_multiple() {
-        let _: Vec<crate::core::authorization::AuthorizationDetailsObject> =
+        let _: Vec<crate::profiles::core::authorization::AuthorizationDetailsObject> =
             serde_json::from_value(json!([
                 {
                   "type":"openid_credential",
@@ -238,7 +238,7 @@ mod test {
             AuthUrl::new("https://server.example.com/authorize".into()).unwrap(),
         ));
 
-        let client = crate::core::client::Client::from_issuer_metadata(
+        let client = crate::profiles::core::client::Client::from_issuer_metadata(
             ClientId::new("s6BhdRkqt3".to_string()),
             RedirectUrl::new("https://client.example.org/cb".into()).unwrap(),
             credential_issuer_metadata,
@@ -259,9 +259,10 @@ mod test {
         let authorization_details = vec![AuthorizationDetailsObject {
             r#type: AuthorizationDetailsObjectType::OpenidCredential,
             additional_profile_fields: CoreProfilesAuthorizationDetailsObject::WithFormat {
-                inner: crate::core::profiles::AuthorizationDetailsObjectWithFormat::JwtVcJson(
-                    authorization_detail,
-                ),
+                inner:
+                    crate::profiles::core::profiles::AuthorizationDetailsObjectWithFormat::JwtVcJson(
+                        authorization_detail,
+                    ),
                 _credential_identifier: (),
             },
             locations: vec![],

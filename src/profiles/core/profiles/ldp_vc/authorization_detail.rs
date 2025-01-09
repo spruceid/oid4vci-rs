@@ -1,38 +1,44 @@
 use std::collections::HashMap;
+use std::fmt::Debug;
 
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::{
-    core::profiles::AuthorizationDetailsObjectClaim, profiles::AuthorizationDetailsObjectProfile,
+    profiles::core::profiles::AuthorizationDetailsObjectClaim,
+    profiles::AuthorizationDetailsObjectProfile,
 };
 
-use super::{CredentialSubjectClaims, Format};
+use super::CredentialSubjectClaims;
 
 #[derive(Clone, Debug, Deserialize, Default, PartialEq, Serialize)]
-pub struct AuthorizationDetailsObjectWithFormat {
-    format: Format,
+pub struct AuthorizationDetailsObjectWithFormat<F> {
+    format: F,
     credential_definition: CredentialDefinition,
 }
 
-impl AuthorizationDetailsObjectWithFormat {
+impl<F> AuthorizationDetailsObjectWithFormat<F> {
     field_getters_setters![
-        pub self [self] ["JWT VC authorization detail value"] {
+        pub self [self] ["authorization detail value"] {
             set_credential_definition -> credential_definition[CredentialDefinition],
         }
     ];
 }
 
-impl AuthorizationDetailsObjectProfile for AuthorizationDetailsObjectWithFormat {}
+impl<F> AuthorizationDetailsObjectProfile for AuthorizationDetailsObjectWithFormat<F> where
+    F: DeserializeOwned + Serialize + Debug + Clone
+{
+}
 
 #[derive(Clone, Debug, Deserialize, Default, PartialEq, Serialize)]
 pub struct AuthorizationDetailsObject {
-    credential_definition: CredentialDefinitionWithoutType,
+    credential_definition: CredentialDefinitionWithoutContext,
 }
 
 impl AuthorizationDetailsObject {
     field_getters_setters![
-        pub self [self] ["JWT VC authorization detail value"] {
-            set_credential_definition -> credential_definition[CredentialDefinitionWithoutType],
+        pub self [self] ["authorization detail value"] {
+            set_credential_definition -> credential_definition[CredentialDefinitionWithoutContext],
         }
     ];
 }
@@ -41,6 +47,8 @@ impl AuthorizationDetailsObjectProfile for AuthorizationDetailsObject {}
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct CredentialDefinition {
+    #[serde(rename = "@context")]
+    context: Vec<Value>,
     r#type: Vec<String>,
     #[serde(
         default,
@@ -53,6 +61,7 @@ pub struct CredentialDefinition {
 impl CredentialDefinition {
     field_getters_setters![
         pub self [self] ["credential definition value"] {
+            set_context -> context[Vec<Value>],
             set_type -> r#type[Vec<String>],
             set_credential_subject -> credential_subject[CredentialSubjectClaims<AuthorizationDetailsObjectClaim>],
         }
@@ -60,7 +69,7 @@ impl CredentialDefinition {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub struct CredentialDefinitionWithoutType {
+pub struct CredentialDefinitionWithoutContext {
     #[serde(
         default,
         skip_serializing_if = "HashMap::is_empty",
@@ -69,7 +78,7 @@ pub struct CredentialDefinitionWithoutType {
     credential_subject: CredentialSubjectClaims<AuthorizationDetailsObjectClaim>,
 }
 
-impl CredentialDefinitionWithoutType {
+impl CredentialDefinitionWithoutContext {
     field_getters_setters![
         pub self [self] ["credential definition value"] {
             set_credential_subject -> credential_subject[CredentialSubjectClaims<AuthorizationDetailsObjectClaim>],
@@ -83,7 +92,7 @@ mod test {
 
     use crate::{
         authorization::AuthorizationDetailsObject,
-        core::profiles::CoreProfilesAuthorizationDetailsObject,
+        profiles::core::profiles::{ldp_vc::Format, CoreProfilesAuthorizationDetailsObject},
     };
 
     #[test]
@@ -91,9 +100,13 @@ mod test {
         let expected_json = json!(
             {
                 "type": "openid_credential",
-                "format": "jwt_vc_json",
+                "format": "ldp_vc",
                 "credential_definition": {
-                    "type": ["UniversityDegreeCredential"],
+                    "@context": [
+                       "https://www.w3.org/2018/credentials/v1",
+                       "https://www.w3.org/2018/credentials/examples/v1"
+                    ],
+                    "type": ["UniversityDegreeCredential_LDP_VC"],
                     "credentialSubject": {
                         "given_name": {},
                         "family_name": {},
@@ -104,7 +117,7 @@ mod test {
         );
 
         let authorization_detail: AuthorizationDetailsObject<
-            super::AuthorizationDetailsObjectWithFormat,
+            super::AuthorizationDetailsObjectWithFormat<Format>,
         > = serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(
             &serde_json::to_string(&expected_json).unwrap(),
         ))
@@ -119,7 +132,7 @@ mod test {
         let expected_json = json!(
             {
                 "type": "openid_credential",
-                "credential_configuration_id": "UniversityDegreeCredential",
+                "credential_configuration_id": "UniversityDegreeCredential_LDP_VC",
                 "credential_definition": {
                     "credentialSubject": {
                         "given_name": {},

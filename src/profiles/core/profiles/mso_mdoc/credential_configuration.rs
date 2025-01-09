@@ -2,7 +2,8 @@ use isomdl::definitions::device_request::DocType;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    core::profiles::CredentialConfigurationClaim, profiles::CredentialConfigurationProfile,
+    profiles::core::profiles::CredentialConfigurationClaim,
+    profiles::CredentialConfigurationProfile,
 };
 
 use super::{Claims, Format};

@@ -3,11 +3,9 @@ mod macros;
 
 pub mod authorization;
 pub mod client;
-pub mod core;
 pub mod credential;
 pub mod credential_offer;
 pub mod credential_response_encryption;
-pub mod custom;
 mod deny_field;
 mod http_utils;
 pub mod metadata;
@@ -23,15 +21,15 @@ pub use oauth2;
 
 #[cfg(test)]
 mod test {
-    use crate::core::profiles::{
-        jwt_vc_json_ld, ldp_vc, CoreProfilesCredentialConfiguration, CoreProfilesCredentialRequest,
-        CredentialRequestWithFormat,
-    };
-    use crate::core::{client::Client, metadata::CredentialIssuerMetadata};
     use crate::credential_offer::CredentialOffer;
     use crate::metadata::authorization_server::GrantType;
     use crate::metadata::credential_issuer::CredentialConfiguration;
     use crate::metadata::{AuthorizationServerMetadata, MetadataDiscovery};
+    use crate::profiles::core::profiles::{
+        jwt_vc_json_ld, ldp_vc, CoreProfilesCredentialConfiguration, CoreProfilesCredentialRequest,
+        CredentialRequestWithFormat,
+    };
+    use crate::profiles::core::{client::Client, metadata::CredentialIssuerMetadata};
     use crate::types::CredentialOfferRequest;
     use oauth2::{ClientId, RedirectUrl, TokenResponse};
     use url::Url;

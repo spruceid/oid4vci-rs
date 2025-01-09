@@ -1,7 +1,9 @@
 use isomdl::definitions::device_request::DocType;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::profiles::CredentialConfigurationClaim, profiles::CredentialRequestProfile};
+use crate::{
+    profiles::core::profiles::CredentialConfigurationClaim, profiles::CredentialRequestProfile,
+};
 
 use super::{Claims, Format};
 
@@ -70,7 +72,7 @@ impl CredentialRequestProfile for CredentialRequest {
 mod test {
     use serde_json::json;
 
-    use crate::{core::profiles::CoreProfilesCredentialRequest, credential::Request};
+    use crate::{credential::Request, profiles::core::profiles::CoreProfilesCredentialRequest};
 
     #[test]
     fn roundtrip_with_format() {

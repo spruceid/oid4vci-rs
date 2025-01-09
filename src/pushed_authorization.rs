@@ -264,10 +264,10 @@ mod test {
     use serde_json::json;
 
     use crate::{
-        core::{
+        metadata::AuthorizationServerMetadata,
+        profiles::core::{
             metadata::CredentialIssuerMetadata, profiles::CoreProfilesAuthorizationDetailsObject,
         },
-        metadata::AuthorizationServerMetadata,
         types::CredentialUrl,
     };
 
@@ -303,7 +303,7 @@ mod test {
             ParUrl::new("https://server.example.com/as/par".into()).unwrap(),
         ));
 
-        let client = crate::core::client::Client::from_issuer_metadata(
+        let client = crate::profiles::core::client::Client::from_issuer_metadata(
             ClientId::new("s6BhdRkqt3".to_string()),
             RedirectUrl::new("https://client.example.org/cb".into()).unwrap(),
             credential_issuer_metadata,

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use ssi::prelude::{AnySuite, DataIntegrity, DataIntegrityDocument};
 
 use crate::profiles::CredentialResponseProfile;
 
@@ -7,7 +7,7 @@ use crate::profiles::CredentialResponseProfile;
 pub struct CredentialResponse;
 
 impl CredentialResponseProfile for CredentialResponse {
-    type Type = Value;
+    type Type = DataIntegrity<DataIntegrityDocument, AnySuite>;
 }
 
 #[cfg(test)]
