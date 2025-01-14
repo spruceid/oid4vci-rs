@@ -7,11 +7,9 @@ use oauth2::{
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
+use crate::authorization::AuthorizationDetailsObject;
+use crate::profiles::ProfilesAuthorizationDetailsObject;
 use crate::types::{Nonce, PreAuthorizedCode};
-use crate::{
-    authorization::AuthorizationDetailsObject,
-    core::profiles::CoreProfilesAuthorizationDetailsObject,
-};
 use crate::{profiles::AuthorizationDetailsObjectProfile, types::TxCode};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -50,7 +48,7 @@ where
 }
 
 pub type Response = StandardTokenResponse<
-    ExtraResponseTokenFields<CoreProfilesAuthorizationDetailsObject>,
+    ExtraResponseTokenFields<ProfilesAuthorizationDetailsObject>,
     BasicTokenType,
 >;
 

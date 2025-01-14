@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{core::profiles::CredentialConfigurationClaim, profiles::CredentialRequestProfile};
+use crate::{
+    profiles::custom::profiles::CredentialConfigurationClaim,
+    profiles::custom::profiles::CredentialRequestProfile,
+};
 
 use super::{Claims, CredentialResponse, Format};
 
@@ -13,11 +16,11 @@ pub struct CredentialRequestWithFormat {
 }
 
 impl CredentialRequestWithFormat {
-    pub fn new(vct: String, claims: Claims<CredentialConfigurationClaim>) -> Self {
+    pub fn new(vct: String, claims: Option<Claims<CredentialConfigurationClaim>>) -> Self {
         Self {
             format: Format::default(),
             vct,
-            claims: Some(claims),
+            claims,
         }
     }
     field_getters_setters![

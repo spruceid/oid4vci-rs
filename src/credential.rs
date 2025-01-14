@@ -453,13 +453,13 @@ pub struct DeferredRequest {
 mod test {
     use serde_json::json;
 
-    use crate::core::profiles::CoreProfilesCredentialResponse;
+    use crate::profiles::core::profiles::CoreProfilesCredentialResponse;
 
     use super::*;
 
     #[test]
     fn example_credential_request_object() {
-        let _: crate::core::credential::Request = serde_json::from_value(json!({
+        let _: crate::profiles::core::credential::Request = serde_json::from_value(json!({
             "format": "jwt_vc_json",
             "credential_definition": {
              "type": [
@@ -480,7 +480,7 @@ mod test {
 
     #[test]
     fn example_credential_request_referenced() {
-        let _: crate::core::credential::Request = serde_json::from_value(json!({
+        let _: crate::profiles::core::credential::Request = serde_json::from_value(json!({
             "credential_identifier": "UniversityDegreeCredential",
             "proof": {
                "proof_type": "jwt",
@@ -496,7 +496,7 @@ mod test {
     #[test]
     fn example_credential_request_deny() {
         assert!(
-            serde_json::from_value::<crate::core::credential::Request>(json!({
+            serde_json::from_value::<crate::profiles::core::credential::Request>(json!({
                 "format": "jwt_vc_json",
                 "credential_identifier": "UniversityDegreeCredential",
                 "proof": {
@@ -545,7 +545,7 @@ mod test {
 
     #[test]
     fn example_batch_request() {
-        let _: crate::core::credential::BatchRequest = serde_json::from_value(json!({
+        let _: crate::profiles::core::credential::BatchRequest = serde_json::from_value(json!({
             "credential_requests":[
               {
                  "format":"jwt_vc_json",
