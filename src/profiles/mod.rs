@@ -20,6 +20,10 @@ pub trait CredentialResponseProfile: Debug + DeserializeOwned + Serialize {
     type Type: Clone + Debug + DeserializeOwned + Serialize;
 }
 
+/// A type representing the data contained in one element of the `credential_configurations_supported`
+/// field of an issuer metadata response. This contains some fields that are particular to the different
+/// credential formats that the issuer can return.
+/// See https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-15.html#section-11.2.3-2.11.1
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ProfilesCredentialConfiguration {
@@ -29,6 +33,10 @@ pub enum ProfilesCredentialConfiguration {
 
 impl CredentialConfigurationProfile for ProfilesCredentialConfiguration {}
 
+/// A type representing the data contained in the `authorization_details` parameter of an authorization
+/// request. This may contain fields that are specific to particular credential formats that the
+/// issuer can return.
+/// See https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-15.html#section-5.1.1
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ProfilesAuthorizationDetailsObject {
@@ -38,6 +46,8 @@ pub enum ProfilesAuthorizationDetailsObject {
 
 impl AuthorizationDetailsObjectProfile for ProfilesAuthorizationDetailsObject {}
 
+// TODO (SKIT-797): Profiles no longer have specific fields in the credential request data structure as of
+// draft 13. This should be removed.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ProfilesCredentialRequest {
@@ -49,6 +59,8 @@ impl CredentialRequestProfile for ProfilesCredentialRequest {
     type Response = ProfilesCredentialResponse;
 }
 
+// TODO (SKIT-797): Profiles no longer have specific fields in the credential request data structure as of
+// draft 13. This should be removed.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ProfilesCredentialRequestWithFormat {
@@ -56,6 +68,10 @@ pub enum ProfilesCredentialRequestWithFormat {
     Custom(custom::profiles::CredentialRequestWithFormat),
 }
 
+/// A type representing the data contained in the credential response returned by the issuer
+/// This may contain fields that are specific to particular credential formats that the
+/// issuer can return.
+/// See https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-15.html#name-credential-response
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum ProfilesCredentialResponse {
@@ -74,6 +90,7 @@ pub enum CredentialResponseType {
     Custom(custom::profiles::CustomProfilesCredentialResponseType),
 }
 
+/// A profile that represents any type of credential configuration that an OID4VCI service may return
 pub enum MetaProfile {
     Core(core::profiles::CoreProfiles),
     Custom(custom::profiles::CustomProfiles),
