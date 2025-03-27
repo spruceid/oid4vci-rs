@@ -167,8 +167,8 @@ pub struct CoreProfilesCredentialResponse;
 pub enum CoreProfilesCredentialResponseType {
     JwtVcJson(<jwt_vc_json::CredentialResponse as CredentialResponseProfile>::Type),
     JwtVcJsonLd(<jwt_vc_json_ld::CredentialResponse as CredentialResponseProfile>::Type),
-    LdpVc(<ldp_vc::CredentialResponse as CredentialResponseProfile>::Type),
-    MsoMdoc(<mso_mdoc::CredentialResponse as CredentialResponseProfile>::Type),
+    LdpVc(Box<<ldp_vc::CredentialResponse as CredentialResponseProfile>::Type>),
+    MsoMdoc(Box<<mso_mdoc::CredentialResponse as CredentialResponseProfile>::Type>),
 }
 
 impl CredentialResponseProfile for CoreProfilesCredentialResponse {
