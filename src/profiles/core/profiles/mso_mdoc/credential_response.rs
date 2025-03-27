@@ -11,7 +11,7 @@ impl CredentialResponseProfile for CredentialResponse {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct IsoIssuerSigned(#[serde(with = "base64_cbor")] IssuerSigned);
+pub struct IsoIssuerSigned(#[serde(with = "base64_cbor")] pub IssuerSigned);
 
 mod base64_cbor {
     use base64::{engine::general_purpose::URL_SAFE, Engine};
