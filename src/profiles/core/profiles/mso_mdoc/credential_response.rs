@@ -18,7 +18,7 @@ mod base64_cbor {
     use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize, Serializer};
 
     pub fn serialize<T: Sized + Serialize, S: Serializer>(v: &T, s: S) -> Result<S::Ok, S::Error> {
-        let v = match serde_cbor::to_vec(v) {
+        let v = match isomdl::cbor::to_vec(v) {
             Ok(v) => v,
             Err(e) => return Err(serde::ser::Error::custom(e)),
         };
@@ -31,7 +31,7 @@ mod base64_cbor {
     ) -> Result<T, D::Error> {
         let b64 = String::deserialize(d)?;
         match URL_SAFE.decode(b64) {
-            Ok(v) => match serde_cbor::from_slice(&v) {
+            Ok(v) => match isomdl::cbor::from_slice(&v) {
                 Ok(v) => Ok(v),
                 Err(e) => Err(serde::de::Error::custom(e)),
             },
