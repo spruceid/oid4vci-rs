@@ -28,18 +28,15 @@ impl PreAuthorizedCodeGrant {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Default)]
 pub enum InputMode {
     #[serde(rename = "numeric")]
+    #[default]
     Numeric,
     #[serde(rename = "text")]
     Text,
 }
 
-impl Default for InputMode {
-    fn default() -> Self {
-        Self::Numeric
-    }
-}
 
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, Serialize)]
