@@ -14,7 +14,7 @@ impl CredentialResponseProfile for CredentialResponse {
 mod test {
     use serde_json::json;
 
-    use crate::credential::Response;
+    use crate::response::Response;
 
     #[test]
     fn roundtrip() {

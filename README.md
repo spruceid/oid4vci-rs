@@ -21,9 +21,9 @@ various types and methods implementing it.
    `/.well-known/openid-credential-issuer` endpoint.
 
 All the code related to Credential Offer is located in the
-[`credential_offer`] module.
+[`offer`] module.
 
-[`CredentialOffer`]: https://docs.rs/oid4vci/latest/oid4vci/credential_offer/enum.CredentialOffer.html
+[`CredentialOffer`]: https://docs.rs/oid4vci/latest/oid4vci/offer/enum.CredentialOffer.html
 [`CredentialIssuerMetadata`]: https://docs.rs/oid4vci/latest/oid4vci/issuer/metadata/struct.CredentialIssuerMetadata.html
 [`Discoverable`]: https://docs.rs/oid4vci/latest/oid4vci/util/discoverable/trait.Discoverable.html
 

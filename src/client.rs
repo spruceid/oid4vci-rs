@@ -15,13 +15,14 @@ use crate::{
         pushed_authorization::PushedAuthorizationRequest, server::AuthorizationServerMetadata,
         token, AuthorizationRequest,
     },
-    credential,
-    credential_response_encryption::CredentialResponseEncryptionMetadata,
+    batch::request::{BatchRequest, BatchRequestBuilder},
+    encryption::CredentialResponseEncryptionMetadata,
     issuer::{
         metadata::{CredentialConfiguration, CredentialIssuerMetadataDisplay},
         CredentialIssuerMetadata,
     },
     profiles::Profile,
+    request::{Request, RequestBuilder},
     types::{
         BatchCredentialUrl, CredentialConfigurationId, CredentialUrl, DeferredCredentialUrl,
         ParUrl, PreAuthorizedCode,
@@ -234,26 +235,21 @@ where
         &self,
         access_token: AccessToken,
         profile_fields: C::CredentialRequest,
-    ) -> credential::RequestBuilder<C::CredentialRequest> {
-        let body = credential::Request::new(profile_fields);
-        credential::RequestBuilder::new(body, self.credential_endpoint.clone(), access_token)
+    ) -> RequestBuilder<C::CredentialRequest> {
+        let body = Request::new(profile_fields);
+        RequestBuilder::new(body, self.credential_endpoint.clone(), access_token)
     }
 
     pub fn batch_request_credential(
         &self,
         access_token: AccessToken,
         profile_fields: Vec<C::CredentialRequest>,
-    ) -> Result<credential::BatchRequestBuilder<C::CredentialRequest>, Error> {
+    ) -> Result<BatchRequestBuilder<C::CredentialRequest>, Error> {
         let Some(endpoint) = &self.batch_credential_endpoint else {
             return Err(Error::BcrUnsupported);
         };
-        let body = credential::BatchRequest::new(
-            profile_fields
-                .into_iter()
-                .map(credential::Request::new)
-                .collect(),
-        );
-        Ok(credential::BatchRequestBuilder::new(
+        let body = BatchRequest::new(profile_fields.into_iter().map(Request::new).collect());
+        Ok(BatchRequestBuilder::new(
             body,
             endpoint.clone(),
             access_token,

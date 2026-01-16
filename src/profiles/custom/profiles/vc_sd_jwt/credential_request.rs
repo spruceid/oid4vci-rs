@@ -53,7 +53,7 @@ impl CredentialRequestProfile for CredentialRequest {
 mod test {
     use serde_json::json;
 
-    use crate::credential::Request;
+    use crate::request::Request;
 
     #[test]
     fn roundtrip_with_format() {

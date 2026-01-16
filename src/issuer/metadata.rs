@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
 use crate::{
-    credential_response_encryption::CredentialResponseEncryptionMetadata,
+    encryption::CredentialResponseEncryptionMetadata,
     profiles::CredentialConfigurationProfile,
     proof_of_possession::KeyProofType,
     types::{

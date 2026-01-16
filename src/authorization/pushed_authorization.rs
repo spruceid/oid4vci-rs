@@ -2,8 +2,8 @@ use std::{borrow::Cow, collections::HashMap, future::Future};
 
 use crate::{
     authorization::{AuthorizationDetailsObject, AuthorizationRequest},
-    credential::RequestError,
     profiles::AuthorizationDetailsObjectProfile,
+    request::RequestError,
     types::{IssuerState, Nonce, ParUrl, UserHint},
     util::http::{content_type_has_essence, MIME_TYPE_FORM_URLENCODED, MIME_TYPE_JSON},
 };

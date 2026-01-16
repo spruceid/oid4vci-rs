@@ -17,9 +17,9 @@
 //!    `/.well-known/openid-credential-issuer` endpoint.
 //!
 //! All the code related to Credential Offer is located in the
-//! [`credential_offer`] module.
+//! [`offer`] module.
 //!
-//! [`CredentialOffer`]: crate::credential_offer::CredentialOffer
+//! [`CredentialOffer`]: crate::offer::CredentialOffer
 //! [`CredentialIssuerMetadata`]: crate::issuer::metadata::CredentialIssuerMetadata
 //! [`Discoverable`]: crate::util::discoverable::Discoverable
 //!
@@ -46,14 +46,16 @@
 //! 8. Wallet sends a Credential Request to the Issuer, with the Access Token.
 //! 9. Issuer returns a Credential Response, with the Credential(s).
 pub mod authorization;
+pub mod batch;
 pub mod client;
-pub mod credential;
-pub mod credential_offer;
-pub mod credential_response_encryption;
+pub mod encryption;
 pub mod issuer;
 pub mod notification;
+pub mod offer;
 pub mod profiles;
 pub mod proof_of_possession;
+pub mod request;
+pub mod response;
 pub mod types;
 pub mod util;
 
@@ -63,8 +65,8 @@ pub use oauth2;
 mod test {
     use crate::authorization::server::metadata::GrantType;
     use crate::authorization::server::AuthorizationServerMetadata;
-    use crate::credential_offer::CredentialOffer;
     use crate::issuer::metadata::CredentialConfiguration;
+    use crate::offer::CredentialOffer;
     use crate::profiles::core::profiles::{
         jwt_vc_json_ld, ldp_vc, CoreProfilesCredentialConfiguration, CoreProfilesCredentialRequest,
         CredentialRequestWithFormat,
