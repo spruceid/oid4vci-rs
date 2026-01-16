@@ -1,3 +1,6 @@
+//! Credential Offer types and methods.
+//!
+//! See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4>
 #![allow(clippy::large_enum_variant, deprecated)]
 
 use anyhow::{bail, Context, Result};
@@ -11,41 +14,53 @@ use url::Url;
 
 use crate::{
     http_utils::{check_content_type, MIME_TYPE_JSON},
-    types::{
-        CredentialConfigurationId, CredentialOfferRequest, IssuerState, IssuerUrl,
-        PreAuthorizedCode,
-    },
+    types::{CredentialConfigurationId, CredentialOfferRequest, IssuerUrl},
 };
 
+mod grant;
+
+pub use grant::*;
+
+/// Credential Offer.
+///
+/// Provides the Credential Offer parameters by value, or by reference.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum CredentialOffer {
     Value {
+        /// Object with the Credential Offer parameters.
         credential_offer: CredentialOfferParameters,
     },
+
     Reference {
+        /// URL using the https scheme referencing a resource containing a JSON
+        /// object with the Credential Offer parameters.
         credential_offer_uri: Url,
     },
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(untagged)]
-enum CredentialOfferFlat {
-    Value { credential_offer: String },
-    Reference { credential_offer_uri: Url },
-}
-
 impl CredentialOffer {
+    /// Decodes a Credential Offer from an URL.
+    ///
+    /// In such URL, the `credential_offer` parameter is encoded as a string
+    /// that must be parsed as a JSON object.
     pub fn from_request(uri: CredentialOfferRequest) -> Result<Self> {
+        #[derive(Clone, Debug, Deserialize, Serialize)]
+        #[serde(untagged)]
+        enum EncodedCredentialOffer {
+            Value { credential_offer: String },
+            Reference { credential_offer_uri: Url },
+        }
+
         match serde_path_to_error::deserialize(serde_urlencoded::Deserializer::new(
             form_urlencoded::parse(uri.url().query().unwrap_or_default().as_bytes()),
         ))? {
-            CredentialOfferFlat::Reference {
+            EncodedCredentialOffer::Reference {
                 credential_offer_uri,
             } => Ok(CredentialOffer::Reference {
                 credential_offer_uri,
             }),
-            CredentialOfferFlat::Value { credential_offer } => Ok(CredentialOffer::Value {
+            EncodedCredentialOffer::Value { credential_offer } => Ok(CredentialOffer::Value {
                 credential_offer: serde_json::from_str(
                     &percent_encoding::percent_decode_str(&credential_offer)
                         .decode_utf8()
@@ -56,6 +71,10 @@ impl CredentialOffer {
         }
     }
 
+    /// Resolves this credential offer into its parameters.
+    ///
+    /// This will either return the `credential_offer` value, or dereference the
+    /// `credential_offer_uri` URL.
     pub fn resolve<C>(self, http_client: &C) -> Result<CredentialOfferParameters>
     where
         C: SyncHttpClient,
@@ -77,6 +96,10 @@ impl CredentialOffer {
         Self::handle_response(response, &uri)
     }
 
+    /// Resolves this credential offer into its parameters, asynchronously.
+    ///
+    /// This will either return the `credential_offer` value, or dereference the
+    /// `credential_offer_uri` URL.
     pub async fn resolve_async<'c, C>(self, http_client: &'c C) -> Result<CredentialOfferParameters>
     where
         C: AsyncHttpClient<'c>,
@@ -123,20 +146,37 @@ impl CredentialOffer {
     }
 }
 
+/// Credential Offer Parameters.
+///
+/// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1>
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CredentialOfferParameters {
-    credential_issuer: IssuerUrl,
-    credential_configuration_ids: Vec<CredentialConfigurationId>,
-    grants: Option<CredentialOfferGrants>,
+    /// URL of the Credential Issuer from which the Wallet is requested to
+    /// obtain one or more Credentials.
+    pub credential_issuer: IssuerUrl,
+
+    /// Offered credential configurations.
+    ///
+    /// Each configuration id must match a key in
+    /// [`CredentialIssuerMetadata::credential_configurations_supported`].
+    ///
+    /// This array must not be empty.
+    pub credential_configuration_ids: Vec<CredentialConfigurationId>, // TODO enforce non-emptiness.
+
+    /// Grant Types the Credential Issuer's Authorization Server is prepared to
+    /// process for this Credential Offer.
+    #[serde(default, skip_serializing_if = "CredentialOfferGrants::is_empty")]
+    pub grants: CredentialOfferGrants,
 }
 
 impl CredentialOfferParameters {
+    /// Create new Credential Offer parameters.
     pub fn new(
         credential_issuer: IssuerUrl,
         credential_configuration_ids: Vec<CredentialConfigurationId>,
-        grants: Option<CredentialOfferGrants>,
+        grants: CredentialOfferGrants,
     ) -> Self {
         Self {
             credential_issuer,
@@ -144,141 +184,6 @@ impl CredentialOfferParameters {
             grants,
         }
     }
-
-    pub fn issuer(&self) -> &IssuerUrl {
-        &self.credential_issuer
-    }
-
-    pub fn grants(&self) -> Option<&CredentialOfferGrants> {
-        self.grants.as_ref()
-    }
-
-    pub fn credential_configuration_ids(&self) -> &[CredentialConfigurationId] {
-        &self.credential_configuration_ids
-    }
-
-    pub fn authorization_code_grant(&self) -> Option<&AuthorizationCodeGrant> {
-        self.grants()?.authorization_code()
-    }
-
-    pub fn pre_authorized_code_grant(&self) -> Option<&PreAuthorizedCodeGrant> {
-        self.grants()?.pre_authorized_code()
-    }
-}
-
-#[serde_as]
-#[skip_serializing_none]
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct CredentialOfferGrants {
-    authorization_code: Option<AuthorizationCodeGrant>,
-    #[serde(rename = "urn:ietf:params:oauth:grant-type:pre-authorized_code")]
-    pre_authorized_code: Option<PreAuthorizedCodeGrant>,
-}
-
-impl CredentialOfferGrants {
-    pub fn new(
-        authorization_code: Option<AuthorizationCodeGrant>,
-        pre_authorized_code: Option<PreAuthorizedCodeGrant>,
-    ) -> Self {
-        Self {
-            authorization_code,
-            pre_authorized_code,
-        }
-    }
-    field_getters_setters![
-        pub self [self] ["credential offer grants"] {
-            set_authorization_code -> authorization_code[Option<AuthorizationCodeGrant>],
-            set_pre_authorized_code -> pre_authorized_code[Option<PreAuthorizedCodeGrant>],
-        }
-    ];
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct AuthorizationCodeGrant {
-    issuer_state: Option<IssuerState>,
-    authorization_server: Option<IssuerUrl>,
-}
-
-impl AuthorizationCodeGrant {
-    pub fn new(issuer_state: Option<IssuerState>, authorization_server: Option<IssuerUrl>) -> Self {
-        Self {
-            issuer_state,
-            authorization_server,
-        }
-    }
-    field_getters_setters![
-        pub self [self] ["authorization code grants"] {
-            set_issuer_state -> issuer_state[Option<IssuerState>],
-            set_authorization_server -> authorization_server[Option<IssuerUrl>],
-        }
-    ];
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct PreAuthorizedCodeGrant {
-    #[serde(rename = "pre-authorized_code")]
-    pre_authorized_code: PreAuthorizedCode,
-    tx_code: Option<TxCodeDefinition>,
-    interval: Option<usize>,
-    authorization_server: Option<IssuerUrl>,
-}
-
-impl PreAuthorizedCodeGrant {
-    pub fn new(pre_authorized_code: PreAuthorizedCode) -> Self {
-        Self {
-            pre_authorized_code,
-            tx_code: None,
-            interval: None,
-            authorization_server: None,
-        }
-    }
-    field_getters_setters![
-        pub self [self] ["pre-authorized_code grants"] {
-            set_pre_authorized_code -> pre_authorized_code[PreAuthorizedCode],
-            set_tx_code -> tx_code[Option<TxCodeDefinition>],
-            set_interval -> interval[Option<usize>],
-            set_authorization_server -> authorization_server[Option<IssuerUrl>],
-        }
-    ];
-}
-
-#[derive(Default, Clone, Debug, Deserialize, Serialize)]
-pub enum InputMode {
-    #[default]
-    #[serde(rename = "numeric")]
-    Numeric,
-    #[serde(rename = "text")]
-    Text,
-}
-
-#[serde_as]
-#[skip_serializing_none]
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct TxCodeDefinition {
-    input_mode: Option<InputMode>,
-    length: Option<usize>,
-    description: Option<String>,
-}
-
-impl TxCodeDefinition {
-    pub fn new(
-        input_mode: Option<InputMode>,
-        length: Option<usize>,
-        description: Option<String>,
-    ) -> Self {
-        Self {
-            input_mode,
-            length,
-            description,
-        }
-    }
-    field_getters_setters![
-        pub self [self] ["transaction code value"] {
-            set_input_mode -> input_mode[Option<InputMode>],
-            set_length -> length[Option<usize>],
-            set_description -> description[Option<String>],
-        }
-    ];
 }
 
 #[cfg(test)]

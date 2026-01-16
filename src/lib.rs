@@ -50,10 +50,12 @@ mod test {
         .await
         .unwrap();
 
-        let credential_issuer_metadata =
-            CredentialIssuerMetadata::discover_async(credential_offer.issuer(), &http_client)
-                .await
-                .unwrap();
+        let credential_issuer_metadata = CredentialIssuerMetadata::discover_async(
+            &credential_offer.credential_issuer,
+            &http_client,
+        )
+        .await
+        .unwrap();
 
         let targeted_credentials: Vec<
             CredentialConfiguration<CoreProfilesCredentialConfiguration>,
@@ -62,7 +64,7 @@ mod test {
             .iter()
             .filter(|configuration| {
                 credential_offer
-                    .credential_configuration_ids()
+                    .credential_configuration_ids
                     .contains(configuration.id())
             })
             .cloned()
@@ -70,8 +72,12 @@ mod test {
 
         assert_eq!(targeted_credentials.len(), 1);
 
-        let grant = credential_offer.pre_authorized_code_grant().unwrap();
-        let authorization_server = grant.authorization_server();
+        let grant = credential_offer
+            .grants
+            .pre_authorized_code
+            .as_ref()
+            .unwrap();
+        let authorization_server = grant.authorization_server.as_ref();
 
         let authorization_server_metadata =
             AuthorizationServerMetadata::discover_from_credential_issuer_metadata_async(
@@ -93,9 +99,11 @@ mod test {
         let token_response = client
             .exchange_pre_authorized_code(
                 credential_offer
-                    .pre_authorized_code_grant()
+                    .grants
+                    .pre_authorized_code
+                    .as_ref()
                     .unwrap()
-                    .pre_authorized_code()
+                    .pre_authorized_code
                     .clone(),
             )
             .set_anonymous_client()
