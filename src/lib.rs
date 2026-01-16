@@ -53,7 +53,6 @@ pub mod client;
 pub mod credential;
 pub mod credential_offer;
 pub mod credential_response_encryption;
-mod deny_field;
 pub mod issuer;
 pub mod notification;
 pub mod profiles;

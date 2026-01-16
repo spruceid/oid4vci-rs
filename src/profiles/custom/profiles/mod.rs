@@ -38,7 +38,7 @@ pub enum CustomProfilesAuthorizationDetailsObject {
         #[serde(
             default,
             skip_serializing,
-            deserialize_with = "crate::deny_field::deny_field",
+            deserialize_with = "crate::util::deny_field::deny_field",
             rename = "credential_identifier"
         )]
         _credential_identifier: (),
@@ -50,7 +50,7 @@ pub enum CustomProfilesAuthorizationDetailsObject {
         #[serde(
             default,
             skip_serializing,
-            deserialize_with = "crate::deny_field::deny_field",
+            deserialize_with = "crate::util::deny_field::deny_field",
             rename = "format"
         )]
         _format: (),
@@ -93,7 +93,7 @@ pub enum CustomProfilesCredentialRequest {
         #[serde(
             default,
             skip_serializing,
-            deserialize_with = "crate::deny_field::deny_field",
+            deserialize_with = "crate::util::deny_field::deny_field",
             rename = "credential_identifier"
         )]
         _credential_identifier: (),
@@ -105,7 +105,7 @@ pub enum CustomProfilesCredentialRequest {
         #[serde(
             default,
             skip_serializing,
-            deserialize_with = "crate::deny_field::deny_field",
+            deserialize_with = "crate::util::deny_field::deny_field",
             rename = "format"
         )]
         _format: (),
