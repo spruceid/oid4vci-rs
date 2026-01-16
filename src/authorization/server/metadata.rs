@@ -15,14 +15,15 @@ use crate::{
     util::discoverable::Discoverable,
 };
 
-/// Authorization Server Metadata according to
-/// [RFC8414](https://datatracker.ietf.org/doc/html/rfc8414) with the following modifications:
+/// Authorization Server Metadata.
+///
+/// According to [RFC 8414] with the following modifications:
 /// * new metadata parameter `pre-authorized_grant_anonymous_access_supported` (as per OID4VP);
 /// * `response_types_supported` is now optional (as per OID4VP);
 /// * `token_endpoint` is no longer optional (OID4VP cannot be performed without the token
 ///   endpoint);
 /// * additional parameters from
-///   [OAuth 2.0 Pushed Authorization Requests](https://datatracker.ietf.org/doc/html/rfc9126).
+///   [OAuth 2.0 Pushed Authorization Requests](RFC 9126).
 /// * the following parameters from RFC 8414 are not yet implemented, but may still be accessed via
 ///   `additional_fields`:
 ///   * `token_endpoint_auth_methods_supported`
@@ -36,6 +37,8 @@ use crate::{
 ///   * `introspection_endpoint_auth_methods_supported`
 ///   * `introspection_endpoint_auth_singing_alg_values_supported`
 ///
+/// [RFC 8414]: <https://datatracker.ietf.org/doc/html/rfc8414>
+/// [RFC 9126]: <https://datatracker.ietf.org/doc/html/rfc9126>
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AuthorizationServerMetadata {
     issuer: UriBuf,

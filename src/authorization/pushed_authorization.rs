@@ -266,7 +266,7 @@ mod test {
     use serde_json::json;
 
     use crate::{
-        metadata::AuthorizationServerMetadata,
+        authorization::server::AuthorizationServerMetadata,
         profiles::core::{
             metadata::CredentialIssuerMetadata, profiles::CoreProfilesAuthorizationDetailsObject,
         },

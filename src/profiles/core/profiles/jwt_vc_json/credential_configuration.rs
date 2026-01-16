@@ -55,7 +55,7 @@ impl CredentialDefinition {
 mod test {
     use serde_json::json;
 
-    use crate::issuer::CredentialConfiguration;
+    use crate::issuer::metadata::CredentialConfiguration;
 
     #[test]
     fn roundtrip() {

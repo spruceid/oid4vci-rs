@@ -45,7 +45,7 @@ impl CredentialConfigurationProfile for CredentialConfiguration {}
 
 #[cfg(test)]
 mod test {
-    use crate::issuer::CredentialConfiguration;
+    use crate::issuer::metadata::CredentialConfiguration;
 
     #[test]
     fn roundtrip() {

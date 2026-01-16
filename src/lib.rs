@@ -1,3 +1,50 @@
+//! This library provides a Rust implementation of [OID4VCI draft-13].
+//!
+//! [OID4VCI draft-13]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#name-pre-authorized-code-flow>
+//!
+//! # Protocol Overview
+//!
+//! Here is a simplified overview of the OID4VCI protocol, referencing the
+//! various types and methods implementing it.
+//!
+//! ## Offer
+//!
+//! 1. *Out-of-band credential offer*: Issuer sends a [`CredentialOffer`] to the
+//!    Wallet. This can be done through various methods like a QR-code, deep
+//!    link, etc.
+//! 2. *Issuer metadata resolution*: Wallet fetches the
+//!    [`CredentialIssuerMetadata`]. This object is [`Discoverable`] behind the
+//!    `/.well-known/openid-credential-issuer` endpoint.
+//!
+//! All the code related to Credential Offer is located in the
+//! [`credential_offer`] module.
+//!
+//! [`CredentialOffer`]: crate::credential_offer::CredentialOffer
+//! [`CredentialIssuerMetadata`]: crate::issuer::metadata::CredentialIssuerMetadata
+//! [`Discoverable`]: crate::util::discoverable::Discoverable
+//!
+//! ## Authorization
+//!
+//! 3. *Authorization server resolution*: Wallet fetches the
+//!    [`AuthorizationServerMetadata`]. This object is [`Discoverable`] behind
+//!    the `/.well-known/oauth-authorization-server` endpoint.
+//! 4. Wallet sends an [`AuthorizationRequest`] to the Authorization Server,
+//!    specifying what types of Credential(s) it is ready to be issued.
+//! 5. Authorization Server returns an [`AuthorizationCode`].
+//! 6. Wallet sends a Token Request.
+//! 7. Authorization Server returns a Token Response, with an Access Token.
+//!
+//! All the code related to Authorization is located in the [`authorization`]
+//! module.
+//!
+//! [`AuthorizationServerMetadata`]: crate::authorization::server::metadata::AuthorizationServerMetadata
+//! [`AuthorizationRequest`]: crate::authorization::AuthorizationRequest
+//! [`AuthorizationCode`]: oauth2::AuthorizationCode
+//!
+//! ## Issuance
+//!
+//! 8. Wallet sends a Credential Request to the Issuer, with the Access Token.
+//! 9. Issuer returns a Credential Response, with the Credential(s).
 #[macro_use]
 mod macros;
 
@@ -8,13 +55,9 @@ pub mod credential_offer;
 pub mod credential_response_encryption;
 mod deny_field;
 pub mod issuer;
-pub mod metadata;
 pub mod notification;
-pub mod pre_authorized_code;
 pub mod profiles;
 pub mod proof_of_possession;
-pub mod pushed_authorization;
-pub mod token;
 pub mod types;
 pub mod util;
 
@@ -22,10 +65,10 @@ pub use oauth2;
 
 #[cfg(test)]
 mod test {
+    use crate::authorization::server::metadata::GrantType;
+    use crate::authorization::server::AuthorizationServerMetadata;
     use crate::credential_offer::CredentialOffer;
-    use crate::issuer::CredentialConfiguration;
-    use crate::metadata::authorization_server::GrantType;
-    use crate::metadata::AuthorizationServerMetadata;
+    use crate::issuer::metadata::CredentialConfiguration;
     use crate::profiles::core::profiles::{
         jwt_vc_json_ld, ldp_vc, CoreProfilesCredentialConfiguration, CoreProfilesCredentialRequest,
         CredentialRequestWithFormat,

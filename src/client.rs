@@ -10,15 +10,18 @@ use oauth2::{
 };
 
 use crate::{
-    authorization::AuthorizationRequest,
+    authorization::{
+        pre_authorized_code::PreAuthorizedCodeTokenRequest,
+        pushed_authorization::PushedAuthorizationRequest, server::AuthorizationServerMetadata,
+        token, AuthorizationRequest,
+    },
     credential,
     credential_response_encryption::CredentialResponseEncryptionMetadata,
-    issuer::{CredentialConfiguration, CredentialIssuerMetadata, CredentialIssuerMetadataDisplay},
-    metadata::AuthorizationServerMetadata,
-    pre_authorized_code::PreAuthorizedCodeTokenRequest,
+    issuer::{
+        metadata::{CredentialConfiguration, CredentialIssuerMetadataDisplay},
+        CredentialIssuerMetadata,
+    },
     profiles::Profile,
-    pushed_authorization::PushedAuthorizationRequest,
-    token,
     types::{
         BatchCredentialUrl, CredentialConfigurationId, CredentialUrl, DeferredCredentialUrl,
         ParUrl, PreAuthorizedCode,

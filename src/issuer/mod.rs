@@ -1,3 +1,3 @@
-mod metadata;
+pub mod metadata;
 
-pub use metadata::*;
+pub use metadata::CredentialIssuerMetadata;

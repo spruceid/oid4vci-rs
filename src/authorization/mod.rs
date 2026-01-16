@@ -10,6 +10,11 @@ use crate::{
     types::{IssuerState, UserHint},
 };
 
+pub mod pre_authorized_code;
+pub mod pushed_authorization;
+pub mod server;
+pub mod token;
+
 pub struct AuthorizationRequest<'a> {
     inner: oauth2::AuthorizationRequest<'a>,
 }
@@ -110,7 +115,7 @@ pub enum AuthorizationDetailsObjectType {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use std::collections::HashSet;
 
     use iref::uri;
@@ -118,7 +123,7 @@ mod test {
     use serde_json::json;
 
     use crate::{
-        metadata::AuthorizationServerMetadata,
+        authorization::server::AuthorizationServerMetadata,
         profiles::core::{
             metadata::CredentialIssuerMetadata,
             profiles::{jwt_vc_json, CoreProfilesAuthorizationDetailsObject},
