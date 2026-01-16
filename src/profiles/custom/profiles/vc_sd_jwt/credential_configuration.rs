@@ -43,13 +43,12 @@ impl CredentialConfigurationProfile for CredentialConfiguration {}
 mod test {
     use serde_json::json;
 
-    use crate::metadata::credential_issuer::CredentialConfiguration;
+    use crate::issuer::CredentialConfiguration;
 
     #[test]
     fn roundtrip() {
         let expected_json = json!(
             {
-              "$key$": "SD_JWT_VC_example_in_OpenID4VCI",
               "format": "spruce-vc+sd-jwt",
               "scope": "SD_JWT_VC_example_in_OpenID4VCI",
               "cryptographic_binding_methods_supported": [

@@ -55,13 +55,12 @@ impl CredentialDefinition {
 mod test {
     use serde_json::json;
 
-    use crate::metadata::credential_issuer::CredentialConfiguration;
+    use crate::issuer::CredentialConfiguration;
 
     #[test]
     fn roundtrip() {
         let expected_json = json!(
             {
-                "$key$": "UniversityDegreeCredential",
                 "format": "jwt_vc_json",
                 "scope": "UniversityDegree",
                 "cryptographic_binding_methods_supported": [

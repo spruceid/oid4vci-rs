@@ -1,7 +1,8 @@
+use iref::UriBuf;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-use crate::types::{IssuerUrl, PreAuthorizedCode};
+use crate::types::PreAuthorizedCode;
 
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -13,7 +14,7 @@ pub struct PreAuthorizedCodeGrant {
 
     pub interval: Option<usize>,
 
-    pub authorization_server: Option<IssuerUrl>,
+    pub authorization_server: Option<UriBuf>,
 }
 
 impl PreAuthorizedCodeGrant {
@@ -27,8 +28,7 @@ impl PreAuthorizedCodeGrant {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[derive(Default)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub enum InputMode {
     #[serde(rename = "numeric")]
     #[default]
@@ -36,7 +36,6 @@ pub enum InputMode {
     #[serde(rename = "text")]
     Text,
 }
-
 
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, Serialize)]

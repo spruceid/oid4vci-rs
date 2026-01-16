@@ -1,12 +1,10 @@
 pub mod profiles;
 
 pub mod metadata {
-    use crate::metadata;
-
     use super::profiles::CoreProfilesCredentialConfiguration;
 
     pub type CredentialIssuerMetadata =
-        metadata::CredentialIssuerMetadata<CoreProfilesCredentialConfiguration>;
+        crate::issuer::CredentialIssuerMetadata<CoreProfilesCredentialConfiguration>;
 }
 
 pub mod credential {

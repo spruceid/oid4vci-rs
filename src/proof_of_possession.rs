@@ -15,14 +15,7 @@ const JWS_TYPE: &str = "openid4vci-proof+jwt";
 
 pub type ProofSigningAlgValuesSupported = Vec<ssi::jwk::Algorithm>;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct KeyProofTypesSupported {
-    #[serde(rename = "$key$")]
-    key: KeyProofType,
-    proof_signing_alg_values_supported: Vec<ssi::jwk::Algorithm>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub enum KeyProofType {
     #[serde(rename = "jwt")]
     Jwt,

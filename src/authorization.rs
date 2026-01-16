@@ -1,12 +1,13 @@
 use std::borrow::Cow;
 
+use iref::{Uri, UriBuf};
 use oauth2::{CsrfToken, PkceCodeChallenge};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::{
     profiles::AuthorizationDetailsObjectProfile,
-    types::{IssuerState, IssuerUrl, UserHint},
+    types::{IssuerState, UserHint},
 };
 
 pub struct AuthorizationRequest<'a> {
@@ -52,7 +53,7 @@ impl<'a> AuthorizationRequest<'a> {
         self
     }
 
-    pub fn set_wallet_issuer(mut self, wallet_issuer: &'a IssuerUrl) -> Self {
+    pub fn set_wallet_issuer(mut self, wallet_issuer: &'a Uri) -> Self {
         self.inner = self
             .inner
             .add_extra_param("wallet_issuer", wallet_issuer.as_str());
@@ -78,7 +79,7 @@ where
     #[serde(flatten, bound = "AD: AuthorizationDetailsObjectProfile")]
     additional_profile_fields: AD,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    locations: Vec<IssuerUrl>,
+    locations: Vec<UriBuf>,
 }
 
 impl<AD> AuthorizationDetailsObject<AD>
@@ -96,7 +97,7 @@ where
     field_getters_setters![
         pub self [self] ["authorization detail value"] {
             set_additional_profile_fields -> additional_profile_fields[AD],
-            set_locations -> locations[Vec<IssuerUrl>],
+            set_locations -> locations[Vec<UriBuf>],
         }
     ];
 }
@@ -112,6 +113,7 @@ pub enum AuthorizationDetailsObjectType {
 mod test {
     use std::collections::HashSet;
 
+    use iref::uri;
     use oauth2::{AuthUrl, ClientId, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, TokenUrl};
     use serde_json::json;
 
@@ -223,15 +225,15 @@ mod test {
         // Modifed the code_challenge from the example and added state and removed spaces in authorization_details
         let mut expected_url = Url::try_from("https://server.example.com/authorize?response_type=code&client_id=s6BhdRkqt3&code_challenge=MYdqq2Vt_ZLMAWpXXsjGIrlxrCF2e4ZP4SxDf7cm_tg&code_challenge_method=S256&authorization_details=%5B%7B%22type%22%3A%22openid_credential%22%2C%22format%22%3A%22jwt_vc_json%22%2C%22credential_definition%22%3A%7B%22type%22%3A%5B%22VerifiableCredential%22%2C%22UniversityDegreeCredential%22%5D%7D%7D%5D&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb&state=state").unwrap();
 
-        let issuer = IssuerUrl::new("https://server.example.com".into()).unwrap();
+        let issuer = uri!("https://server.example.com");
 
         let credential_issuer_metadata = CredentialIssuerMetadata::new(
-            issuer.clone(),
+            issuer.to_owned(),
             CredentialUrl::new("https://server.example.com/credential".into()).unwrap(),
         );
 
         let authorization_server_metadata = AuthorizationServerMetadata::new(
-            issuer,
+            issuer.to_owned(),
             TokenUrl::new("https://server.example.com/token".into()).unwrap(),
         )
         .set_authorization_endpoint(Some(

@@ -4,6 +4,7 @@
 #![allow(clippy::large_enum_variant, deprecated)]
 
 use anyhow::{bail, Context, Result};
+use iref::UriBuf;
 use oauth2::{
     http::{self, header::ACCEPT, HeaderValue, Method, StatusCode},
     AsyncHttpClient, SyncHttpClient,
@@ -13,8 +14,8 @@ use serde_with::{serde_as, skip_serializing_none};
 use url::Url;
 
 use crate::{
-    http_utils::{check_content_type, MIME_TYPE_JSON},
-    types::{CredentialConfigurationId, CredentialOfferRequest, IssuerUrl},
+    types::{CredentialConfigurationId, CredentialOfferRequest},
+    util::http::{check_content_type, MIME_TYPE_JSON},
 };
 
 mod grant;
@@ -155,7 +156,7 @@ impl CredentialOffer {
 pub struct CredentialOfferParameters {
     /// URL of the Credential Issuer from which the Wallet is requested to
     /// obtain one or more Credentials.
-    pub credential_issuer: IssuerUrl,
+    pub credential_issuer: UriBuf,
 
     /// Offered credential configurations.
     ///
@@ -174,7 +175,7 @@ pub struct CredentialOfferParameters {
 impl CredentialOfferParameters {
     /// Create new Credential Offer parameters.
     pub fn new(
-        credential_issuer: IssuerUrl,
+        credential_issuer: UriBuf,
         credential_configuration_ids: Vec<CredentialConfigurationId>,
         grants: CredentialOfferGrants,
     ) -> Self {

@@ -1,54 +1,103 @@
 use anyhow::bail;
+use indexmap::IndexMap;
+use iref::{uri_ref, Uri, UriBuf, UriRef};
 use oauth2::Scope;
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, KeyValueMap};
+use serde_with::{serde_as, skip_serializing_none};
 
 use crate::{
     credential_response_encryption::CredentialResponseEncryptionMetadata,
     profiles::CredentialConfigurationProfile,
-    proof_of_possession::KeyProofTypesSupported,
+    proof_of_possession::KeyProofType,
     types::{
         BatchCredentialUrl, CredentialConfigurationId, CredentialUrl, DeferredCredentialUrl,
-        IssuerUrl, LanguageTag, LogoUri, NotificationUrl,
+        LanguageTag, LogoUri, NotificationUrl,
     },
+    util::discoverable::Discoverable,
 };
 
-use super::MetadataDiscovery;
-
-#[serde_as]
+/// Credential Issuer Metadata.
+///
+/// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#section-11.2>
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CredentialIssuerMetadata<CM>
 where
     CM: CredentialConfigurationProfile,
 {
-    credential_issuer: IssuerUrl,
-    authorization_servers: Option<Vec<IssuerUrl>>,
-    credential_endpoint: CredentialUrl,
-    batch_credential_endpoint: Option<BatchCredentialUrl>,
-    deferred_credential_endpoint: Option<DeferredCredentialUrl>,
-    notification_endpoint: Option<NotificationUrl>,
-    credential_response_encryption: Option<CredentialResponseEncryptionMetadata>,
-    credential_identifiers_supported: Option<bool>,
-    signed_metadata: Option<String>,
-    display: Option<Vec<CredentialIssuerMetadataDisplay>>,
-    #[serde(default = "Vec::new", bound = "CM: CredentialConfigurationProfile")]
-    #[serde_as(as = "KeyValueMap<_>")]
-    credential_configurations_supported: Vec<CredentialConfiguration<CM>>,
+    /// Credential Issuer's identifier.
+    pub credential_issuer: UriBuf,
+
+    /// List of OAuth 2.0 Authorization Server (as defined in [RFC8414]) the
+    /// Credential Issuer relies on for authorization.
+    ///
+    /// [RFC8414]: <https://www.rfc-editor.org/info/rfc8414>
+    #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
+    pub authorization_servers: Vec<UriBuf>,
+
+    /// URL of the Credential Issuer's Credential Endpoint.
+    ///
+    /// This URL *must* use the `https` scheme and *may* contain port, path, and
+    /// query parameter components.
+    pub credential_endpoint: CredentialUrl,
+
+    /// DEPRECATED in version 1.0
+    pub batch_credential_endpoint: Option<BatchCredentialUrl>,
+
+    /// URL of the Credential Issuer's Deferred Credential Endpoint.
+    ///
+    /// This URL *must* use the `https` scheme and *may* contain port, path, and
+    /// query parameter components.
+    ///
+    /// If omitted, the Credential Issuer does not support the Deferred
+    /// Credential Endpoint.
+    pub deferred_credential_endpoint: Option<DeferredCredentialUrl>,
+
+    /// URL of the Credential Issuer's Notification Endpoint.
+    ///
+    /// This URL *must* use the `https` scheme and *may* contain port, path, and
+    /// query parameter components.
+    ///
+    /// If omitted, the Credential Issuer does not support the Notification
+    /// Endpoint.
+    pub notification_endpoint: Option<NotificationUrl>,
+
+    /// Information about whether the Credential Issuer supports encryption of
+    /// the Credential and Batch Credential Response on top of TLS.
+    pub credential_response_encryption: Option<CredentialResponseEncryptionMetadata>,
+
+    /// DEPRECATED in version 1.0
+    pub credential_identifiers_supported: Option<bool>,
+
+    /// Credential Issuer Metadata signed as a JWT.
+    pub signed_metadata: Option<String>, // TODO turn that into an actual `JwsString`.
+
+    /// Credential Issuer display properties.
+    #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
+    pub display: Vec<CredentialIssuerMetadataDisplay>,
+
+    /// Specifics of the Credential that the Credential Issuer supports issuance
+    /// of.
+    ///
+    /// List of name/value pairs, where each name is a unique identifier of the
+    /// supported Credential being described.
+    #[serde(bound = "CM: CredentialConfigurationProfile")]
+    pub credential_configurations_supported:
+        IndexMap<CredentialConfigurationId, CredentialConfiguration<CM>>,
 }
 
-impl<CM> MetadataDiscovery for CredentialIssuerMetadata<CM>
+impl<CM> Discoverable for CredentialIssuerMetadata<CM>
 where
     CM: CredentialConfigurationProfile,
 {
-    const METADATA_URL_SUFFIX: &'static str = ".well-known/openid-credential-issuer";
+    const WELL_KNOWN_URI_REF: &UriRef = uri_ref!(".well-known/openid-credential-issuer");
 
-    fn validate(&self, issuer: &IssuerUrl) -> anyhow::Result<()> {
-        if self.credential_issuer() != issuer {
+    fn validate(&self, issuer: &Uri) -> anyhow::Result<()> {
+        if self.credential_issuer != issuer {
             bail!(
                 "unexpected issuer URI `{}` (expected `{}`)",
-                self.credential_issuer().as_str(),
-                issuer.as_str()
+                self.credential_issuer,
+                issuer
             )
         }
         Ok(())
@@ -59,10 +108,10 @@ impl<CM> CredentialIssuerMetadata<CM>
 where
     CM: CredentialConfigurationProfile,
 {
-    pub fn new(credential_issuer: IssuerUrl, credential_endpoint: CredentialUrl) -> Self {
+    pub fn new(credential_issuer: UriBuf, credential_endpoint: CredentialUrl) -> Self {
         Self {
             credential_issuer,
-            authorization_servers: None,
+            authorization_servers: Vec::new(),
             credential_endpoint,
             batch_credential_endpoint: None,
             deferred_credential_endpoint: None,
@@ -70,35 +119,18 @@ where
             credential_response_encryption: None,
             credential_identifiers_supported: None,
             signed_metadata: None,
-            display: None,
-            credential_configurations_supported: vec![],
+            display: Vec::new(),
+            credential_configurations_supported: IndexMap::new(),
         }
     }
-
-    field_getters_setters![
-        pub self [self] ["credential issuer metadata value"] {
-            set_credential_issuer -> credential_issuer[IssuerUrl],
-            set_authorization_servers -> authorization_servers[Option<Vec<IssuerUrl>>],
-            set_credential_endpoint -> credential_endpoint[CredentialUrl],
-            set_batch_credential_endpoint -> batch_credential_endpoint[Option<BatchCredentialUrl>],
-            set_deferred_credential_endpoint -> deferred_credential_endpoint[Option<DeferredCredentialUrl>],
-            set_notification_endpoint -> notification_endpoint[Option<NotificationUrl>],
-            set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryptionMetadata>],
-            set_credential_identifiers_supported -> credential_identifiers_supported[Option<bool>],
-            set_signed_metadata -> signed_metadata[Option<String>],
-            set_display -> display[Option<Vec<CredentialIssuerMetadataDisplay>>],
-            set_credential_configurations_supported -> credential_configurations_supported[Vec<CredentialConfiguration<CM>>],
-        }
-    ];
 }
 
-#[serde_as]
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CredentialIssuerMetadataDisplay {
-    name: Option<String>,
-    locale: Option<LanguageTag>,
-    logo: Option<MetadataDisplayLogo>,
+    pub name: Option<String>,
+    pub locale: Option<LanguageTag>,
+    pub logo: Option<MetadataDisplayLogo>,
 }
 
 impl CredentialIssuerMetadataDisplay {
@@ -109,96 +141,99 @@ impl CredentialIssuerMetadataDisplay {
     ) -> Self {
         Self { name, locale, logo }
     }
-
-    field_getters_setters![
-        pub self [self] ["metadata background image value"] {
-            set_name -> name[Option<String>],
-            set_locale -> locale[Option<LanguageTag>],
-            set_logo -> logo[Option<MetadataDisplayLogo>],
-        }
-    ];
 }
 
-#[serde_as]
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct MetadataDisplayLogo {
-    uri: LogoUri,
-    alt_text: Option<String>,
+    pub uri: LogoUri,
+    pub alt_text: Option<String>,
 }
 
 impl MetadataDisplayLogo {
     pub fn new(uri: LogoUri, alt_text: Option<String>) -> Self {
         Self { uri, alt_text }
     }
-
-    field_getters_setters![
-        pub self [self] ["metadata display logo value"] {
-            set_url -> uri[LogoUri],
-            set_alt_text -> alt_text[Option<String>],
-        }
-    ];
 }
 
-#[serde_as]
+/// Credential Issuer Metadata `credential_configurations_supported` parameter
+/// value.
+///
+/// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#section-11.2.3>
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CredentialConfiguration<CM>
 where
     CM: CredentialConfigurationProfile,
 {
-    #[serde(rename = "$key$")]
-    id: CredentialConfigurationId,
-    scope: Option<Scope>,
-    cryptographic_binding_methods_supported: Option<Vec<CryptographicBindingMethod>>,
-    #[serde_as(as = "Option<KeyValueMap<_>>")]
-    proof_types_supported: Option<Vec<KeyProofTypesSupported>>,
-    display: Option<Vec<CredentialMetadataDisplay>>,
+    /// TODO where is the required `format` parameter?
+
+    /// String identifying the scope value that this Credential Issuer supports
+    /// for this particular Credential.
+    ///
+    /// The value can be the same across multiple
+    /// [`CredentialConfiguration`]s.
+    pub scope: Option<Scope>,
+
+    /// TODO missing optional `credential_signing_alg_values_supported` parameter?
+
+    /// Case sensitive strings that identify the representation of the
+    /// cryptographic key material that the issued Credential is bound to.
+    #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
+    pub cryptographic_binding_methods_supported: Vec<CryptographicBindingMethod>,
+
+    /// Specifics of the key proof(s) that the Credential Issuer supports.
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub proof_types_supported: IndexMap<KeyProofType, KeyProofTypesSupported>,
+
+    /// Display properties of the supported Credential for different languages.
+    #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
+    pub display: Vec<CredentialMetadataDisplay>,
+
+    /// Profile-specific fields.
     #[serde(bound = "CM: CredentialConfigurationProfile")]
     #[serde(flatten)]
-    profile_specific_fields: CM,
+    pub profile_specific_fields: CM,
 }
 
 impl<CM> CredentialConfiguration<CM>
 where
     CM: CredentialConfigurationProfile,
 {
-    pub fn new(id: CredentialConfigurationId, profile_specific_fields: CM) -> Self {
+    pub fn new(profile_specific_fields: CM) -> Self {
         Self {
-            id,
             scope: None,
-            cryptographic_binding_methods_supported: None,
-            proof_types_supported: None,
-            display: None,
+            cryptographic_binding_methods_supported: Vec::new(),
+            proof_types_supported: IndexMap::new(),
+            display: Vec::new(),
             profile_specific_fields,
         }
     }
+}
 
-    field_getters_setters![
-        pub self [self] ["credential metadata value"] {
-            set_id -> id[CredentialConfigurationId],
-            set_scope -> scope[Option<Scope>],
-            set_cryptographic_binding_methods_supported -> cryptographic_binding_methods_supported[Option<Vec<CryptographicBindingMethod>>],
-            set_proof_types_supported -> proof_types_supported[Option<Vec<KeyProofTypesSupported>>],
-            set_display -> display[Option<Vec<CredentialMetadataDisplay>>],
-            set_profile_specific_fields -> profile_specific_fields[CM],
-        }
-    ];
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct KeyProofTypesSupported {
+    pub proof_signing_alg_values_supported: Vec<ssi::jwk::Algorithm>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum CryptographicBindingMethod {
     #[serde(rename = "jwk")]
     Jwk,
+
     #[serde(rename = "cose_key")]
     Cose,
+
     #[serde(rename = "mso")]
     MSO,
+
     #[serde(rename = "did:")]
     Did,
+
     #[cfg(test)]
     #[serde(rename = "did:example")]
     DidExample,
+
     #[serde(untagged)]
     Extension(String),
 }

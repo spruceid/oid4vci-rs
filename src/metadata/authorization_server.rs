@@ -1,4 +1,5 @@
 use anyhow::{bail, Result};
+use iref::{uri_ref, Uri, UriBuf};
 use oauth2::{
     AsyncHttpClient, AuthUrl, IntrospectionUrl, PkceCodeChallengeMethod, ResponseType,
     RevocationUrl, Scope, SyncHttpClient, TokenUrl,
@@ -8,11 +9,11 @@ use serde_json::{Map, Value as Json};
 use tracing::{info, warn};
 
 use crate::{
+    issuer::CredentialIssuerMetadata,
     profiles::CredentialConfigurationProfile,
-    types::{IssuerUrl, JsonWebKeySetUrl, ParUrl, RegistrationUrl, ResponseMode},
+    types::{JsonWebKeySetUrl, ParUrl, RegistrationUrl, ResponseMode},
+    util::discoverable::Discoverable,
 };
-
-use super::{CredentialIssuerMetadata, MetadataDiscovery};
 
 /// Authorization Server Metadata according to
 /// [RFC8414](https://datatracker.ietf.org/doc/html/rfc8414) with the following modifications:
@@ -34,10 +35,10 @@ use super::{CredentialIssuerMetadata, MetadataDiscovery};
 ///   * `revocation_endpoint_auth_singing_alg_values_supported`
 ///   * `introspection_endpoint_auth_methods_supported`
 ///   * `introspection_endpoint_auth_singing_alg_values_supported`
-///   
+///
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AuthorizationServerMetadata {
-    issuer: IssuerUrl,
+    issuer: UriBuf,
     authorization_endpoint: Option<AuthUrl>,
     token_endpoint: TokenUrl,
     jwks_uri: Option<JsonWebKeySetUrl>,
@@ -61,7 +62,7 @@ pub struct AuthorizationServerMetadata {
 }
 
 impl AuthorizationServerMetadata {
-    pub fn new(issuer: IssuerUrl, token_endpoint: TokenUrl) -> Self {
+    pub fn new(issuer: UriBuf, token_endpoint: TokenUrl) -> Self {
         Self {
             issuer,
             authorization_endpoint: Default::default(),
@@ -84,7 +85,7 @@ impl AuthorizationServerMetadata {
 
     field_getters_setters![
         pub self [self] ["authorization server metadata value"] {
-            set_issuer -> issuer[IssuerUrl],
+            set_issuer -> issuer[UriBuf],
             set_authorization_endpoint -> authorization_endpoint[Option<AuthUrl>],
             set_token_endpoint -> token_endpoint[TokenUrl],
             set_jwks_uri -> jwks_uri[Option<JsonWebKeySetUrl>],
@@ -119,7 +120,7 @@ impl AuthorizationServerMetadata {
         http_client: &C,
         credential_issuer_metadata: &CredentialIssuerMetadata<CM>,
         grant_type: Option<&GrantType>,
-        authorization_server: Option<&IssuerUrl>,
+        authorization_server: Option<&Uri>,
     ) -> Result<Self, anyhow::Error>
     where
         C: SyncHttpClient,
@@ -127,7 +128,7 @@ impl AuthorizationServerMetadata {
         CM: CredentialConfigurationProfile,
     {
         let credential_issuer_authorization_server_metadata =
-            Self::discover(credential_issuer_metadata.credential_issuer(), http_client);
+            Self::discover(&credential_issuer_metadata.credential_issuer, http_client);
         let Some(grant_type) = grant_type else {
             // If grants is not present or is empty, the Wallet MUST determine the Grant Types the
             // Credential Issuer's Authorization Server supports using the respective metadata.
@@ -136,34 +137,38 @@ impl AuthorizationServerMetadata {
             return credential_issuer_authorization_server_metadata;
         };
 
-        if let Some(servers) = credential_issuer_metadata.authorization_servers() {
-            // the Wallet can use to identify the Authorization Server to use with this grant type
-            // when authorization_servers parameter in the Credential Issuer metadata has multiple
-            // entries. It MUST NOT be used otherwise.
-            // https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#section-4.1.1-4.1.2.2
-            if let Some(server) = authorization_server {
-                if servers.len() > 1 && servers.contains(server) {
-                    return Self::discover(server, http_client);
-                }
+        // the Wallet can use to identify the Authorization Server to use with this grant type
+        // when authorization_servers parameter in the Credential Issuer metadata has multiple
+        // entries. It MUST NOT be used otherwise.
+        // https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#section-4.1.1-4.1.2.2
+        if let Some(server) = authorization_server {
+            if credential_issuer_metadata.authorization_servers.len() > 1
+                && credential_issuer_metadata
+                    .authorization_servers
+                    .iter()
+                    .any(|uri| uri == server)
+            {
+                return Self::discover(server, http_client);
             }
-            for auth_server in servers {
-                let response = Self::discover(auth_server, http_client);
-                match response {
-                    Ok(response) => {
-                        if response
-                            .grant_types_supported()
-                            .0
-                            .iter()
-                            .any(|gt| gt == grant_type)
-                        {
-                            return Ok(response);
-                        } else {
-                            info!("Auth server not supporting grant type, trying the next one");
-                        }
+        }
+
+        for auth_server in &credential_issuer_metadata.authorization_servers {
+            let response = Self::discover(auth_server, http_client);
+            match response {
+                Ok(response) => {
+                    if response
+                        .grant_types_supported()
+                        .0
+                        .iter()
+                        .any(|gt| gt == grant_type)
+                    {
+                        return Ok(response);
+                    } else {
+                        info!("Auth server not supporting grant type, trying the next one");
                     }
-                    Err(e) => {
-                        warn!("Error fetching auth server metadata, trying the next one: {e:?}");
-                    }
+                }
+                Err(e) => {
+                    warn!("Error fetching auth server metadata, trying the next one: {e:?}");
                 }
             }
         }
@@ -181,7 +186,7 @@ impl AuthorizationServerMetadata {
         http_client: &'c C,
         credential_issuer_metadata: &CredentialIssuerMetadata<CM>,
         grant_type: Option<&GrantType>,
-        authorization_server: Option<&IssuerUrl>,
+        authorization_server: Option<&Uri>,
     ) -> Result<Self, anyhow::Error>
     where
         C: AsyncHttpClient<'c>,
@@ -189,7 +194,7 @@ impl AuthorizationServerMetadata {
         CM: CredentialConfigurationProfile,
     {
         let credential_issuer_authorization_server_metadata =
-            Self::discover_async(credential_issuer_metadata.credential_issuer(), http_client).await;
+            Self::discover_async(&credential_issuer_metadata.credential_issuer, http_client).await;
         let Some(grant_type) = grant_type else {
             // If grants is not present or is empty, the Wallet MUST determine the Grant Types the
             // Credential Issuer's Authorization Server supports using the respective metadata.
@@ -198,34 +203,37 @@ impl AuthorizationServerMetadata {
             return credential_issuer_authorization_server_metadata;
         };
 
-        if let Some(servers) = credential_issuer_metadata.authorization_servers() {
-            // the Wallet can use to identify the Authorization Server to use with this grant type
-            // when authorization_servers parameter in the Credential Issuer metadata has multiple
-            // entries. It MUST NOT be used otherwise.
-            // https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#section-4.1.1-4.1.2.2
-            if let Some(server) = authorization_server {
-                if servers.len() > 1 && servers.contains(server) {
-                    return Self::discover_async(server, http_client).await;
-                }
+        // the Wallet can use to identify the Authorization Server to use with this grant type
+        // when authorization_servers parameter in the Credential Issuer metadata has multiple
+        // entries. It MUST NOT be used otherwise.
+        // https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#section-4.1.1-4.1.2.2
+        if let Some(server) = authorization_server {
+            if credential_issuer_metadata.authorization_servers.len() > 1
+                && credential_issuer_metadata
+                    .authorization_servers
+                    .iter()
+                    .any(|uri| uri == server)
+            {
+                return Self::discover_async(server, http_client).await;
             }
-            for auth_server in servers {
-                let response = Self::discover_async(auth_server, http_client).await;
-                match response {
-                    Ok(response) => {
-                        if response
-                            .grant_types_supported()
-                            .0
-                            .iter()
-                            .any(|gt| gt == grant_type)
-                        {
-                            return Ok(response);
-                        } else {
-                            info!("Auth server not supporting grant type, trying the next one");
-                        }
+        }
+        for auth_server in &credential_issuer_metadata.authorization_servers {
+            let response = Self::discover_async(auth_server, http_client).await;
+            match response {
+                Ok(response) => {
+                    if response
+                        .grant_types_supported()
+                        .0
+                        .iter()
+                        .any(|gt| gt == grant_type)
+                    {
+                        return Ok(response);
+                    } else {
+                        info!("Auth server not supporting grant type, trying the next one");
                     }
-                    Err(e) => {
-                        warn!("Error fetching auth server metadata, trying the next one: {e:?}");
-                    }
+                }
+                Err(e) => {
+                    warn!("Error fetching auth server metadata, trying the next one: {e:?}");
                 }
             }
         }
@@ -235,11 +243,11 @@ impl AuthorizationServerMetadata {
     }
 }
 
-impl MetadataDiscovery for AuthorizationServerMetadata {
-    const METADATA_URL_SUFFIX: &'static str = ".well-known/oauth-authorization-server";
+impl Discoverable for AuthorizationServerMetadata {
+    const WELL_KNOWN_URI_REF: &iref::UriRef = uri_ref!(".well-known/oauth-authorization-server");
 
-    fn validate(&self, issuer: &IssuerUrl) -> Result<()> {
-        if self.issuer() != issuer {
+    fn validate(&self, issuer: &Uri) -> Result<()> {
+        if self.issuer != issuer {
             bail!(
                 "unexpected issuer URI `{}` (expected `{}`)",
                 self.issuer().as_str(),

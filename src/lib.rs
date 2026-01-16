@@ -7,7 +7,7 @@ pub mod credential;
 pub mod credential_offer;
 pub mod credential_response_encryption;
 mod deny_field;
-mod http_utils;
+pub mod issuer;
 pub mod metadata;
 pub mod notification;
 pub mod pre_authorized_code;
@@ -16,21 +16,23 @@ pub mod proof_of_possession;
 pub mod pushed_authorization;
 pub mod token;
 pub mod types;
+pub mod util;
 
 pub use oauth2;
 
 #[cfg(test)]
 mod test {
     use crate::credential_offer::CredentialOffer;
+    use crate::issuer::CredentialConfiguration;
     use crate::metadata::authorization_server::GrantType;
-    use crate::metadata::credential_issuer::CredentialConfiguration;
-    use crate::metadata::{AuthorizationServerMetadata, MetadataDiscovery};
+    use crate::metadata::AuthorizationServerMetadata;
     use crate::profiles::core::profiles::{
         jwt_vc_json_ld, ldp_vc, CoreProfilesCredentialConfiguration, CoreProfilesCredentialRequest,
         CredentialRequestWithFormat,
     };
     use crate::profiles::core::{client::Client, metadata::CredentialIssuerMetadata};
-    use crate::types::CredentialOfferRequest;
+    use crate::types::{CredentialConfigurationId, CredentialOfferRequest};
+    use crate::util::discoverable::Discoverable;
     use oauth2::{ClientId, RedirectUrl, TokenResponse};
     use url::Url;
 
@@ -57,17 +59,14 @@ mod test {
         .await
         .unwrap();
 
-        let targeted_credentials: Vec<
+        let targeted_credentials: Vec<(
+            CredentialConfigurationId,
             CredentialConfiguration<CoreProfilesCredentialConfiguration>,
-        > = credential_issuer_metadata
-            .credential_configurations_supported()
+        )> = credential_issuer_metadata
+            .credential_configurations_supported
             .iter()
-            .filter(|configuration| {
-                credential_offer
-                    .credential_configuration_ids
-                    .contains(configuration.id())
-            })
-            .cloned()
+            .filter(|(id, _)| credential_offer.credential_configuration_ids.contains(id))
+            .map(|(id, configuration)| (id.clone(), configuration.clone()))
             .collect();
 
         assert_eq!(targeted_credentials.len(), 1);
@@ -77,7 +76,7 @@ mod test {
             .pre_authorized_code
             .as_ref()
             .unwrap();
-        let authorization_server = grant.authorization_server.as_ref();
+        let authorization_server = grant.authorization_server.as_deref();
 
         let authorization_server_metadata =
             AuthorizationServerMetadata::discover_from_credential_issuer_metadata_async(
@@ -111,8 +110,8 @@ mod test {
             .await
             .unwrap();
 
-        let credential_configuration = &targeted_credentials[0];
-        let request_inner = match credential_configuration.profile_specific_fields() {
+        let credential_configuration = &targeted_credentials[0].1;
+        let request_inner = match &credential_configuration.profile_specific_fields {
             CoreProfilesCredentialConfiguration::LdpVc(config) => {
                 let credential_definition =
                     ldp_vc::authorization_detail::CredentialDefinition::default()

@@ -1,26 +1,21 @@
+use iref::UriBuf;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-use crate::types::{IssuerState, IssuerUrl};
+use crate::types::IssuerState;
 
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AuthorizationCodeGrant {
-    issuer_state: Option<IssuerState>,
-    authorization_server: Option<IssuerUrl>,
+    pub issuer_state: Option<IssuerState>,
+    pub authorization_server: Option<UriBuf>,
 }
 
 impl AuthorizationCodeGrant {
-    pub fn new(issuer_state: Option<IssuerState>, authorization_server: Option<IssuerUrl>) -> Self {
+    pub fn new(issuer_state: Option<IssuerState>, authorization_server: Option<UriBuf>) -> Self {
         Self {
             issuer_state,
             authorization_server,
         }
     }
-    field_getters_setters![
-        pub self [self] ["authorization code grants"] {
-            set_issuer_state -> issuer_state[Option<IssuerState>],
-            set_authorization_server -> authorization_server[Option<IssuerUrl>],
-        }
-    ];
 }

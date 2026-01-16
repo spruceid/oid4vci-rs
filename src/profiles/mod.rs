@@ -113,10 +113,8 @@ pub mod client {
 }
 
 pub mod metadata {
-    use crate::metadata;
-
     use super::ProfilesCredentialConfiguration;
 
     pub type CredentialIssuerMetadata =
-        metadata::CredentialIssuerMetadata<ProfilesCredentialConfiguration>;
+        crate::issuer::CredentialIssuerMetadata<ProfilesCredentialConfiguration>;
 }

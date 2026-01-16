@@ -1,5 +1,7 @@
 use std::marker::PhantomData;
 
+use indexmap::IndexMap;
+use iref::UriBuf;
 use oauth2::{
     basic::{BasicErrorResponse, BasicRevocationErrorResponse, BasicTokenIntrospectionResponse},
     AccessToken, AuthUrl, AuthorizationCode, ClientId, CodeTokenRequest, ConfigurationError,
@@ -11,17 +13,15 @@ use crate::{
     authorization::AuthorizationRequest,
     credential,
     credential_response_encryption::CredentialResponseEncryptionMetadata,
-    metadata::{
-        credential_issuer::{CredentialConfiguration, CredentialIssuerMetadataDisplay},
-        AuthorizationServerMetadata, CredentialIssuerMetadata,
-    },
+    issuer::{CredentialConfiguration, CredentialIssuerMetadata, CredentialIssuerMetadataDisplay},
+    metadata::AuthorizationServerMetadata,
     pre_authorized_code::PreAuthorizedCodeTokenRequest,
     profiles::Profile,
     pushed_authorization::PushedAuthorizationRequest,
     token,
     types::{
-        BatchCredentialUrl, CredentialUrl, DeferredCredentialUrl, IssuerUrl, ParUrl,
-        PreAuthorizedCode,
+        BatchCredentialUrl, CredentialConfigurationId, CredentialUrl, DeferredCredentialUrl,
+        ParUrl, PreAuthorizedCode,
     },
 };
 
@@ -53,14 +53,15 @@ where
         EndpointNotSet,
         EndpointSet,
     >,
-    issuer: IssuerUrl,
+    issuer: UriBuf,
     credential_endpoint: CredentialUrl,
     par_auth_url: Option<ParUrl>,
     batch_credential_endpoint: Option<BatchCredentialUrl>,
     deferred_credential_endpoint: Option<DeferredCredentialUrl>,
     credential_response_encryption: Option<CredentialResponseEncryptionMetadata>,
-    credential_configurations_supported: Vec<CredentialConfiguration<C::CredentialConfiguration>>,
-    display: Option<Vec<CredentialIssuerMetadataDisplay>>,
+    credential_configurations_supported:
+        IndexMap<CredentialConfigurationId, CredentialConfiguration<C::CredentialConfiguration>>,
+    display: Vec<CredentialIssuerMetadataDisplay>,
 }
 
 impl<C> Client<C>
@@ -69,13 +70,13 @@ where
 {
     field_getters_setters![
         pub self [self] ["client configuration value"] {
-            set_issuer -> issuer[IssuerUrl],
+            set_issuer -> issuer[UriBuf],
             set_credential_endpoint -> credential_endpoint[CredentialUrl],
             set_batch_credential_endpoint -> batch_credential_endpoint[Option<BatchCredentialUrl>],
             set_deferred_credential_endpoint -> deferred_credential_endpoint[Option<DeferredCredentialUrl>],
             set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryptionMetadata>],
-            set_credential_configurations_supported -> credential_configurations_supported[Vec<CredentialConfiguration<C::CredentialConfiguration>>],
-            set_display -> display[Option<Vec<CredentialIssuerMetadataDisplay>>],
+            set_credential_configurations_supported -> credential_configurations_supported[IndexMap<CredentialConfigurationId, CredentialConfiguration<C::CredentialConfiguration>>],
+            set_display -> display[Vec<CredentialIssuerMetadataDisplay>],
         }
     ];
 
@@ -94,24 +95,22 @@ where
 
         Self {
             inner,
-            issuer: credential_issuer_metadata.credential_issuer().clone(),
-            credential_endpoint: credential_issuer_metadata.credential_endpoint().clone(),
+            issuer: credential_issuer_metadata.credential_issuer.clone(),
+            credential_endpoint: credential_issuer_metadata.credential_endpoint.clone(),
             par_auth_url: authorization_metadata
                 .pushed_authorization_request_endpoint()
                 .cloned(),
-            batch_credential_endpoint: credential_issuer_metadata
-                .batch_credential_endpoint()
-                .cloned(),
+            batch_credential_endpoint: credential_issuer_metadata.batch_credential_endpoint.clone(),
             deferred_credential_endpoint: credential_issuer_metadata
-                .deferred_credential_endpoint()
-                .cloned(),
-            credential_response_encryption: credential_issuer_metadata
-                .credential_response_encryption()
-                .cloned(),
-            credential_configurations_supported: credential_issuer_metadata
-                .credential_configurations_supported()
+                .deferred_credential_endpoint
                 .clone(),
-            display: credential_issuer_metadata.display().cloned(),
+            credential_response_encryption: credential_issuer_metadata
+                .credential_response_encryption
+                .clone(),
+            credential_configurations_supported: credential_issuer_metadata
+                .credential_configurations_supported
+                .clone(),
+            display: credential_issuer_metadata.display.clone(),
         }
     }
 
@@ -178,7 +177,7 @@ where
         profile_fields: C::CredentialRequest,
     ) -> credential::RequestBuilder<C::CredentialRequest> {
         let body = credential::Request::new(profile_fields);
-        credential::RequestBuilder::new(body, self.credential_endpoint().clone(), access_token)
+        credential::RequestBuilder::new(body, self.credential_endpoint.clone(), access_token)
     }
 
     pub fn batch_request_credential(
@@ -186,7 +185,7 @@ where
         access_token: AccessToken,
         profile_fields: Vec<C::CredentialRequest>,
     ) -> Result<credential::BatchRequestBuilder<C::CredentialRequest>, Error> {
-        let Some(endpoint) = self.batch_credential_endpoint() else {
+        let Some(endpoint) = &self.batch_credential_endpoint else {
             return Err(Error::BcrUnsupported);
         };
         let body = credential::BatchRequest::new(

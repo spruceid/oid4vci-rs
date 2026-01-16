@@ -321,23 +321,6 @@ macro_rules! new_url_type {
 }
 
 new_url_type![
-    /// Base URL of the [Credential] Issuer.
-    IssuerUrl
-    impl {
-        /// Parse a string as a URL, with this URL as the base URL.
-        ///
-        /// See [`Url::parse`].
-        pub fn join(&self, suffix: &str) -> Result<Url, url::ParseError> {
-            if let Some('/') = self.1.chars().next_back() {
-                Url::parse(&(self.1.clone() + suffix))
-            } else {
-                Url::parse(&(self.1.clone() + "/" + suffix))
-            }
-        }
-    }
-];
-
-new_url_type![
     /// The credential offer request as a URL, as represented in a QR code or deep link.
     CredentialOfferRequest
     impl {

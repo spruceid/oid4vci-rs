@@ -45,13 +45,12 @@ impl CredentialConfigurationProfile for CredentialConfiguration {}
 
 #[cfg(test)]
 mod test {
-    use crate::metadata::credential_issuer::CredentialConfiguration;
+    use crate::issuer::CredentialConfiguration;
 
     #[test]
     fn roundtrip() {
         let expected_json = serde_json::json!(
             {
-                "$key$": "org.iso.18013.5.1.mDL",
                 "format": "mso_mdoc",
                 "doctype": "org.iso.18013.5.1.mDL",
                 "cryptographic_binding_methods_supported": [

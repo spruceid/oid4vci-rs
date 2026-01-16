@@ -14,8 +14,8 @@ use serde::de::DeserializeOwned;
 use url::Url;
 
 use crate::{
-    http_utils::{MIME_TYPE_FORM_URLENCODED, MIME_TYPE_JSON},
     types::{PreAuthorizedCode, TxCode},
+    util::http::{MIME_TYPE_FORM_URLENCODED, MIME_TYPE_JSON},
 };
 
 /// A request to exchange an authorization code for an access token.

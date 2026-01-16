@@ -3,10 +3,11 @@ use std::{borrow::Cow, collections::HashMap, future::Future};
 use crate::{
     authorization::{AuthorizationDetailsObject, AuthorizationRequest},
     credential::RequestError,
-    http_utils::{content_type_has_essence, MIME_TYPE_FORM_URLENCODED, MIME_TYPE_JSON},
     profiles::AuthorizationDetailsObjectProfile,
-    types::{IssuerState, IssuerUrl, Nonce, ParUrl, UserHint},
+    types::{IssuerState, Nonce, ParUrl, UserHint},
+    util::http::{content_type_has_essence, MIME_TYPE_FORM_URLENCODED, MIME_TYPE_JSON},
 };
+use iref::{Uri, UriBuf};
 use oauth2::{
     http::{
         self,
@@ -52,7 +53,7 @@ struct ParAuthParams {
     client_assertion: Option<String>,
     client_assertion_type: Option<String>,
     authorization_details: Option<String>,
-    wallet_issuer: Option<IssuerUrl>,
+    wallet_issuer: Option<UriBuf>,
     user_hint: Option<String>,
     issuer_state: Option<CsrfToken>,
     #[serde(flatten)]
@@ -234,7 +235,7 @@ impl<'a> PushedAuthorizationRequest<'a> {
         self
     }
 
-    pub fn set_wallet_issuer(mut self, wallet_issuer: &'a IssuerUrl) -> Self {
+    pub fn set_wallet_issuer(mut self, wallet_issuer: &'a Uri) -> Self {
         self.inner = self.inner.set_wallet_issuer(wallet_issuer);
         self
     }
@@ -260,6 +261,7 @@ impl<'a> PushedAuthorizationRequest<'a> {
 #[cfg(test)]
 mod test {
     use assert_json_diff::assert_json_eq;
+    use iref::uri;
     use oauth2::{AuthUrl, ClientId, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, TokenUrl};
     use serde_json::json;
 
@@ -285,15 +287,15 @@ mod test {
             "authorization_details": "[]",
         });
 
-        let issuer = IssuerUrl::new("https://server.example.com".into()).unwrap();
+        let issuer = uri!("https://server.example.com");
 
         let credential_issuer_metadata = CredentialIssuerMetadata::new(
-            issuer.clone(),
+            issuer.to_owned(),
             CredentialUrl::new("https://server.example.com/credential".into()).unwrap(),
         );
 
         let authorization_server_metadata = AuthorizationServerMetadata::new(
-            issuer,
+            issuer.to_owned(),
             TokenUrl::new("https://server.example.com/token".into()).unwrap(),
         )
         .set_authorization_endpoint(Some(

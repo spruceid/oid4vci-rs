@@ -13,10 +13,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     credential_response_encryption::CredentialResponseEncryption,
-    http_utils::{auth_bearer, content_type_has_essence, MIME_TYPE_JSON},
     profiles::{CredentialRequestProfile, CredentialResponseProfile},
     proof_of_possession::Proof,
     types::{BatchCredentialUrl, CredentialUrl, Nonce},
+    util::http::{auth_bearer, content_type_has_essence, MIME_TYPE_JSON},
 };
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

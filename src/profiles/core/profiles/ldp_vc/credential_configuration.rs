@@ -65,16 +65,12 @@ impl CredentialDefinition {
 mod test {
     use serde_json::json;
 
-    use crate::{
-        metadata::credential_issuer::CredentialConfiguration,
-        profiles::core::profiles::ldp_vc::Format,
-    };
+    use crate::{issuer::CredentialConfiguration, profiles::core::profiles::ldp_vc::Format};
 
     #[test]
     fn roundtrip() {
         let expected_json = json!(
             {
-                "$key$": "UniversityDegreeCredential_LDP_VC",
                 "format": "ldp_vc",
                 "cryptographic_binding_methods_supported": [
                     "did:example"
