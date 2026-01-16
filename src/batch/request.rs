@@ -11,49 +11,49 @@ use oauth2::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    batch::response::BatchResponse,
+    batch::response::BatchCredentialResponse,
     profiles::CredentialRequestProfile,
     proof_of_possession::Proof,
-    request::{Request, RequestError},
+    request::{CredentialRequest, CredentialRequestError},
     types::BatchCredentialUrl,
     util::http::{auth_bearer, content_type_has_essence, MIME_TYPE_JSON},
 };
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct BatchRequest<CR>
+pub struct BatchCredentialRequest<CR>
 where
     CR: CredentialRequestProfile,
 {
     #[serde(bound = "CR: CredentialRequestProfile")]
-    credential_requests: Vec<Request<CR>>,
+    credential_requests: Vec<CredentialRequest<CR>>,
 }
 
-impl<CR> BatchRequest<CR>
+impl<CR> BatchCredentialRequest<CR>
 where
     CR: CredentialRequestProfile,
 {
-    pub fn new(credential_requests: Vec<Request<CR>>) -> Self {
+    pub fn new(credential_requests: Vec<CredentialRequest<CR>>) -> Self {
         Self {
             credential_requests,
         }
     }
 }
 
-pub struct BatchRequestBuilder<CR>
+pub struct BatchCredentialRequestBuilder<CR>
 where
     CR: CredentialRequestProfile,
 {
-    body: BatchRequest<CR>,
+    body: BatchCredentialRequest<CR>,
     url: BatchCredentialUrl,
     access_token: AccessToken,
 }
 
-impl<CR> BatchRequestBuilder<CR>
+impl<CR> BatchCredentialRequestBuilder<CR>
 where
     CR: CredentialRequestProfile,
 {
     pub(crate) fn new(
-        body: BatchRequest<CR>,
+        body: BatchCredentialRequest<CR>,
         url: BatchCredentialUrl,
         access_token: AccessToken,
     ) -> Self {
@@ -67,14 +67,14 @@ where
     pub fn set_proofs<RE>(
         mut self,
         proofs_of_possession: Vec<Proof>,
-    ) -> Result<Self, RequestError<RE>>
+    ) -> Result<Self, CredentialRequestError<RE>>
     where
         RE: std::error::Error + 'static,
     {
         let req_count = self.body.credential_requests.len();
         let pop_count = proofs_of_possession.len();
         if req_count != pop_count {
-            return Err(RequestError::Other(format!(
+            return Err(CredentialRequestError::Other(format!(
                 "invalid proof count: expected {req_count}; found {pop_count}"
             )));
         }
@@ -89,15 +89,18 @@ where
     pub fn request<C>(
         self,
         http_client: &C,
-    ) -> Result<BatchResponse<CR::Response>, RequestError<<C as SyncHttpClient>::Error>>
+    ) -> Result<
+        BatchCredentialResponse<CR::Response>,
+        CredentialRequestError<<C as SyncHttpClient>::Error>,
+    >
     where
         C: SyncHttpClient,
     {
         http_client
             .call(self.prepare_request().map_err(|err| {
-                RequestError::Other(format!("failed to prepare request: {err:?}"))
+                CredentialRequestError::Other(format!("failed to prepare request: {err:?}"))
             })?)
-            .map_err(RequestError::Request)
+            .map_err(CredentialRequestError::Request)
             .and_then(|http_response| self.credential_response(http_response))
     }
 
@@ -106,8 +109,8 @@ where
         http_client: &'c C,
     ) -> impl Future<
         Output = Result<
-            BatchResponse<CR::Response>,
-            RequestError<<C as AsyncHttpClient<'c>>::Error>,
+            BatchCredentialResponse<CR::Response>,
+            CredentialRequestError<<C as AsyncHttpClient<'c>>::Error>,
         >,
     > + 'c
     where
@@ -117,16 +120,16 @@ where
         Box::pin(async move {
             let http_response = http_client
                 .call(self.prepare_request().map_err(|err| {
-                    RequestError::Other(format!("failed to prepare request: {err:?}"))
+                    CredentialRequestError::Other(format!("failed to prepare request: {err:?}"))
                 })?)
                 .await
-                .map_err(RequestError::Request)?;
+                .map_err(CredentialRequestError::Request)?;
 
             self.credential_response(http_response)
         })
     }
 
-    fn prepare_request(&self) -> Result<HttpRequest, RequestError<http::Error>> {
+    fn prepare_request(&self) -> Result<HttpRequest, CredentialRequestError<http::Error>> {
         let (auth_header, auth_value) = auth_bearer(&self.access_token);
         http::Request::builder()
             .uri(self.url.to_string())
@@ -134,20 +137,23 @@ where
             .header(CONTENT_TYPE, HeaderValue::from_static(MIME_TYPE_JSON))
             .header(ACCEPT, HeaderValue::from_static(MIME_TYPE_JSON))
             .header(auth_header, auth_value)
-            .body(serde_json::to_vec(&self.body).map_err(|e| RequestError::Other(e.to_string()))?)
-            .map_err(RequestError::Request)
+            .body(
+                serde_json::to_vec(&self.body)
+                    .map_err(|e| CredentialRequestError::Other(e.to_string()))?,
+            )
+            .map_err(CredentialRequestError::Request)
     }
 
     fn credential_response<RE>(
         self,
         http_response: HttpResponse,
-    ) -> Result<BatchResponse<CR::Response>, RequestError<RE>>
+    ) -> Result<BatchCredentialResponse<CR::Response>, CredentialRequestError<RE>>
     where
         RE: std::error::Error + 'static,
     {
         // TODO status 202 if deferred
         if http_response.status() != StatusCode::OK {
-            return Err(RequestError::Response(
+            return Err(CredentialRequestError::Response(
                 http_response.status(),
                 http_response.body().to_owned(),
                 "unexpected HTTP status code".to_string(),
@@ -164,9 +170,9 @@ where
                 serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_slice(
                     http_response.body(),
                 ))
-                .map_err(RequestError::Parse)
+                .map_err(CredentialRequestError::Parse)
             }
-            ref content_type => Err(RequestError::Response(
+            ref content_type => Err(CredentialRequestError::Response(
                 http_response.status(),
                 http_response.body().to_owned(),
                 format!("unexpected response Content-Type: `{:?}`", content_type),

@@ -10,8 +10,9 @@ pub mod metadata {
 pub mod credential {
     use super::profiles::CoreProfilesCredentialRequest;
 
-    pub type Request = crate::request::Request<CoreProfilesCredentialRequest>;
-    pub type BatchRequest = crate::batch::request::BatchRequest<CoreProfilesCredentialRequest>;
+    pub type Request = crate::request::CredentialRequest<CoreProfilesCredentialRequest>;
+    pub type BatchRequest =
+        crate::batch::request::BatchCredentialRequest<CoreProfilesCredentialRequest>;
 }
 
 pub mod authorization {

@@ -3,7 +3,7 @@ use std::{borrow::Cow, collections::HashMap, future::Future};
 use crate::{
     authorization::{AuthorizationDetailsObject, AuthorizationRequest},
     profiles::AuthorizationDetailsObjectProfile,
-    request::RequestError,
+    request::CredentialRequestError,
     types::{IssuerState, Nonce, ParUrl, UserHint},
     util::http::{content_type_has_essence, MIME_TYPE_FORM_URLENCODED, MIME_TYPE_JSON},
 };
@@ -88,19 +88,19 @@ impl<'a> PushedAuthorizationRequest<'a> {
     pub fn request<C>(
         self,
         http_client: &C,
-    ) -> Result<(url::Url, CsrfToken), RequestError<<C as SyncHttpClient>::Error>>
+    ) -> Result<(url::Url, CsrfToken), CredentialRequestError<<C as SyncHttpClient>::Error>>
     where
         C: SyncHttpClient,
     {
         let mut auth_url = self.auth_url.url().clone();
 
-        let (http_request, req_body, token) = self
-            .prepare_request()
-            .map_err(|err| RequestError::Other(format!("failed to prepare request: {err:?}")))?;
+        let (http_request, req_body, token) = self.prepare_request().map_err(|err| {
+            CredentialRequestError::Other(format!("failed to prepare request: {err:?}"))
+        })?;
 
         let http_response = http_client
             .call(http_request)
-            .map_err(RequestError::Request)?;
+            .map_err(CredentialRequestError::Request)?;
 
         let parsed_response = Self::parse_response(http_response)?;
 
@@ -119,7 +119,10 @@ impl<'a> PushedAuthorizationRequest<'a> {
         self,
         http_client: &'c C,
     ) -> impl Future<
-        Output = Result<(url::Url, CsrfToken), RequestError<<C as AsyncHttpClient<'c>>::Error>>,
+        Output = Result<
+            (url::Url, CsrfToken),
+            CredentialRequestError<<C as AsyncHttpClient<'c>>::Error>,
+        >,
     > + 'c
     where
         'a: 'c,
@@ -129,13 +132,13 @@ impl<'a> PushedAuthorizationRequest<'a> {
             let mut auth_url = self.auth_url.url().clone();
 
             let (http_request, req_body, token) = self.prepare_request().map_err(|err| {
-                RequestError::Other(format!("failed to prepare request: {err:?}"))
+                CredentialRequestError::Other(format!("failed to prepare request: {err:?}"))
             })?;
 
             let http_response = http_client
                 .call(http_request)
                 .await
-                .map_err(RequestError::Request)?;
+                .map_err(CredentialRequestError::Request)?;
 
             let parsed_response = Self::parse_response(http_response)?;
 
@@ -153,11 +156,11 @@ impl<'a> PushedAuthorizationRequest<'a> {
 
     fn prepare_request(
         self,
-    ) -> Result<(HttpRequest, ParAuthParams, CsrfToken), RequestError<http::Error>> {
+    ) -> Result<(HttpRequest, ParAuthParams, CsrfToken), CredentialRequestError<http::Error>> {
         let (url, token) = self.inner.url();
 
         let body = serde_urlencoded::from_str::<ParAuthParams>(url.query().unwrap_or_default())
-            .map_err(|_| RequestError::Other("failed parsing url".to_string()))?;
+            .map_err(|_| CredentialRequestError::Other("failed parsing url".to_string()))?;
 
         let request = http::Request::builder()
             .uri(self.par_auth_url.to_string())
@@ -170,20 +173,23 @@ impl<'a> PushedAuthorizationRequest<'a> {
             .body(
                 serde_urlencoded::to_string(&body)
                     .map_err(|e| {
-                        RequestError::Other(format!("unable to encode request body: {}", e))
+                        CredentialRequestError::Other(format!(
+                            "unable to encode request body: {}",
+                            e
+                        ))
                     })?
                     .as_bytes()
                     .to_vec(),
             )
-            .map_err(RequestError::Request)?;
+            .map_err(CredentialRequestError::Request)?;
         Ok((request, body, token))
     }
 
     fn parse_response<RE: std::error::Error>(
         http_response: http::Response<Vec<u8>>,
-    ) -> Result<PushedAuthorizationResponse, RequestError<RE>> {
+    ) -> Result<PushedAuthorizationResponse, CredentialRequestError<RE>> {
         if http_response.status() != StatusCode::OK {
-            return Err(RequestError::Response(
+            return Err(CredentialRequestError::Response(
                 http_response.status(),
                 http_response.body().to_owned(),
                 "unexpected HTTP status code".to_string(),
@@ -200,9 +206,9 @@ impl<'a> PushedAuthorizationRequest<'a> {
                 serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_slice(
                     &http_response.body().to_owned(),
                 ))
-                .map_err(RequestError::Parse)
+                .map_err(CredentialRequestError::Parse)
             }
-            ref content_type => Err(RequestError::Response(
+            ref content_type => Err(CredentialRequestError::Response(
                 http_response.status(),
                 http_response.body().to_owned(),
                 format!("unexpected response Content-Type: `{:?}`", content_type),

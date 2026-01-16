@@ -56,7 +56,7 @@ mod test {
 
     use crate::{
         profiles::core::profiles::{ldp_vc::Format, CoreProfilesCredentialRequest},
-        request::Request,
+        request::CredentialRequest,
     };
 
     #[test]
@@ -107,7 +107,7 @@ mod test {
             }
         );
 
-        let credential_request: Request<super::CredentialRequestWithFormat<Format>> =
+        let credential_request: CredentialRequest<super::CredentialRequestWithFormat<Format>> =
             serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(
                 &serde_json::to_string(&expected_json).unwrap(),
             ))
@@ -157,7 +157,7 @@ mod test {
             }
         );
 
-        let credential_request: Request<CoreProfilesCredentialRequest> =
+        let credential_request: CredentialRequest<CoreProfilesCredentialRequest> =
             serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(
                 &serde_json::to_string(&expected_json).unwrap(),
             ))

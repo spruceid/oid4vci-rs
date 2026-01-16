@@ -47,7 +47,10 @@ module.
 
 ### Issuance
 
-8. Wallet sends a Credential Request to the Issuer, with the Access Token.
-9. Issuer returns a Credential Response, with the Credential(s).
+8. Wallet sends a [`CredentialRequest`] to the Issuer, with the Access Token.
+9. Issuer returns a [`CredentialResponse`], with the Credential(s).
+
+[`CredentialRequest`]: https://docs.rs/oid4vci/latest/oid4vci/request/struct.CredentialRequest.html
+[`CredentialResponse`]: https://docs.rs/oid4vci/latest/oid4vci/response/struct.CredentialResponse.html
 
 <!-- cargo-rdme end -->

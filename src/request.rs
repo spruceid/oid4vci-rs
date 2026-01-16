@@ -14,14 +14,14 @@ use crate::{
     encryption::CredentialResponseEncryption,
     profiles::CredentialRequestProfile,
     proof_of_possession::Proof,
-    response::Response,
+    response::CredentialResponse,
     types::CredentialUrl,
     util::http::{auth_bearer, content_type_has_essence, MIME_TYPE_JSON},
 };
 
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
-pub enum RequestError<RE>
+pub enum CredentialRequestError<RE>
 where
     RE: std::error::Error + 'static,
 {
@@ -36,7 +36,7 @@ where
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct Request<CR>
+pub struct CredentialRequest<CR>
 where
     CR: CredentialRequestProfile,
 {
@@ -50,7 +50,7 @@ where
     pub additional_profile_fields: CR,
 }
 
-impl<CR> Request<CR>
+impl<CR> CredentialRequest<CR>
 where
     CR: CredentialRequestProfile,
 {
@@ -63,20 +63,24 @@ where
     }
 }
 
-pub struct RequestBuilder<CR>
+pub struct CredentialRequestBuilder<CR>
 where
     CR: CredentialRequestProfile,
 {
-    body: Request<CR>,
+    body: CredentialRequest<CR>,
     url: CredentialUrl,
     access_token: AccessToken,
 }
 
-impl<CR> RequestBuilder<CR>
+impl<CR> CredentialRequestBuilder<CR>
 where
     CR: CredentialRequestProfile,
 {
-    pub(crate) fn new(body: Request<CR>, url: CredentialUrl, access_token: AccessToken) -> Self {
+    pub(crate) fn new(
+        body: CredentialRequest<CR>,
+        url: CredentialUrl,
+        access_token: AccessToken,
+    ) -> Self {
         Self {
             body,
             url,
@@ -117,15 +121,18 @@ where
     pub fn request<C>(
         self,
         http_client: &C,
-    ) -> Result<Response<CR::Response>, RequestError<<C as SyncHttpClient>::Error>>
+    ) -> Result<
+        CredentialResponse<CR::Response>,
+        CredentialRequestError<<C as SyncHttpClient>::Error>,
+    >
     where
         C: SyncHttpClient,
     {
         http_client
             .call(self.prepare_request().map_err(|err| {
-                RequestError::Other(format!("failed to prepare request: {err:?}"))
+                CredentialRequestError::Other(format!("failed to prepare request: {err:?}"))
             })?)
-            .map_err(RequestError::Request)
+            .map_err(CredentialRequestError::Request)
             .and_then(|http_response| self.credential_response(http_response))
     }
 
@@ -133,7 +140,10 @@ where
         self,
         http_client: &'c C,
     ) -> impl Future<
-        Output = Result<Response<CR::Response>, RequestError<<C as AsyncHttpClient<'c>>::Error>>,
+        Output = Result<
+            CredentialResponse<CR::Response>,
+            CredentialRequestError<<C as AsyncHttpClient<'c>>::Error>,
+        >,
     > + 'c
     where
         Self: 'c,
@@ -142,16 +152,16 @@ where
         Box::pin(async move {
             let http_response = http_client
                 .call(self.prepare_request().map_err(|err| {
-                    RequestError::Other(format!("failed to prepare request: {err:?}"))
+                    CredentialRequestError::Other(format!("failed to prepare request: {err:?}"))
                 })?)
                 .await
-                .map_err(RequestError::Request)?;
+                .map_err(CredentialRequestError::Request)?;
 
             self.credential_response(http_response)
         })
     }
 
-    fn prepare_request(&self) -> Result<HttpRequest, RequestError<http::Error>> {
+    fn prepare_request(&self) -> Result<HttpRequest, CredentialRequestError<http::Error>> {
         let (auth_header, auth_value) = auth_bearer(&self.access_token);
         http::Request::builder()
             .uri(self.url.to_string())
@@ -159,20 +169,23 @@ where
             .header(CONTENT_TYPE, HeaderValue::from_static(MIME_TYPE_JSON))
             .header(ACCEPT, HeaderValue::from_static(MIME_TYPE_JSON))
             .header(auth_header, auth_value)
-            .body(serde_json::to_vec(&self.body).map_err(|e| RequestError::Other(e.to_string()))?)
-            .map_err(RequestError::Request)
+            .body(
+                serde_json::to_vec(&self.body)
+                    .map_err(|e| CredentialRequestError::Other(e.to_string()))?,
+            )
+            .map_err(CredentialRequestError::Request)
     }
 
     fn credential_response<RE>(
         self,
         http_response: HttpResponse,
-    ) -> Result<Response<CR::Response>, RequestError<RE>>
+    ) -> Result<CredentialResponse<CR::Response>, CredentialRequestError<RE>>
     where
         RE: std::error::Error + 'static,
     {
         // TODO status 202 if deferred
         if http_response.status() != StatusCode::OK {
-            return Err(RequestError::Response(
+            return Err(CredentialRequestError::Response(
                 http_response.status(),
                 http_response.body().to_owned(),
                 "unexpected HTTP status code".to_string(),
@@ -189,9 +202,9 @@ where
                 serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_slice(
                     http_response.body(),
                 ))
-                .map_err(RequestError::Parse)
+                .map_err(CredentialRequestError::Parse)
             }
-            ref content_type => Err(RequestError::Response(
+            ref content_type => Err(CredentialRequestError::Response(
                 http_response.status(),
                 http_response.body().to_owned(),
                 format!("unexpected response Content-Type: `{:?}`", content_type),

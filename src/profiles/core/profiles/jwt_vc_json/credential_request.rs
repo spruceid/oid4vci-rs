@@ -46,7 +46,9 @@ impl CredentialRequestProfile for CredentialRequest {
 mod test {
     use serde_json::json;
 
-    use crate::{profiles::core::profiles::CoreProfilesCredentialRequest, request::Request};
+    use crate::{
+        profiles::core::profiles::CoreProfilesCredentialRequest, request::CredentialRequest,
+    };
 
     #[test]
     fn roundtrip_with_format() {
@@ -71,7 +73,7 @@ mod test {
             }
         );
 
-        let credential_request: Request<super::CredentialRequestWithFormat> =
+        let credential_request: CredentialRequest<super::CredentialRequestWithFormat> =
             serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(
                 &serde_json::to_string(&expected_json).unwrap(),
             ))
@@ -100,7 +102,7 @@ mod test {
             }
         );
 
-        let credential_request: Request<CoreProfilesCredentialRequest> =
+        let credential_request: CredentialRequest<CoreProfilesCredentialRequest> =
             serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(
                 &serde_json::to_string(&expected_json).unwrap(),
             ))

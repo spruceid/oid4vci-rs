@@ -15,14 +15,14 @@ use crate::{
         pushed_authorization::PushedAuthorizationRequest, server::AuthorizationServerMetadata,
         token, AuthorizationRequest,
     },
-    batch::request::{BatchRequest, BatchRequestBuilder},
+    batch::request::{BatchCredentialRequest, BatchCredentialRequestBuilder},
     encryption::CredentialResponseEncryptionMetadata,
     issuer::{
         metadata::{CredentialConfiguration, CredentialIssuerMetadataDisplay},
         CredentialIssuerMetadata,
     },
     profiles::Profile,
-    request::{Request, RequestBuilder},
+    request::{CredentialRequest, CredentialRequestBuilder},
     types::{
         BatchCredentialUrl, CredentialConfigurationId, CredentialUrl, DeferredCredentialUrl,
         ParUrl, PreAuthorizedCode,
@@ -235,21 +235,26 @@ where
         &self,
         access_token: AccessToken,
         profile_fields: C::CredentialRequest,
-    ) -> RequestBuilder<C::CredentialRequest> {
-        let body = Request::new(profile_fields);
-        RequestBuilder::new(body, self.credential_endpoint.clone(), access_token)
+    ) -> CredentialRequestBuilder<C::CredentialRequest> {
+        let body = CredentialRequest::new(profile_fields);
+        CredentialRequestBuilder::new(body, self.credential_endpoint.clone(), access_token)
     }
 
     pub fn batch_request_credential(
         &self,
         access_token: AccessToken,
         profile_fields: Vec<C::CredentialRequest>,
-    ) -> Result<BatchRequestBuilder<C::CredentialRequest>, Error> {
+    ) -> Result<BatchCredentialRequestBuilder<C::CredentialRequest>, Error> {
         let Some(endpoint) = &self.batch_credential_endpoint else {
             return Err(Error::BcrUnsupported);
         };
-        let body = BatchRequest::new(profile_fields.into_iter().map(Request::new).collect());
-        Ok(BatchRequestBuilder::new(
+        let body = BatchCredentialRequest::new(
+            profile_fields
+                .into_iter()
+                .map(CredentialRequest::new)
+                .collect(),
+        );
+        Ok(BatchCredentialRequestBuilder::new(
             body,
             endpoint.clone(),
             access_token,

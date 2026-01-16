@@ -14,7 +14,7 @@ impl CredentialResponseProfile for CredentialResponse {
 mod test {
     use serde_json::json;
 
-    use crate::response::Response;
+    use crate::response::CredentialResponse;
 
     #[test]
     fn roundtrip() {
@@ -26,7 +26,7 @@ mod test {
             }
         );
 
-        let credential_response: Response<super::CredentialResponse> =
+        let credential_response: CredentialResponse<super::CredentialResponse> =
             serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(
                 &serde_json::to_string(&expected_json).unwrap(),
             ))
