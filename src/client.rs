@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use indexmap::IndexMap;
-use iref::UriBuf;
+use iref::{Uri, UriBuf};
 use oauth2::{
     basic::{BasicErrorResponse, BasicRevocationErrorResponse, BasicTokenIntrospectionResponse},
     AccessToken, AuthUrl, AuthorizationCode, ClientId, CodeTokenRequest, ConfigurationError,
@@ -71,17 +71,73 @@ impl<C> Client<C>
 where
     C: Profile,
 {
-    field_getters_setters![
-        pub self [self] ["client configuration value"] {
-            set_issuer -> issuer[UriBuf],
-            set_credential_endpoint -> credential_endpoint[CredentialUrl],
-            set_batch_credential_endpoint -> batch_credential_endpoint[Option<BatchCredentialUrl>],
-            set_deferred_credential_endpoint -> deferred_credential_endpoint[Option<DeferredCredentialUrl>],
-            set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryptionMetadata>],
-            set_credential_configurations_supported -> credential_configurations_supported[IndexMap<CredentialConfigurationId, CredentialConfiguration<C::CredentialConfiguration>>],
-            set_display -> display[Vec<CredentialIssuerMetadataDisplay>],
-        }
-    ];
+    pub fn issuer(&self) -> &Uri {
+        &self.issuer
+    }
+
+    pub fn set_issuer(&mut self, value: UriBuf) {
+        self.issuer = value;
+    }
+
+    pub fn credential_endpoint(&self) -> &CredentialUrl {
+        &self.credential_endpoint
+    }
+
+    pub fn set_credential_endpoint(&mut self, value: CredentialUrl) {
+        self.credential_endpoint = value;
+    }
+
+    pub fn batch_credential_endpoint(&self) -> &Option<BatchCredentialUrl> {
+        &self.batch_credential_endpoint
+    }
+
+    pub fn set_batch_credential_endpoint(&mut self, value: Option<BatchCredentialUrl>) {
+        self.batch_credential_endpoint = value;
+    }
+
+    pub fn deferred_credential_endpoint(&self) -> &Option<DeferredCredentialUrl> {
+        &self.deferred_credential_endpoint
+    }
+
+    pub fn set_deferred_credential_endpoint(&mut self, value: Option<DeferredCredentialUrl>) {
+        self.deferred_credential_endpoint = value;
+    }
+
+    pub fn credential_response_encryption(&self) -> &Option<CredentialResponseEncryptionMetadata> {
+        &self.credential_response_encryption
+    }
+
+    pub fn set_credential_response_encryption(
+        &mut self,
+        value: Option<CredentialResponseEncryptionMetadata>,
+    ) {
+        self.credential_response_encryption = value;
+    }
+
+    pub fn credential_configurations_supported(
+        &self,
+    ) -> &IndexMap<CredentialConfigurationId, CredentialConfiguration<C::CredentialConfiguration>>
+    {
+        &self.credential_configurations_supported
+    }
+
+    pub fn set_credential_configurations_supported(
+        &mut self,
+        value: IndexMap<
+            CredentialConfigurationId,
+            CredentialConfiguration<C::CredentialConfiguration>,
+        >,
+    ) {
+        self.credential_configurations_supported = value;
+    }
+
+    pub fn display(&self) -> &Vec<CredentialIssuerMetadataDisplay> {
+        &self.display
+    }
+
+    pub fn set_display(&mut self, value: Vec<CredentialIssuerMetadataDisplay>) {
+        self.display = value;
+    }
 
     pub fn from_issuer_metadata(
         client_id: ClientId,
@@ -92,8 +148,8 @@ where
         let inner = Self::new_inner_client(
             client_id,
             redirect_uri,
-            authorization_metadata.authorization_endpoint().cloned(),
-            authorization_metadata.token_endpoint().clone(),
+            authorization_metadata.authorization_endpoint.clone(),
+            authorization_metadata.token_endpoint.clone(),
         );
 
         Self {
@@ -101,8 +157,8 @@ where
             issuer: credential_issuer_metadata.credential_issuer.clone(),
             credential_endpoint: credential_issuer_metadata.credential_endpoint.clone(),
             par_auth_url: authorization_metadata
-                .pushed_authorization_request_endpoint()
-                .cloned(),
+                .pushed_authorization_request_endpoint
+                .clone(),
             batch_credential_endpoint: credential_issuer_metadata.batch_credential_endpoint.clone(),
             deferred_credential_endpoint: credential_issuer_metadata
                 .deferred_credential_endpoint

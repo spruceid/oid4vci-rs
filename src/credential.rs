@@ -24,12 +24,14 @@ pub struct Request<CR>
 where
     CR: CredentialRequestProfile,
 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proof: Option<Proof>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credential_response_encryption: Option<CredentialResponseEncryption>,
+
     #[serde(flatten, bound = "CR: CredentialRequestProfile")]
-    additional_profile_fields: CR,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    proof: Option<Proof>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    credential_response_encryption: Option<CredentialResponseEncryption>,
+    pub additional_profile_fields: CR,
 }
 
 impl<CR> Request<CR>
@@ -38,19 +40,11 @@ where
 {
     pub(crate) fn new(additional_profile_fields: CR) -> Self {
         Self {
-            additional_profile_fields,
             proof: None,
             credential_response_encryption: None,
+            additional_profile_fields,
         }
     }
-
-    field_getters_setters![
-        pub self [self] ["credential request value"] {
-            set_additional_profile_fields -> additional_profile_fields[CR],
-            set_proof -> proof[Option<Proof>],
-            set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryption>],
-        }
-    ];
 }
 
 pub struct RequestBuilder<CR>
@@ -74,13 +68,35 @@ where
         }
     }
 
-    field_getters_setters![
-        pub self [self.body] ["credential request value"] {
-            set_additional_profile_fields -> additional_profile_fields[CR],
-            set_proof -> proof[Option<Proof>],
-            set_credential_response_encryption -> credential_response_encryption[Option<CredentialResponseEncryption>],
-        }
-    ];
+    pub fn additional_profile_fields(&self) -> &CR {
+        &self.body.additional_profile_fields
+    }
+
+    pub fn set_additional_profile_fields(mut self, additional_profile_fields: CR) -> Self {
+        self.body.additional_profile_fields = additional_profile_fields;
+        self
+    }
+
+    pub fn proof(&self) -> &Option<Proof> {
+        &self.body.proof
+    }
+
+    pub fn set_proof(mut self, proof: Option<Proof>) -> Self {
+        self.body.proof = proof;
+        self
+    }
+
+    pub fn credential_response_encryption(&self) -> &Option<CredentialResponseEncryption> {
+        &self.body.credential_response_encryption
+    }
+
+    pub fn set_credential_response_encryption(
+        mut self,
+        credential_response_encryption: Option<CredentialResponseEncryption>,
+    ) -> Self {
+        self.body.credential_response_encryption = credential_response_encryption;
+        self
+    }
 
     pub fn request<C>(
         self,
@@ -208,14 +224,9 @@ where
             )));
         }
 
-        self.body.credential_requests = self
-            .body
-            .credential_requests
-            .clone()
-            .into_iter()
-            .enumerate()
-            .map(|(i, req)| req.set_proof(Some(proofs_of_possession.get(i).unwrap().to_owned())))
-            .collect();
+        for (i, request) in self.body.credential_requests.iter_mut().enumerate() {
+            request.proof = Some(proofs_of_possession.get(i).unwrap().to_owned())
+        }
 
         Ok(self)
     }
@@ -331,11 +342,11 @@ where
     CR: CredentialResponseProfile,
 {
     #[serde(flatten, bound = "CR: CredentialResponseProfile")]
-    response_kind: ResponseEnum<CR>,
+    pub response_kind: ResponseEnum<CR>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    c_nonce: Option<Nonce>,
+    pub c_nonce: Option<Nonce>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    c_nonce_expires_in: Option<i64>,
+    pub c_nonce_expires_in: Option<i64>,
 }
 
 impl<CR> Response<CR>
@@ -349,13 +360,6 @@ where
             c_nonce_expires_in: None,
         }
     }
-    field_getters_setters![
-        pub self [self] ["credential response value"] {
-            set_response_kind -> response_kind[ResponseEnum<CR>],
-            set_nonce -> c_nonce[Option<Nonce>],
-            set_nonce_expiration -> c_nonce_expires_in[Option<i64>],
-        }
-    ];
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -417,11 +421,11 @@ where
     CR: CredentialResponseProfile,
 {
     #[serde(bound = "CR: CredentialResponseProfile")]
-    credential_responses: Vec<ResponseEnum<CR>>,
+    pub credential_responses: Vec<ResponseEnum<CR>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    c_nonce: Option<Nonce>,
+    pub c_nonce: Option<Nonce>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    c_nonce_expires_in: Option<i64>,
+    pub c_nonce_expires_in: Option<i64>,
 }
 
 impl<CR> BatchResponse<CR>
@@ -435,13 +439,6 @@ where
             c_nonce_expires_in: None,
         }
     }
-    field_getters_setters![
-        pub self [self] ["batch credential response value"] {
-            set_credential_responses -> credential_responses[Vec<ResponseEnum<CR>>],
-            set_nonce -> c_nonce[Option<Nonce>],
-            set_nonce_expiration -> c_nonce_expires_in[Option<i64>],
-        }
-    ];
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

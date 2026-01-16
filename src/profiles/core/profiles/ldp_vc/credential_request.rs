@@ -8,8 +8,8 @@ use super::{authorization_detail::CredentialDefinition, CredentialResponse};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CredentialRequestWithFormat<F> {
-    format: F,
-    credential_definition: CredentialDefinition,
+    pub format: F,
+    pub credential_definition: CredentialDefinition,
 }
 
 impl<F> CredentialRequestWithFormat<F> {
@@ -22,11 +22,6 @@ impl<F> CredentialRequestWithFormat<F> {
             credential_definition,
         }
     }
-    field_getters_setters![
-        pub self [self] ["request value"] {
-            set_credential_definition -> credential_definition[CredentialDefinition],
-        }
-    ];
 }
 
 impl<F> CredentialRequestProfile for CredentialRequestWithFormat<F>

@@ -45,9 +45,6 @@
 //!
 //! 8. Wallet sends a Credential Request to the Issuer, with the Access Token.
 //! 9. Issuer returns a Credential Response, with the Credential(s).
-#[macro_use]
-mod macros;
-
 pub mod authorization;
 pub mod client;
 pub mod credential;
@@ -157,8 +154,8 @@ mod test {
             CoreProfilesCredentialConfiguration::LdpVc(config) => {
                 let credential_definition =
                     ldp_vc::authorization_detail::CredentialDefinition::default()
-                        .set_context(config.credential_definition().context().clone())
-                        .set_type(config.credential_definition().r#type().clone());
+                        .with_context(config.credential_definition.context.clone())
+                        .with_type(config.credential_definition.r#type.clone());
                 CredentialRequestWithFormat::LdpVc(ldp_vc::CredentialRequestWithFormat::new(
                     credential_definition,
                 ))
@@ -166,8 +163,8 @@ mod test {
             CoreProfilesCredentialConfiguration::JwtVcJsonLd(config) => {
                 let credential_definition =
                     ldp_vc::authorization_detail::CredentialDefinition::default()
-                        .set_context(config.credential_definition().context().clone())
-                        .set_type(config.credential_definition().r#type().clone());
+                        .with_context(config.credential_definition.context.clone())
+                        .with_type(config.credential_definition.r#type.clone());
                 CredentialRequestWithFormat::JwtVcJsonLd(
                     jwt_vc_json_ld::CredentialRequestWithFormat::new(credential_definition),
                 )

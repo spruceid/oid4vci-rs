@@ -13,16 +13,8 @@ use super::CredentialSubjectClaims;
 
 #[derive(Clone, Debug, Deserialize, Default, PartialEq, Serialize)]
 pub struct AuthorizationDetailsObjectWithFormat<F> {
-    format: F,
-    credential_definition: CredentialDefinition,
-}
-
-impl<F> AuthorizationDetailsObjectWithFormat<F> {
-    field_getters_setters![
-        pub self [self] ["authorization detail value"] {
-            set_credential_definition -> credential_definition[CredentialDefinition],
-        }
-    ];
+    pub format: F,
+    pub credential_definition: CredentialDefinition,
 }
 
 impl<F> AuthorizationDetailsObjectProfile for AuthorizationDetailsObjectWithFormat<F> where
@@ -32,15 +24,7 @@ impl<F> AuthorizationDetailsObjectProfile for AuthorizationDetailsObjectWithForm
 
 #[derive(Clone, Debug, Deserialize, Default, PartialEq, Serialize)]
 pub struct AuthorizationDetailsObject {
-    credential_definition: CredentialDefinitionWithoutContext,
-}
-
-impl AuthorizationDetailsObject {
-    field_getters_setters![
-        pub self [self] ["authorization detail value"] {
-            set_credential_definition -> credential_definition[CredentialDefinitionWithoutContext],
-        }
-    ];
+    pub credential_definition: CredentialDefinitionWithoutContext,
 }
 
 impl AuthorizationDetailsObjectProfile for AuthorizationDetailsObject {}
@@ -48,24 +32,24 @@ impl AuthorizationDetailsObjectProfile for AuthorizationDetailsObject {}
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct CredentialDefinition {
     #[serde(rename = "@context")]
-    context: Vec<Value>,
-    r#type: Vec<String>,
+    pub context: Vec<Value>,
+    pub r#type: Vec<String>,
     #[serde(
         default,
         skip_serializing_if = "HashMap::is_empty",
         rename = "credentialSubject"
     )]
-    credential_subject: CredentialSubjectClaims<AuthorizationDetailsObjectClaim>,
+    pub credential_subject: CredentialSubjectClaims<AuthorizationDetailsObjectClaim>,
 }
 
 impl CredentialDefinition {
-    field_getters_setters![
-        pub self [self] ["credential definition value"] {
-            set_context -> context[Vec<Value>],
-            set_type -> r#type[Vec<String>],
-            set_credential_subject -> credential_subject[CredentialSubjectClaims<AuthorizationDetailsObjectClaim>],
-        }
-    ];
+    pub fn with_context(self, context: Vec<Value>) -> Self {
+        Self { context, ..self }
+    }
+
+    pub fn with_type(self, r#type: Vec<String>) -> Self {
+        Self { r#type, ..self }
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -75,15 +59,7 @@ pub struct CredentialDefinitionWithoutContext {
         skip_serializing_if = "HashMap::is_empty",
         rename = "credentialSubject"
     )]
-    credential_subject: CredentialSubjectClaims<AuthorizationDetailsObjectClaim>,
-}
-
-impl CredentialDefinitionWithoutContext {
-    field_getters_setters![
-        pub self [self] ["credential definition value"] {
-            set_credential_subject -> credential_subject[CredentialSubjectClaims<AuthorizationDetailsObjectClaim>],
-        }
-    ];
+    pub credential_subject: CredentialSubjectClaims<AuthorizationDetailsObjectClaim>,
 }
 
 #[cfg(test)]

@@ -10,15 +10,15 @@ use super::{Claims, Format};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CredentialConfiguration {
-    format: Format,
+    pub format: Format,
     // TODO: Enumerate possible COSE algs
-    doctype: DocType,
+    pub doctype: DocType,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    credential_signing_alg_values_supported: Vec<String>,
+    pub credential_signing_alg_values_supported: Vec<String>,
     #[serde(default, skip_serializing_if = "Claims::is_empty")]
-    claims: Claims<CredentialConfigurationClaim>,
+    pub claims: Claims<CredentialConfigurationClaim>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    order: Vec<String>,
+    pub order: Vec<String>,
 }
 
 impl CredentialConfiguration {
@@ -31,14 +31,6 @@ impl CredentialConfiguration {
             order: Vec::new(),
         }
     }
-    field_getters_setters![
-        pub self [self] ["ISO mDL metadata value"] {
-            set_doctype -> doctype[DocType],
-            set_credential_signing_alg_values_supported -> credential_signing_alg_values_supported[Vec<String>],
-            set_claims -> claims[Claims<CredentialConfigurationClaim>],
-            set_order -> order[Vec<String>],
-        }
-    ];
 }
 
 impl CredentialConfigurationProfile for CredentialConfiguration {}

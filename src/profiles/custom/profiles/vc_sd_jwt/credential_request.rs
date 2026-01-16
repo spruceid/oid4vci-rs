@@ -9,10 +9,10 @@ use super::{Claims, CredentialResponse, Format};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CredentialRequestWithFormat {
-    format: Format,
-    vct: String,
+    pub format: Format,
+    pub vct: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    claims: Option<Claims<CredentialConfigurationClaim>>,
+    pub claims: Option<Claims<CredentialConfigurationClaim>>,
 }
 
 impl CredentialRequestWithFormat {
@@ -23,12 +23,6 @@ impl CredentialRequestWithFormat {
             claims,
         }
     }
-    field_getters_setters![
-        pub self [self] ["VC SD-JWT request value"] {
-            set_vct -> vct[String],
-            set_claims -> claims[Option<Claims<CredentialConfigurationClaim>>],
-        }
-    ];
 }
 
 impl CredentialRequestProfile for CredentialRequestWithFormat {
@@ -37,9 +31,9 @@ impl CredentialRequestProfile for CredentialRequestWithFormat {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct CredentialRequest {
-    vct: String,
+    pub vct: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    claims: Option<Claims<CredentialConfigurationClaim>>,
+    pub claims: Option<Claims<CredentialConfigurationClaim>>,
 }
 
 impl CredentialRequest {
@@ -49,12 +43,6 @@ impl CredentialRequest {
             claims: Some(claims),
         }
     }
-    field_getters_setters![
-        pub self [self] ["VC SD-JWT request value"] {
-            set_vct -> vct[String],
-            set_claims -> claims[Option<Claims<CredentialConfigurationClaim>>],
-        }
-    ];
 }
 
 impl CredentialRequestProfile for CredentialRequest {

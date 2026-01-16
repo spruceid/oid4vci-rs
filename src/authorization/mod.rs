@@ -80,11 +80,11 @@ pub struct AuthorizationDetailsObject<AD>
 where
     AD: AuthorizationDetailsObjectProfile,
 {
-    r#type: AuthorizationDetailsObjectType,
-    #[serde(flatten, bound = "AD: AuthorizationDetailsObjectProfile")]
-    additional_profile_fields: AD,
+    pub r#type: AuthorizationDetailsObjectType,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    locations: Vec<UriBuf>,
+    pub locations: Vec<UriBuf>,
+    #[serde(flatten, bound = "AD: AuthorizationDetailsObjectProfile")]
+    pub additional_profile_fields: AD,
 }
 
 impl<AD> AuthorizationDetailsObject<AD>
@@ -94,17 +94,10 @@ where
     pub fn new(additional_profile_fields: AD) -> Self {
         Self {
             r#type: AuthorizationDetailsObjectType::OpenidCredential,
-            additional_profile_fields,
             locations: Vec::new(),
+            additional_profile_fields,
         }
     }
-
-    field_getters_setters![
-        pub self [self] ["authorization detail value"] {
-            set_additional_profile_fields -> additional_profile_fields[AD],
-            set_locations -> locations[Vec<UriBuf>],
-        }
-    ];
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -237,13 +230,13 @@ mod tests {
             CredentialUrl::new("https://server.example.com/credential".into()).unwrap(),
         );
 
-        let authorization_server_metadata = AuthorizationServerMetadata::new(
+        let mut authorization_server_metadata = AuthorizationServerMetadata::new(
             issuer.to_owned(),
             TokenUrl::new("https://server.example.com/token".into()).unwrap(),
-        )
-        .set_authorization_endpoint(Some(
-            AuthUrl::new("https://server.example.com/authorize".into()).unwrap(),
-        ));
+        );
+
+        authorization_server_metadata.authorization_endpoint =
+            Some(AuthUrl::new("https://server.example.com/authorize".into()).unwrap());
 
         let client = crate::profiles::core::client::Client::from_issuer_metadata(
             ClientId::new("s6BhdRkqt3".to_string()),
@@ -256,13 +249,13 @@ mod tests {
             PkceCodeVerifier::new("challengechallengechallengechallengechallenge".into());
         let pkce_challenge = PkceCodeChallenge::from_code_verifier_sha256(&pkce_verifier);
         let state = CsrfToken::new("state".into());
-        let authorization_detail = jwt_vc_json::AuthorizationDetailsObjectWithFormat::default()
-            .set_credential_definition(
-                jwt_vc_json::authorization_detail::CredentialDefinition::default().set_type(vec![
-                    "VerifiableCredential".into(),
-                    "UniversityDegreeCredential".into(),
-                ]),
-            );
+
+        let mut authorization_detail = jwt_vc_json::AuthorizationDetailsObjectWithFormat::default();
+        authorization_detail.credential_definition.r#type = vec![
+            "VerifiableCredential".into(),
+            "UniversityDegreeCredential".into(),
+        ];
+
         let authorization_details = vec![AuthorizationDetailsObject {
             r#type: AuthorizationDetailsObjectType::OpenidCredential,
             additional_profile_fields: CoreProfilesAuthorizationDetailsObject::WithFormat {

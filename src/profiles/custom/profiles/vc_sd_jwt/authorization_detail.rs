@@ -8,36 +8,18 @@ use super::{Claims, Format};
 
 #[derive(Clone, Debug, Deserialize, Default, PartialEq, Serialize)]
 pub struct AuthorizationDetailsObjectWithFormat {
-    format: Format,
-    vct: String,
+    pub format: Format,
+    pub vct: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    claims: Option<Claims<CredentialConfigurationClaim>>,
-}
-
-impl AuthorizationDetailsObjectWithFormat {
-    field_getters_setters![
-        pub self [self] ["VC SD-JWT authorization detail value"] {
-            set_vct -> vct[String],
-            set_claims -> claims[Option<Claims<CredentialConfigurationClaim>>],
-        }
-    ];
+    pub claims: Option<Claims<CredentialConfigurationClaim>>,
 }
 
 impl AuthorizationDetailsObjectProfile for AuthorizationDetailsObjectWithFormat {}
 
 #[derive(Clone, Debug, Deserialize, Default, PartialEq, Serialize)]
 pub struct AuthorizationDetailsObject {
-    vct: String,
-    claims: Option<Claims<CredentialConfigurationClaim>>,
-}
-
-impl AuthorizationDetailsObject {
-    field_getters_setters![
-        pub self [self] ["VC SD-JWT authorization detail value"] {
-            set_vct -> vct[String],
-            set_claims -> claims[Option<Claims<CredentialConfigurationClaim>>],
-        }
-    ];
+    pub vct: String,
+    pub claims: Option<Claims<CredentialConfigurationClaim>>,
 }
 
 impl AuthorizationDetailsObjectProfile for AuthorizationDetailsObject {}

@@ -11,53 +11,28 @@ use super::{CredentialSubjectClaims, Format};
 
 #[derive(Clone, Debug, Deserialize, Default, PartialEq, Serialize)]
 pub struct AuthorizationDetailsObjectWithFormat {
-    format: Format,
-    credential_definition: CredentialDefinition,
-}
-
-impl AuthorizationDetailsObjectWithFormat {
-    field_getters_setters![
-        pub self [self] ["JWT VC authorization detail value"] {
-            set_credential_definition -> credential_definition[CredentialDefinition],
-        }
-    ];
+    pub format: Format,
+    pub credential_definition: CredentialDefinition,
 }
 
 impl AuthorizationDetailsObjectProfile for AuthorizationDetailsObjectWithFormat {}
 
 #[derive(Clone, Debug, Deserialize, Default, PartialEq, Serialize)]
 pub struct AuthorizationDetailsObject {
-    credential_definition: CredentialDefinitionWithoutType,
-}
-
-impl AuthorizationDetailsObject {
-    field_getters_setters![
-        pub self [self] ["JWT VC authorization detail value"] {
-            set_credential_definition -> credential_definition[CredentialDefinitionWithoutType],
-        }
-    ];
+    pub credential_definition: CredentialDefinitionWithoutType,
 }
 
 impl AuthorizationDetailsObjectProfile for AuthorizationDetailsObject {}
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct CredentialDefinition {
-    r#type: Vec<String>,
+    pub r#type: Vec<String>,
     #[serde(
         default,
         skip_serializing_if = "HashMap::is_empty",
         rename = "credentialSubject"
     )]
-    credential_subject: CredentialSubjectClaims<AuthorizationDetailsObjectClaim>,
-}
-
-impl CredentialDefinition {
-    field_getters_setters![
-        pub self [self] ["credential definition value"] {
-            set_type -> r#type[Vec<String>],
-            set_credential_subject -> credential_subject[CredentialSubjectClaims<AuthorizationDetailsObjectClaim>],
-        }
-    ];
+    pub credential_subject: CredentialSubjectClaims<AuthorizationDetailsObjectClaim>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -67,15 +42,7 @@ pub struct CredentialDefinitionWithoutType {
         skip_serializing_if = "HashMap::is_empty",
         rename = "credentialSubject"
     )]
-    credential_subject: CredentialSubjectClaims<AuthorizationDetailsObjectClaim>,
-}
-
-impl CredentialDefinitionWithoutType {
-    field_getters_setters![
-        pub self [self] ["credential definition value"] {
-            set_credential_subject -> credential_subject[CredentialSubjectClaims<AuthorizationDetailsObjectClaim>],
-        }
-    ];
+    pub credential_subject: CredentialSubjectClaims<AuthorizationDetailsObjectClaim>,
 }
 
 #[cfg(test)]

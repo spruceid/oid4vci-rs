@@ -6,8 +6,8 @@ use super::{authorization_detail::CredentialDefinition, CredentialResponse, Form
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CredentialRequestWithFormat {
-    format: Format,
-    credential_definition: CredentialDefinition,
+    pub format: Format,
+    pub credential_definition: CredentialDefinition,
 }
 
 impl CredentialRequestWithFormat {
@@ -17,11 +17,6 @@ impl CredentialRequestWithFormat {
             credential_definition,
         }
     }
-    field_getters_setters![
-        pub self [self] ["JWT VC request value"] {
-            set_credential_definition -> credential_definition[CredentialDefinition],
-        }
-    ];
 }
 
 impl CredentialRequestProfile for CredentialRequestWithFormat {

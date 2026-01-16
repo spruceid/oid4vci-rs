@@ -294,16 +294,14 @@ mod test {
             CredentialUrl::new("https://server.example.com/credential".into()).unwrap(),
         );
 
-        let authorization_server_metadata = AuthorizationServerMetadata::new(
+        let mut authorization_server_metadata = AuthorizationServerMetadata::new(
             issuer.to_owned(),
             TokenUrl::new("https://server.example.com/token".into()).unwrap(),
-        )
-        .set_authorization_endpoint(Some(
-            AuthUrl::new("https://server.example.com/authorize".into()).unwrap(),
-        ))
-        .set_pushed_authorization_request_endpoint(Some(
-            ParUrl::new("https://server.example.com/as/par".into()).unwrap(),
-        ));
+        );
+        authorization_server_metadata.authorization_endpoint =
+            Some(AuthUrl::new("https://server.example.com/authorize".into()).unwrap());
+        authorization_server_metadata.pushed_authorization_request_endpoint =
+            Some(ParUrl::new("https://server.example.com/as/par".into()).unwrap());
 
         let client = crate::profiles::core::client::Client::from_issuer_metadata(
             ClientId::new("s6BhdRkqt3".to_string()),

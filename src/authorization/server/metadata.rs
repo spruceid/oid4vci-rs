@@ -41,27 +41,27 @@ use crate::{
 /// [RFC 9126]: <https://datatracker.ietf.org/doc/html/rfc9126>
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AuthorizationServerMetadata {
-    issuer: UriBuf,
-    authorization_endpoint: Option<AuthUrl>,
-    token_endpoint: TokenUrl,
-    jwks_uri: Option<JsonWebKeySetUrl>,
-    registration_endpoint: Option<RegistrationUrl>,
-    scopes_supported: Option<Vec<Scope>>,
-    response_types_supported: Option<Vec<ResponseType>>,
-    #[serde(default)]
-    response_modes_supported: ResponseModes,
-    #[serde(default)]
-    grant_types_supported: GrantTypesSupported,
-    revocation_endpoint: Option<RevocationUrl>,
-    introspection_endpoint: Option<IntrospectionUrl>,
-    code_challenge_methods_supported: Option<Vec<PkceCodeChallengeMethod>>,
+    pub issuer: UriBuf,
+    pub authorization_endpoint: Option<AuthUrl>,
+    pub token_endpoint: TokenUrl,
+    pub jwks_uri: Option<JsonWebKeySetUrl>,
+    pub registration_endpoint: Option<RegistrationUrl>,
+    pub scopes_supported: Option<Vec<Scope>>,
+    pub response_types_supported: Option<Vec<ResponseType>>,
+    #[serde(default = "default_response_modes_supported")]
+    pub response_modes_supported: Vec<ResponseMode>,
+    #[serde(default = "default_grant_types_supported")]
+    pub grant_types_supported: Vec<GrantType>,
+    pub revocation_endpoint: Option<RevocationUrl>,
+    pub introspection_endpoint: Option<IntrospectionUrl>,
+    pub code_challenge_methods_supported: Option<Vec<PkceCodeChallengeMethod>>,
     #[serde(default, rename = "pre-authorized_grant_anonymous_access_supported")]
-    pre_authorized_grant_anonymous_access_supported: bool,
-    pushed_authorization_request_endpoint: Option<ParUrl>,
+    pub pre_authorized_grant_anonymous_access_supported: bool,
+    pub pushed_authorization_request_endpoint: Option<ParUrl>,
     #[serde(default)]
-    require_pushed_authorization_requests: bool,
+    pub require_pushed_authorization_requests: bool,
     #[serde(flatten)]
-    additional_fields: Map<String, Json>,
+    pub additional_fields: Map<String, Json>,
 }
 
 impl AuthorizationServerMetadata {
@@ -74,8 +74,8 @@ impl AuthorizationServerMetadata {
             registration_endpoint: Default::default(),
             scopes_supported: Default::default(),
             response_types_supported: Default::default(),
-            response_modes_supported: Default::default(),
-            grant_types_supported: Default::default(),
+            response_modes_supported: default_response_modes_supported(),
+            grant_types_supported: default_grant_types_supported(),
             revocation_endpoint: Default::default(),
             introspection_endpoint: Default::default(),
             code_challenge_methods_supported: Default::default(),
@@ -85,26 +85,6 @@ impl AuthorizationServerMetadata {
             additional_fields: Default::default(),
         }
     }
-
-    field_getters_setters![
-        pub self [self] ["authorization server metadata value"] {
-            set_issuer -> issuer[UriBuf],
-            set_authorization_endpoint -> authorization_endpoint[Option<AuthUrl>],
-            set_token_endpoint -> token_endpoint[TokenUrl],
-            set_jwks_uri -> jwks_uri[Option<JsonWebKeySetUrl>],
-            set_registration_endpoint -> registration_endpoint[Option<RegistrationUrl>],
-            set_scopes_supported -> scopes_supported[Option<Vec<Scope>>],
-            set_response_types_supported -> response_types_supported[Option<Vec<ResponseType>>],
-            set_response_modes_supported -> response_modes_supported[ResponseModes],
-            set_grant_types_supported -> grant_types_supported[GrantTypesSupported],
-            set_revocation_endpoint -> revocation_endpoint[Option<RevocationUrl>],
-            set_introspection_endpoint -> introspection_endpoint[Option<IntrospectionUrl>],
-            set_code_challenge_methods_supported -> code_challenge_methods_supported[Option<Vec<PkceCodeChallengeMethod>>],
-            set_pre_authorized_grant_anonymous_access_supported -> pre_authorized_grant_anonymous_access_supported[bool],
-            set_pushed_authorization_request_endpoint -> pushed_authorization_request_endpoint[Option<ParUrl>],
-            set_require_pushed_authorization_requests -> require_pushed_authorization_requests[bool],
-        }
-    ];
 
     pub fn additional_fields(&self) -> &Map<String, Json> {
         &self.additional_fields
@@ -160,8 +140,7 @@ impl AuthorizationServerMetadata {
             match response {
                 Ok(response) => {
                     if response
-                        .grant_types_supported()
-                        .0
+                        .grant_types_supported
                         .iter()
                         .any(|gt| gt == grant_type)
                     {
@@ -225,8 +204,7 @@ impl AuthorizationServerMetadata {
             match response {
                 Ok(response) => {
                     if response
-                        .grant_types_supported()
-                        .0
+                        .grant_types_supported
                         .iter()
                         .any(|gt| gt == grant_type)
                     {
@@ -253,32 +231,11 @@ impl Discoverable for AuthorizationServerMetadata {
         if self.issuer != issuer {
             bail!(
                 "unexpected issuer URI `{}` (expected `{}`)",
-                self.issuer().as_str(),
-                issuer.as_str()
+                self.issuer,
+                issuer
             )
         }
         Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ResponseModes(pub Vec<ResponseMode>);
-
-impl Default for ResponseModes {
-    fn default() -> Self {
-        Self(vec![
-            ResponseMode::new("query".to_owned()),
-            ResponseMode::new("fragment".to_owned()),
-        ])
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct GrantTypesSupported(pub Vec<GrantType>);
-
-impl Default for GrantTypesSupported {
-    fn default() -> Self {
-        Self(vec![GrantType::AuthorizationCode, GrantType::Implicit])
     }
 }
 
@@ -291,4 +248,15 @@ pub enum GrantType {
     PreAuthorizedCode,
     #[serde(untagged)]
     Extension(String),
+}
+
+pub fn default_response_modes_supported() -> Vec<ResponseMode> {
+    vec![
+        ResponseMode::new("query".to_owned()),
+        ResponseMode::new("fragment".to_owned()),
+    ]
+}
+
+pub fn default_grant_types_supported() -> Vec<GrantType> {
+    vec![GrantType::AuthorizationCode, GrantType::Implicit]
 }

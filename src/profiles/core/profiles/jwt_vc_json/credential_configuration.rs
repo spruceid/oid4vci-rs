@@ -11,44 +11,25 @@ use super::{CredentialSubjectClaims, Format};
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct CredentialConfiguration {
-    format: Format,
+    pub format: Format,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    credential_signing_alg_values_supported: Vec<ssi::jwk::Algorithm>,
-    credential_definition: CredentialDefinition,
+    pub credential_signing_alg_values_supported: Vec<ssi::jwk::Algorithm>,
+    pub credential_definition: CredentialDefinition,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    order: Vec<String>,
-}
-
-impl CredentialConfiguration {
-    field_getters_setters![
-        pub self [self] ["JWT VC metadata value"] {
-            set_credential_signing_alg_values_supported -> credential_signing_alg_values_supported[Vec<ssi::jwk::Algorithm>],
-            set_credential_definition -> credential_definition[CredentialDefinition],
-            set_order -> order[Vec<String>],
-        }
-    ];
+    pub order: Vec<String>,
 }
 
 impl CredentialConfigurationProfile for CredentialConfiguration {}
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct CredentialDefinition {
-    r#type: Vec<String>,
+    pub r#type: Vec<String>,
     #[serde(
         default,
         skip_serializing_if = "HashMap::is_empty",
         rename = "credentialSubject"
     )]
-    credential_subject: CredentialSubjectClaims<CredentialConfigurationClaim>,
-}
-
-impl CredentialDefinition {
-    field_getters_setters![
-        pub self [self] ["credential definition value"] {
-            set_type -> r#type[Vec<String>],
-            set_credential_subject -> credential_subject[CredentialSubjectClaims<CredentialConfigurationClaim>],
-        }
-    ];
+    pub credential_subject: CredentialSubjectClaims<CredentialConfigurationClaim>,
 }
 
 #[cfg(test)]

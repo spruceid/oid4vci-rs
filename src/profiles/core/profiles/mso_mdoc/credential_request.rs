@@ -9,12 +9,12 @@ use super::{Claims, Format};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CredentialRequestWithFormat {
-    format: Format,
-    doctype: DocType,
+    pub format: Format,
+    pub doctype: DocType,
     // Possibly the spec needs updating, `display` and `value_type` don't seem to have any use
     // here.
     #[serde(default, skip_serializing_if = "Claims::is_empty")]
-    claims: Claims<CredentialConfigurationClaim>,
+    pub claims: Claims<CredentialConfigurationClaim>,
 }
 
 impl CredentialRequestWithFormat {
@@ -25,12 +25,6 @@ impl CredentialRequestWithFormat {
             claims: Claims::new(),
         }
     }
-    field_getters_setters![
-        pub self [self] ["ISO mDL request value"] {
-            set_doctype -> doctype[DocType],
-            set_claims -> claims[Claims<CredentialConfigurationClaim>],
-        }
-    ];
 }
 
 impl CredentialRequestProfile for CredentialRequestWithFormat {
@@ -42,7 +36,7 @@ pub struct CredentialRequest {
     // Possibly the spec needs updating, `display` and `value_type` don't seem to have any use
     // here.
     #[serde(default, skip_serializing_if = "Claims::is_empty")]
-    claims: Claims<CredentialConfigurationClaim>,
+    pub claims: Claims<CredentialConfigurationClaim>,
 }
 
 impl Default for CredentialRequest {
@@ -57,11 +51,6 @@ impl CredentialRequest {
             claims: Claims::new(),
         }
     }
-    field_getters_setters![
-        pub self [self] ["ISO mDL request value"] {
-            set_claims -> claims[Claims<CredentialConfigurationClaim>],
-        }
-    ];
 }
 
 impl CredentialRequestProfile for CredentialRequest {

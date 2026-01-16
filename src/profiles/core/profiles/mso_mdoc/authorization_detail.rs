@@ -12,10 +12,10 @@ use super::{Claims, Format};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AuthorizationDetailsObjectWithFormat {
-    format: Format,
-    doctype: DocType,
+    pub format: Format,
+    pub doctype: DocType,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    claims: Claims<AuthorizationDetailsObjectClaim>,
+    pub claims: Claims<AuthorizationDetailsObjectClaim>,
 }
 
 impl AuthorizationDetailsObjectWithFormat {
@@ -26,12 +26,6 @@ impl AuthorizationDetailsObjectWithFormat {
             claims,
         }
     }
-    field_getters_setters![
-        pub self [self] ["ISO mDL authorization detail value"] {
-            set_doctype -> doctype[DocType],
-            set_claims -> claims[Claims<AuthorizationDetailsObjectClaim>],
-        }
-    ];
 }
 
 impl AuthorizationDetailsObjectProfile for AuthorizationDetailsObjectWithFormat {}
@@ -39,18 +33,13 @@ impl AuthorizationDetailsObjectProfile for AuthorizationDetailsObjectWithFormat 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AuthorizationDetailsObject {
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    claims: Claims<AuthorizationDetailsObjectClaim>,
+    pub claims: Claims<AuthorizationDetailsObjectClaim>,
 }
 
 impl AuthorizationDetailsObject {
     pub fn new(claims: Claims<AuthorizationDetailsObjectClaim>) -> Self {
         Self { claims }
     }
-    field_getters_setters![
-        pub self [self] ["ISO mDL authorization detail value"] {
-            set_claims -> claims[ Claims<AuthorizationDetailsObjectClaim>],
-        }
-    ];
 }
 
 impl AuthorizationDetailsObjectProfile for AuthorizationDetailsObject {}

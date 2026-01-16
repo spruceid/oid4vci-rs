@@ -242,13 +242,13 @@ pub enum CryptographicBindingMethod {
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CredentialMetadataDisplay {
-    name: String,
-    locale: Option<LanguageTag>,
-    logo: Option<MetadataDisplayLogo>,
-    description: Option<String>,
-    background_color: Option<String>,
-    background_image: Option<MetadataBackgroundImage>,
-    text_color: Option<String>,
+    pub name: String,
+    pub locale: Option<LanguageTag>,
+    pub logo: Option<MetadataDisplayLogo>,
+    pub description: Option<String>,
+    pub background_color: Option<String>,
+    pub background_image: Option<MetadataBackgroundImage>,
+    pub text_color: Option<String>,
 }
 
 impl CredentialMetadataDisplay {
@@ -271,35 +271,17 @@ impl CredentialMetadataDisplay {
             text_color,
         }
     }
-
-    field_getters_setters![
-        pub self [self] ["credential metadata display value"] {
-            set_name -> name[String],
-            set_locale -> locale[Option<LanguageTag>],
-            set_logo -> logo[Option<MetadataDisplayLogo>],
-            set_description -> description[Option<String>],
-            set_background_color -> background_color[Option<String>],
-            set_background_image -> background_image[Option<MetadataBackgroundImage>],
-            set_text_color -> text_color[Option<String>],
-        }
-    ];
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct MetadataBackgroundImage {
-    uri: LogoUri,
+    pub uri: LogoUri,
 }
 
 impl MetadataBackgroundImage {
     pub fn new(uri: LogoUri) -> Self {
         Self { uri }
     }
-
-    field_getters_setters![
-        pub self [self] ["metadata background image value"] {
-            set_uri -> uri[LogoUri],
-        }
-    ];
 }
 
 #[cfg(test)]
@@ -411,7 +393,6 @@ mod test {
     fn example_credential_metadata_jwt() {
         let _: CredentialConfiguration<CoreProfilesCredentialConfiguration> =
             serde_json::from_value(json!({
-                "$key$": "name", // purely for test reason, you cannot really deserialize CredentialMetadata on its own
                 "format": "jwt_vc_json",
                 "id": "UniversityDegree_JWT",
                 "cryptographic_binding_methods_supported": [
@@ -482,7 +463,6 @@ mod test {
     fn example_credential_metadata_ldp() {
         let _: CredentialConfiguration<CoreProfilesCredentialConfiguration> =
             serde_json::from_value(json!({
-                "$key$": "name", // purely for test reason, you cannot really deserialize CredentialMetadata on its own
                 "format": "ldp_vc",
                 "@context": [
                     "https://www.w3.org/2018/credentials/v1",
@@ -557,7 +537,6 @@ mod test {
     fn example_credential_metadata_isomdl() {
         let _: CredentialConfiguration<CoreProfilesCredentialConfiguration> =
             serde_json::from_value(json!({
-                "$key$": "name", // purely for test reason, you cannot really deserialize CredentialMetadata on its own
                 "format": "mso_mdoc",
                 "doctype": "org.iso.18013.5.1.mDL",
                 "cryptographic_binding_methods_supported": [
