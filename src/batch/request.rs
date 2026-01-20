@@ -1,4 +1,4 @@
-use std::future::Future;
+use std::{future::Future, marker::PhantomData};
 
 use oauth2::{
     http::{
@@ -8,52 +8,46 @@ use oauth2::{
     },
     AccessToken, AsyncHttpClient, HttpRequest, HttpResponse, SyncHttpClient,
 };
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::{
     batch::response::BatchCredentialResponse,
-    profiles::CredentialRequestProfile,
     proof_of_possession::Proof,
-    request::{CredentialRequest, CredentialRequestError},
+    request::{
+        AnyCredentialRequestParams, CredentialRequest, CredentialRequestError,
+        CredentialRequestParams,
+    },
     types::BatchCredentialUrl,
     util::http::{auth_bearer, content_type_has_essence, MIME_TYPE_JSON},
 };
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct BatchCredentialRequest<CR>
-where
-    CR: CredentialRequestProfile,
-{
-    #[serde(bound = "CR: CredentialRequestProfile")]
-    credential_requests: Vec<CredentialRequest<CR>>,
+#[serde(bound = "F: CredentialRequestParams")]
+pub struct BatchCredentialRequest<F: CredentialRequestParams = AnyCredentialRequestParams> {
+    credential_requests: Vec<CredentialRequest<F>>,
 }
 
-impl<CR> BatchCredentialRequest<CR>
-where
-    CR: CredentialRequestProfile,
-{
-    pub fn new(credential_requests: Vec<CredentialRequest<CR>>) -> Self {
+impl<F: CredentialRequestParams> BatchCredentialRequest<F> {
+    pub fn new(credential_requests: Vec<CredentialRequest<F>>) -> Self {
         Self {
             credential_requests,
         }
     }
 }
 
-pub struct BatchCredentialRequestBuilder<CR>
-where
-    CR: CredentialRequestProfile,
-{
-    body: BatchCredentialRequest<CR>,
+pub struct BatchCredentialRequestBuilder<F: CredentialRequestParams, T> {
+    body: BatchCredentialRequest<F>,
     url: BatchCredentialUrl,
     access_token: AccessToken,
+    credential_type: PhantomData<T>,
 }
 
-impl<CR> BatchCredentialRequestBuilder<CR>
+impl<F, T> BatchCredentialRequestBuilder<F, T>
 where
-    CR: CredentialRequestProfile,
+    F: CredentialRequestParams,
 {
     pub(crate) fn new(
-        body: BatchCredentialRequest<CR>,
+        body: BatchCredentialRequest<F>,
         url: BatchCredentialUrl,
         access_token: AccessToken,
     ) -> Self {
@@ -61,6 +55,7 @@ where
             body,
             url,
             access_token,
+            credential_type: PhantomData,
         }
     }
 
@@ -89,12 +84,10 @@ where
     pub fn request<C>(
         self,
         http_client: &C,
-    ) -> Result<
-        BatchCredentialResponse<CR::Response>,
-        CredentialRequestError<<C as SyncHttpClient>::Error>,
-    >
+    ) -> Result<BatchCredentialResponse<T>, CredentialRequestError<C::Error>>
     where
         C: SyncHttpClient,
+        T: DeserializeOwned,
     {
         http_client
             .call(self.prepare_request().map_err(|err| {
@@ -107,15 +100,11 @@ where
     pub fn request_async<'c, C>(
         self,
         http_client: &'c C,
-    ) -> impl Future<
-        Output = Result<
-            BatchCredentialResponse<CR::Response>,
-            CredentialRequestError<<C as AsyncHttpClient<'c>>::Error>,
-        >,
-    > + 'c
+    ) -> impl Future<Output = Result<BatchCredentialResponse<T>, CredentialRequestError<C::Error>>> + 'c
     where
         Self: 'c,
         C: AsyncHttpClient<'c>,
+        T: DeserializeOwned,
     {
         Box::pin(async move {
             let http_response = http_client
@@ -147,8 +136,9 @@ where
     fn credential_response<RE>(
         self,
         http_response: HttpResponse,
-    ) -> Result<BatchCredentialResponse<CR::Response>, CredentialRequestError<RE>>
+    ) -> Result<BatchCredentialResponse<T>, CredentialRequestError<RE>>
     where
+        T: DeserializeOwned,
         RE: std::error::Error + 'static,
     {
         // TODO status 202 if deferred
@@ -185,9 +175,11 @@ where
 mod tests {
     use serde_json::json;
 
+    use super::*;
+
     #[test]
     fn example_batch_request() {
-        let _: crate::profiles::core::credential::BatchRequest = serde_json::from_value(json!({
+        let _: BatchCredentialRequest = serde_json::from_value(json!({
             "credential_requests":[
               {
                  "format":"jwt_vc_json",

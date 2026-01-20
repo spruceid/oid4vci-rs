@@ -1,69 +1,31 @@
-use isomdl::definitions::device_request::DocType;
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 
-use crate::{
-    profiles::core::profiles::CredentialConfigurationClaim, profiles::CredentialRequestProfile,
-};
+use crate::request::CredentialRequestParams;
 
-use super::{Claims, Format};
+use super::{MsoMdocClaimMetadata, MsoMdocFormat};
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct CredentialRequestWithFormat {
-    pub format: Format,
-    pub doctype: DocType,
-    // Possibly the spec needs updating, `display` and `value_type` don't seem to have any use
-    // here.
-    #[serde(default, skip_serializing_if = "Claims::is_empty")]
-    pub claims: Claims<CredentialConfigurationClaim>,
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MsoMdocRequestParams {
+    pub doctype: Option<String>,
+
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub claims: IndexMap<String, IndexMap<String, MsoMdocClaimMetadata>>,
 }
 
-impl CredentialRequestWithFormat {
-    pub fn new(doctype: DocType) -> Self {
-        Self {
-            format: Format::MsoMdoc,
-            doctype,
-            claims: Claims::new(),
-        }
-    }
-}
-
-impl CredentialRequestProfile for CredentialRequestWithFormat {
-    type Response = super::CredentialResponse;
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct CredentialRequest {
-    // Possibly the spec needs updating, `display` and `value_type` don't seem to have any use
-    // here.
-    #[serde(default, skip_serializing_if = "Claims::is_empty")]
-    pub claims: Claims<CredentialConfigurationClaim>,
-}
-
-impl Default for CredentialRequest {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl CredentialRequest {
-    pub fn new() -> Self {
-        Self {
-            claims: Claims::new(),
-        }
-    }
-}
-
-impl CredentialRequestProfile for CredentialRequest {
-    type Response = super::CredentialResponse;
+impl CredentialRequestParams for MsoMdocRequestParams {
+    type Format = MsoMdocFormat;
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use serde_json::json;
 
-    use crate::{
-        profiles::core::profiles::CoreProfilesCredentialRequest, request::CredentialRequest,
-    };
+    use crate::request::CredentialRequest;
+
+    use super::*;
 
     #[test]
     fn roundtrip_with_format() {
@@ -88,7 +50,7 @@ mod test {
             }
         );
 
-        let credential_request: CredentialRequest<super::CredentialRequestWithFormat> =
+        let credential_request: CredentialRequest<MsoMdocRequestParams> =
             serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(
                 &serde_json::to_string(&expected_json).unwrap(),
             ))
@@ -120,7 +82,7 @@ mod test {
             }
         );
 
-        let credential_request: CredentialRequest<CoreProfilesCredentialRequest> =
+        let credential_request: CredentialRequest<MsoMdocRequestParams> =
             serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(
                 &serde_json::to_string(&expected_json).unwrap(),
             ))

@@ -21,8 +21,8 @@ use crate::{
         metadata::{CredentialConfiguration, CredentialIssuerMetadataDisplay},
         CredentialIssuerMetadata,
     },
-    profiles::Profile,
-    request::{CredentialRequest, CredentialRequestBuilder},
+    profile::{Profile, StandardProfile},
+    request::{CredentialFormatOrIdentifier, CredentialRequest, CredentialRequestBuilder},
     types::{
         BatchCredentialUrl, CredentialConfigurationId, CredentialUrl, DeferredCredentialUrl,
         ParUrl, PreAuthorizedCode,
@@ -41,22 +41,24 @@ pub enum Error {
     MetadataDiscovery(anyhow::Error),
 }
 
-pub struct Client<C>
+type OAuth2Client<C> = oauth2::Client<
+    BasicErrorResponse,
+    token::Response<<C as Profile>::AuthorizationParams>,
+    BasicTokenIntrospectionResponse,
+    StandardRevocableToken,
+    BasicRevocationErrorResponse,
+    EndpointMaybeSet,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointSet,
+>;
+
+pub struct Client<C = StandardProfile>
 where
     C: Profile,
 {
-    inner: oauth2::Client<
-        BasicErrorResponse,
-        token::Response,
-        BasicTokenIntrospectionResponse,
-        StandardRevocableToken,
-        BasicRevocationErrorResponse,
-        EndpointMaybeSet,
-        EndpointNotSet,
-        EndpointNotSet,
-        EndpointNotSet,
-        EndpointSet,
-    >,
+    inner: OAuth2Client<C>,
     issuer: UriBuf,
     credential_endpoint: CredentialUrl,
     par_auth_url: Option<ParUrl>,
@@ -64,13 +66,13 @@ where
     deferred_credential_endpoint: Option<DeferredCredentialUrl>,
     credential_response_encryption: Option<CredentialResponseEncryptionMetadata>,
     credential_configurations_supported:
-        IndexMap<CredentialConfigurationId, CredentialConfiguration<C::CredentialConfiguration>>,
+        IndexMap<CredentialConfigurationId, CredentialConfiguration<C::FormatConfiguration>>,
     display: Vec<CredentialIssuerMetadataDisplay>,
 }
 
-impl<C> Client<C>
+impl<P> Client<P>
 where
-    C: Profile,
+    P: Profile,
 {
     pub fn issuer(&self) -> &Uri {
         &self.issuer
@@ -117,17 +119,13 @@ where
 
     pub fn credential_configurations_supported(
         &self,
-    ) -> &IndexMap<CredentialConfigurationId, CredentialConfiguration<C::CredentialConfiguration>>
-    {
+    ) -> &IndexMap<CredentialConfigurationId, CredentialConfiguration<P::FormatConfiguration>> {
         &self.credential_configurations_supported
     }
 
     pub fn set_credential_configurations_supported(
         &mut self,
-        value: IndexMap<
-            CredentialConfigurationId,
-            CredentialConfiguration<C::CredentialConfiguration>,
-        >,
+        value: IndexMap<CredentialConfigurationId, CredentialConfiguration<P::FormatConfiguration>>,
     ) {
         self.credential_configurations_supported = value;
     }
@@ -143,7 +141,7 @@ where
     pub fn from_issuer_metadata(
         client_id: ClientId,
         redirect_uri: RedirectUrl,
-        credential_issuer_metadata: CredentialIssuerMetadata<C::CredentialConfiguration>,
+        credential_issuer_metadata: CredentialIssuerMetadata<P::FormatConfiguration>,
         authorization_metadata: AuthorizationServerMetadata,
     ) -> Self {
         let inner = Self::new_inner_client(
@@ -211,14 +209,18 @@ where
     pub fn exchange_code(
         &self,
         code: AuthorizationCode,
-    ) -> CodeTokenRequest<'_, BasicErrorResponse, token::Response> {
+    ) -> CodeTokenRequest<'_, BasicErrorResponse, token::Response<P::AuthorizationParams>> {
         self.inner.exchange_code(code)
     }
 
     pub fn exchange_pre_authorized_code(
         &self,
         pre_authorized_code: PreAuthorizedCode,
-    ) -> PreAuthorizedCodeTokenRequest<'_, BasicErrorResponse, token::Response> {
+    ) -> PreAuthorizedCodeTokenRequest<
+        '_,
+        BasicErrorResponse,
+        token::Response<P::AuthorizationParams>,
+    > {
         PreAuthorizedCodeTokenRequest {
             auth_type: self.inner.auth_type(),
             client_id: Some(self.inner.client_id()),
@@ -234,24 +236,25 @@ where
     pub fn request_credential(
         &self,
         access_token: AccessToken,
-        profile_fields: C::CredentialRequest,
-    ) -> CredentialRequestBuilder<C::CredentialRequest> {
-        let body = CredentialRequest::new(profile_fields);
+        id: CredentialFormatOrIdentifier<P::Format>,
+        params: P::RequestParams,
+    ) -> CredentialRequestBuilder<P::RequestParams, P::Credential> {
+        let body = CredentialRequest::new(id, params);
         CredentialRequestBuilder::new(body, self.credential_endpoint.clone(), access_token)
     }
 
     pub fn batch_request_credential(
         &self,
         access_token: AccessToken,
-        profile_fields: Vec<C::CredentialRequest>,
-    ) -> Result<BatchCredentialRequestBuilder<C::CredentialRequest>, Error> {
+        credentials: Vec<(CredentialFormatOrIdentifier<P::Format>, P::RequestParams)>,
+    ) -> Result<BatchCredentialRequestBuilder<P::RequestParams, P::Credential>, Error> {
         let Some(endpoint) = &self.batch_credential_endpoint else {
             return Err(Error::BcrUnsupported);
         };
         let body = BatchCredentialRequest::new(
-            profile_fields
+            credentials
                 .into_iter()
-                .map(CredentialRequest::new)
+                .map(|(id, params)| CredentialRequest::new(id, params))
                 .collect(),
         );
         Ok(BatchCredentialRequestBuilder::new(
@@ -266,18 +269,7 @@ where
         redirect_uri: RedirectUrl,
         auth_url: Option<AuthUrl>,
         token_url: TokenUrl,
-    ) -> oauth2::Client<
-        BasicErrorResponse,
-        token::Response,
-        BasicTokenIntrospectionResponse,
-        StandardRevocableToken,
-        BasicRevocationErrorResponse,
-        EndpointMaybeSet,
-        EndpointNotSet,
-        EndpointNotSet,
-        EndpointNotSet,
-        EndpointSet,
-    > {
+    ) -> OAuth2Client<P> {
         oauth2::Client::new(client_id)
             .set_redirect_uri(redirect_uri)
             .set_auth_uri_option(auth_url)

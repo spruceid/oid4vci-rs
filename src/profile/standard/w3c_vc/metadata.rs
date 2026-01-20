@@ -1,66 +1,88 @@
-use std::collections::HashMap;
-use std::fmt::Debug;
+use indexmap::IndexMap;
+use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use serde_json::Value;
+use crate::{issuer::metadata::CredentialFormatMetadata, types::LanguageTag};
 
-use crate::{
-    profiles::core::profiles::CredentialConfigurationClaim,
-    profiles::CredentialConfigurationProfile,
-};
+use super::W3cVcFormat;
 
-use super::CredentialSubjectClaims;
+/// Format configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct W3cVcFormatMetadata {
+    #[serde(rename = "format")]
+    pub id: W3cVcFormat,
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub struct CredentialConfiguration<F> {
-    pub format: F,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    // TODO: Enumerate types from LD Suite Registry:
-    // https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#appendix-A.1.2.2-1
-    pub credential_signing_alg_values_supported: Vec<String>,
-    pub credential_definition: CredentialDefinition,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub order: Vec<String>,
+    pub credential_definition: W3cVcDefinitionMetadata,
 }
 
-impl<F> CredentialConfigurationProfile for CredentialConfiguration<F> where
-    F: DeserializeOwned + Serialize + Debug + Clone
-{
+impl CredentialFormatMetadata for W3cVcFormatMetadata {
+    type Format = W3cVcFormat;
+
+    type SigningAlgorithm = String;
+
+    fn id(&self) -> W3cVcFormat {
+        self.id
+    }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub struct CredentialDefinition {
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct W3cVcDefinitionMetadata {
     #[serde(rename = "@context")]
-    pub context: Vec<Value>,
+    pub context: Vec<ssi::json_ld::syntax::ContextEntry>,
+
     pub r#type: Vec<String>,
+
     #[serde(
-        default,
-        skip_serializing_if = "HashMap::is_empty",
-        rename = "credentialSubject"
+        rename = "credentialSubject",
+        skip_serializing_if = "IndexMap::is_empty"
     )]
-    pub credential_subject: CredentialSubjectClaims<CredentialConfigurationClaim>,
+    pub credential_subject: IndexMap<String, W3cVcClaimMetadata>,
+
+    pub order: Option<Vec<String>>,
+}
+
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct W3cVcClaimMetadata {
+    #[serde(default, skip_serializing_if = "crate::util::is_false")]
+    pub mandatory: bool,
+
+    pub value_type: Option<String>,
+
+    #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
+    pub display: Vec<W3cVcClaimDisplay>,
+}
+
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct W3cVcClaimDisplay {
+    pub name: Option<String>,
+
+    pub locale: Option<LanguageTag>,
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use serde_json::json;
 
-    use crate::{
-        issuer::metadata::CredentialConfiguration, profiles::core::profiles::ldp_vc::Format,
-    };
+    use crate::issuer::metadata::CredentialConfiguration;
+
+    use super::*;
 
     #[test]
     fn roundtrip() {
         let expected_json = json!(
             {
-                "format": "ldp_vc",
+                "format": "jwt_vc_json",
+                "scope": "UniversityDegree",
                 "cryptographic_binding_methods_supported": [
                     "did:example"
                 ],
                 "credential_signing_alg_values_supported": [
-                    "Ed25519Signature2018"
+                    "ES256"
                 ],
-                "credential_definition": {
+                "credential_definition":{
                     "@context": [
                         "https://www.w3.org/2018/credentials/v1",
                         "https://www.w3.org/2018/credentials/examples/v1"
@@ -97,6 +119,13 @@ mod test {
                         }
                     }
                 },
+                "proof_types_supported": {
+                    "jwt": {
+                        "proof_signing_alg_values_supported": [
+                            "ES256"
+                        ]
+                    }
+                },
                 "display": [
                     {
                         "name": "University Credential",
@@ -111,12 +140,11 @@ mod test {
                 ]
             }
         );
-        let credential_configuration: CredentialConfiguration<
-            super::CredentialConfiguration<Format>,
-        > = serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(
-            &serde_json::to_string(&expected_json).unwrap(),
-        ))
-        .unwrap();
+        let credential_configuration: CredentialConfiguration<W3cVcFormatMetadata> =
+            serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(
+                &serde_json::to_string(&expected_json).unwrap(),
+            ))
+            .unwrap();
 
         let roundtripped = serde_json::to_value(credential_configuration).unwrap();
         assert_json_diff::assert_json_eq!(expected_json, roundtripped)

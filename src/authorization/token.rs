@@ -1,16 +1,17 @@
 use std::time::Duration;
 
-use oauth2::basic::BasicTokenType;
 use oauth2::{
-    AuthorizationCode, ClientId, ExtraTokenFields, RedirectUrl, RefreshToken, StandardTokenResponse,
+    basic::BasicTokenType, AuthorizationCode, ClientId, ExtraTokenFields, RedirectUrl,
+    RefreshToken, StandardTokenResponse,
 };
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none};
+use serde_with::skip_serializing_none;
 
-use crate::authorization::AuthorizationDetailsObject;
-use crate::profiles::ProfilesAuthorizationDetailsObject;
-use crate::types::{Nonce, PreAuthorizedCode};
-use crate::{profiles::AuthorizationDetailsObjectProfile, types::TxCode};
+use crate::{
+    authorization::{CredentialAuthorizationDetailsObject, CredentialAuthorizationParams},
+    profile::StandardCredentialAuthorizationParams,
+    types::{Nonce, PreAuthorizedCode, TxCode},
+};
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case", tag = "grant_type")]
@@ -34,25 +35,16 @@ pub enum Request {
     },
 }
 
-#[serde_as]
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub struct ExtraResponseTokenFields<AD>
-where
-    AD: AuthorizationDetailsObjectProfile,
-{
+#[serde(bound = "T: CredentialAuthorizationParams")]
+pub struct ExtraResponseTokenFields<T: CredentialAuthorizationParams> {
     pub c_nonce: Option<Nonce>,
     pub c_nonce_expires_in: Option<Duration>,
-    #[serde(bound = "AD: AuthorizationDetailsObjectProfile")]
-    pub authorization_details: Option<Vec<AuthorizationDetailsObject<AD>>>,
+    pub authorization_details: Option<Vec<CredentialAuthorizationDetailsObject<T>>>,
 }
 
-pub type Response = StandardTokenResponse<
-    ExtraResponseTokenFields<ProfilesAuthorizationDetailsObject>,
-    BasicTokenType,
->;
+pub type Response<T = StandardCredentialAuthorizationParams> =
+    StandardTokenResponse<ExtraResponseTokenFields<T>, BasicTokenType>;
 
-impl<AD> ExtraTokenFields for ExtraResponseTokenFields<AD> where
-    AD: AuthorizationDetailsObjectProfile
-{
-}
+impl<T> ExtraTokenFields for ExtraResponseTokenFields<T> where T: CredentialAuthorizationParams {}

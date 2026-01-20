@@ -1,43 +1,60 @@
-use isomdl::definitions::device_request::DocType;
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 
-use crate::{
-    profiles::core::profiles::CredentialConfigurationClaim,
-    profiles::CredentialConfigurationProfile,
-};
+use crate::{issuer::metadata::CredentialFormatMetadata, types::LanguageTag};
 
-use super::{Claims, Format};
+use super::MsoMdocFormat;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct CredentialConfiguration {
-    pub format: Format,
-    // TODO: Enumerate possible COSE algs
-    pub doctype: DocType,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub credential_signing_alg_values_supported: Vec<String>,
-    #[serde(default, skip_serializing_if = "Claims::is_empty")]
-    pub claims: Claims<CredentialConfigurationClaim>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub order: Vec<String>,
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MsoMdocFormatMetadata {
+    #[serde(rename = "format")]
+    pub id: MsoMdocFormat,
+
+    pub doctype: String,
+
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub claims: IndexMap<String, IndexMap<String, MsoMdocClaimMetadata>>,
+
+    pub order: Option<Vec<String>>,
 }
 
-impl CredentialConfiguration {
-    pub fn new(doctype: DocType) -> Self {
-        Self {
-            format: Format::MsoMdoc,
-            doctype,
-            credential_signing_alg_values_supported: Vec::new(),
-            claims: Default::default(),
-            order: Vec::new(),
-        }
+impl CredentialFormatMetadata for MsoMdocFormatMetadata {
+    type Format = MsoMdocFormat;
+
+    type SigningAlgorithm = String;
+
+    fn id(&self) -> Self::Format {
+        self.id
     }
 }
 
-impl CredentialConfigurationProfile for CredentialConfiguration {}
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MsoMdocClaimMetadata {
+    #[serde(default, skip_serializing_if = "crate::util::is_false")]
+    pub mandatory: bool,
+
+    pub value_type: Option<String>,
+
+    #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
+    pub display: Vec<MsoMdocClaimDisplay>,
+}
+
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MsoMdocClaimDisplay {
+    pub name: Option<String>,
+
+    pub locale: Option<LanguageTag>,
+}
 
 #[cfg(test)]
-mod test {
+mod tests {
     use crate::issuer::metadata::CredentialConfiguration;
+
+    use super::*;
 
     #[test]
     fn roundtrip() {
@@ -105,7 +122,7 @@ mod test {
                 }
             }
         );
-        let credential_configuration: CredentialConfiguration<super::CredentialConfiguration> =
+        let credential_configuration: CredentialConfiguration<MsoMdocFormatMetadata> =
             serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(
                 &serde_json::to_string(&expected_json).unwrap(),
             ))

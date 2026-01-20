@@ -1,25 +1,19 @@
 use oauth2::{ErrorResponseType, StandardErrorResponse};
 use serde::{Deserialize, Serialize};
 
-use crate::{profiles::CredentialResponseProfile, types::Nonce};
+use crate::types::Nonce;
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct CredentialResponse<CR>
-where
-    CR: CredentialResponseProfile,
-{
-    #[serde(flatten, bound = "CR: CredentialResponseProfile")]
-    pub response_kind: ResponseKind<CR>,
+pub struct CredentialResponse<T = serde_json::Value> {
+    #[serde(flatten)]
+    pub response_kind: ResponseKind<T>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub c_nonce: Option<Nonce>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub c_nonce_expires_in: Option<i64>,
 }
 
-impl<CR> CredentialResponse<CR>
-where
-    CR: CredentialResponseProfile,
-{
+impl<CR> CredentialResponse<CR> {
     pub fn new(response_kind: ResponseKind<CR>) -> Self {
         Self {
             response_kind,
@@ -31,18 +25,13 @@ where
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
-pub enum ResponseKind<CR>
-where
-    CR: CredentialResponseProfile,
-{
-    #[serde(bound = "CR: CredentialResponseProfile")]
+pub enum ResponseKind<T> {
     Immediate {
-        credential: CR::Type,
+        credential: T,
     },
     /// Support for multiple credentials of a specific type from the latest working draft versions.
-    #[serde(bound = "CR: CredentialResponseProfile")]
     ImmediateMany {
-        credentials: Vec<CR::Type>,
+        credentials: Vec<T>,
     },
     Deferred {
         transaction_id: Option<String>,
@@ -67,13 +56,11 @@ pub type ErrorResponse = StandardErrorResponse<ErrorType>;
 mod tests {
     use serde_json::json;
 
-    use crate::profiles::core::profiles::CoreProfilesCredentialResponse;
-
     use super::*;
 
     #[test]
     fn example_credential_response_object() {
-        let _: CredentialResponse<CoreProfilesCredentialResponse> = serde_json::from_value(json!({
+        let _: CredentialResponse = serde_json::from_value(json!({
             "format": "jwt_vc_json",
             "credential": "LUpixVCWJk0eOt4CXQe1NXK....WZwmhmn9OQp6YxX0a2L",
             "c_nonce": "fGFF7UkhLa",
@@ -84,7 +71,7 @@ mod tests {
 
     #[test]
     fn example_credential_deferred_response_object() {
-        let _: CredentialResponse<CoreProfilesCredentialResponse> = serde_json::from_value(json!({
+        let _: CredentialResponse = serde_json::from_value(json!({
             "transaction_id": "8xLOxBtZp8",
             "c_nonce": "wlbQc6pCJp",
             "c_nonce_expires_in": 86400

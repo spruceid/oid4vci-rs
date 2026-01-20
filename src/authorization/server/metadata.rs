@@ -9,8 +9,7 @@ use serde_json::{Map, Value as Json};
 use tracing::{info, warn};
 
 use crate::{
-    issuer::CredentialIssuerMetadata,
-    profiles::CredentialConfigurationProfile,
+    issuer::{metadata::CredentialFormatMetadata, CredentialIssuerMetadata},
     types::{JsonWebKeySetUrl, ParUrl, RegistrationUrl, ResponseMode},
     util::discoverable::Discoverable,
 };
@@ -99,16 +98,16 @@ impl AuthorizationServerMetadata {
     ///
     /// Optionally the grant type and authorization server (i.e. from the credential offer) can be
     /// provided to help select the correct authorization server.
-    pub fn discover_from_credential_issuer_metadata<C, CM>(
+    pub fn discover_from_credential_issuer_metadata<C, F>(
         http_client: &C,
-        credential_issuer_metadata: &CredentialIssuerMetadata<CM>,
+        credential_issuer_metadata: &CredentialIssuerMetadata<F>,
         grant_type: Option<&GrantType>,
         authorization_server: Option<&Uri>,
     ) -> Result<Self, anyhow::Error>
     where
         C: SyncHttpClient,
         C::Error: Send + Sync,
-        CM: CredentialConfigurationProfile,
+        F: CredentialFormatMetadata,
     {
         let credential_issuer_authorization_server_metadata =
             Self::discover(&credential_issuer_metadata.credential_issuer, http_client);
@@ -164,16 +163,16 @@ impl AuthorizationServerMetadata {
     ///
     /// Optionally the grant type and authorization server (i.e. from the credential offer) can be
     /// provided to help select the correct authorization server.
-    pub async fn discover_from_credential_issuer_metadata_async<'c, C, CM>(
+    pub async fn discover_from_credential_issuer_metadata_async<'c, C, F>(
         http_client: &'c C,
-        credential_issuer_metadata: &CredentialIssuerMetadata<CM>,
+        credential_issuer_metadata: &CredentialIssuerMetadata<F>,
         grant_type: Option<&GrantType>,
         authorization_server: Option<&Uri>,
     ) -> Result<Self, anyhow::Error>
     where
         C: AsyncHttpClient<'c>,
         C::Error: Send + Sync,
-        CM: CredentialConfigurationProfile,
+        F: CredentialFormatMetadata,
     {
         let credential_issuer_authorization_server_metadata =
             Self::discover_async(&credential_issuer_metadata.credential_issuer, http_client).await;

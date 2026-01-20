@@ -48,6 +48,19 @@
 //!
 //! [`CredentialRequest`]: crate::request::CredentialRequest
 //! [`CredentialResponse`]: crate::response::CredentialResponse
+//!
+//! # Profiles
+//!
+//! The supported credential formats are defined by the [`Profile`] trait
+//! implementation. This library provides two built-in profiles:
+//! - [`AnyProfile`]: Format-agnostic profile. Accepts everything, but won't
+///   interpret anything.
+/// - [`StandardProfile`]: Implements the profile defined by the OID4VCI
+///   specification's [Appendix A].
+///
+/// [Appendix A]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#appendix-A>
+pub use oauth2;
+
 pub mod authorization;
 pub mod batch;
 pub mod client;
@@ -55,28 +68,31 @@ pub mod encryption;
 pub mod issuer;
 pub mod notification;
 pub mod offer;
-pub mod profiles;
+pub mod profile;
 pub mod proof_of_possession;
 pub mod request;
 pub mod response;
 pub mod types;
 pub mod util;
 
-pub use oauth2;
+pub use profile::{AnyProfile, Profile, StandardProfile};
 
 #[cfg(test)]
 mod test {
-    use crate::authorization::server::metadata::GrantType;
-    use crate::authorization::server::AuthorizationServerMetadata;
-    use crate::issuer::metadata::CredentialConfiguration;
-    use crate::offer::CredentialOffer;
-    use crate::profiles::core::profiles::{
-        jwt_vc_json_ld, ldp_vc, CoreProfilesCredentialConfiguration, CoreProfilesCredentialRequest,
-        CredentialRequestWithFormat,
+    use crate::{
+        authorization::server::{metadata::GrantType, AuthorizationServerMetadata},
+        client::Client,
+        issuer::{metadata::CredentialConfiguration, CredentialIssuerMetadata},
+        offer::CredentialOffer,
+        profile::{
+            w3c_vc::{W3cVcDefinitionRequest, W3cVcRequestParams},
+            StandardCredentialFormatMetadata, StandardCredentialRequestParams, StandardFormat,
+            W3cVcFormat,
+        },
+        request::CredentialFormatOrIdentifier,
+        types::{CredentialConfigurationId, CredentialOfferRequest},
+        util::discoverable::Discoverable,
     };
-    use crate::profiles::core::{client::Client, metadata::CredentialIssuerMetadata};
-    use crate::types::{CredentialConfigurationId, CredentialOfferRequest};
-    use crate::util::discoverable::Discoverable;
     use oauth2::{ClientId, RedirectUrl, TokenResponse};
     use url::Url;
 
@@ -103,15 +119,13 @@ mod test {
         .await
         .unwrap();
 
-        let targeted_credentials: Vec<(
-            CredentialConfigurationId,
-            CredentialConfiguration<CoreProfilesCredentialConfiguration>,
-        )> = credential_issuer_metadata
-            .credential_configurations_supported
-            .iter()
-            .filter(|(id, _)| credential_offer.credential_configuration_ids.contains(id))
-            .map(|(id, configuration)| (id.clone(), configuration.clone()))
-            .collect();
+        let targeted_credentials: Vec<(CredentialConfigurationId, CredentialConfiguration)> =
+            credential_issuer_metadata
+                .credential_configurations_supported
+                .iter()
+                .filter(|(id, _)| credential_offer.credential_configuration_ids.contains(id))
+                .map(|(id, configuration)| (id.clone(), configuration.clone()))
+                .collect();
 
         assert_eq!(targeted_credentials.len(), 1);
 
@@ -132,7 +146,7 @@ mod test {
             .await
             .unwrap();
 
-        let client = Client::from_issuer_metadata(
+        let client: Client = Client::from_issuer_metadata(
             ClientId::new("test".to_owned()),
             RedirectUrl::new("test://".to_owned()).unwrap(),
             credential_issuer_metadata,
@@ -155,34 +169,44 @@ mod test {
             .unwrap();
 
         let credential_configuration = &targeted_credentials[0].1;
-        let request_inner = match &credential_configuration.profile_specific_fields {
-            CoreProfilesCredentialConfiguration::LdpVc(config) => {
-                let credential_definition =
-                    ldp_vc::authorization_detail::CredentialDefinition::default()
-                        .with_context(config.credential_definition.context.clone())
-                        .with_type(config.credential_definition.r#type.clone());
-                CredentialRequestWithFormat::LdpVc(ldp_vc::CredentialRequestWithFormat::new(
-                    credential_definition,
-                ))
-            }
-            CoreProfilesCredentialConfiguration::JwtVcJsonLd(config) => {
-                let credential_definition =
-                    ldp_vc::authorization_detail::CredentialDefinition::default()
-                        .with_context(config.credential_definition.context.clone())
-                        .with_type(config.credential_definition.r#type.clone());
-                CredentialRequestWithFormat::JwtVcJsonLd(
-                    jwt_vc_json_ld::CredentialRequestWithFormat::new(credential_definition),
-                )
-            }
-            x => unimplemented!("{x:?}"),
+        let (format, params) = match &credential_configuration.format {
+            StandardCredentialFormatMetadata::W3c(format) => match &format.id {
+                W3cVcFormat::LdpVc => {
+                    let credential_definition = W3cVcDefinitionRequest::default()
+                        .with_contexts(format.credential_definition.context.iter().cloned())
+                        .with_types(format.credential_definition.r#type.iter().cloned());
+
+                    (
+                        W3cVcFormat::LdpVc,
+                        W3cVcRequestParams {
+                            credential_definition,
+                        },
+                    )
+                }
+                W3cVcFormat::JwtVcJsonLd => {
+                    let credential_definition = W3cVcDefinitionRequest::default()
+                        .with_contexts(format.credential_definition.context.iter().cloned())
+                        .with_types(format.credential_definition.r#type.iter().cloned());
+
+                    (
+                        W3cVcFormat::JwtVcJsonLd,
+                        W3cVcRequestParams {
+                            credential_definition,
+                        },
+                    )
+                }
+                x => unimplemented!("{x:?}"),
+            },
+            _ => unimplemented!(),
         };
 
         let credential_response = client
             .request_credential(
                 token_response.access_token().clone(),
-                CoreProfilesCredentialRequest::WithFormat {
-                    inner: request_inner,
-                    _credential_identifier: (),
+                CredentialFormatOrIdentifier::Format(StandardFormat::W3c(format)),
+                StandardCredentialRequestParams {
+                    w3c_vc: Some(params),
+                    ..Default::default()
                 },
             )
             .request_async(&http_client)

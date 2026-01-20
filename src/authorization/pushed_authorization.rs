@@ -1,8 +1,9 @@
 use std::{borrow::Cow, collections::HashMap, future::Future};
 
 use crate::{
-    authorization::{AuthorizationDetailsObject, AuthorizationRequest},
-    profiles::AuthorizationDetailsObjectProfile,
+    authorization::{
+        AuthorizationRequest, CredentialAuthorizationDetailsObject, CredentialAuthorizationParams,
+    },
     request::CredentialRequestError,
     types::{IssuerState, Nonce, ParUrl, UserHint},
     util::http::{content_type_has_essence, MIME_TYPE_FORM_URLENCODED, MIME_TYPE_JSON},
@@ -221,9 +222,9 @@ impl<'a> PushedAuthorizationRequest<'a> {
         self
     }
 
-    pub fn set_authorization_details<AD: AuthorizationDetailsObjectProfile>(
+    pub fn set_authorization_details<T: CredentialAuthorizationParams>(
         mut self,
-        authorization_details: Vec<AuthorizationDetailsObject<AD>>,
+        authorization_details: Vec<CredentialAuthorizationDetailsObject<T>>,
     ) -> Result<Self, serde_json::Error> {
         self.inner = self
             .inner
@@ -272,10 +273,8 @@ mod test {
     use serde_json::json;
 
     use crate::{
-        authorization::server::AuthorizationServerMetadata,
-        profiles::core::{
-            metadata::CredentialIssuerMetadata, profiles::CoreProfilesAuthorizationDetailsObject,
-        },
+        authorization::server::AuthorizationServerMetadata, client::Client,
+        issuer::CredentialIssuerMetadata, profile::StandardCredentialAuthorizationParams,
         types::CredentialUrl,
     };
 
@@ -295,7 +294,7 @@ mod test {
 
         let issuer = uri!("https://server.example.com");
 
-        let credential_issuer_metadata = CredentialIssuerMetadata::new(
+        let credential_issuer_metadata: CredentialIssuerMetadata = CredentialIssuerMetadata::new(
             issuer.to_owned(),
             CredentialUrl::new("https://server.example.com/credential".into()).unwrap(),
         );
@@ -309,7 +308,7 @@ mod test {
         authorization_server_metadata.pushed_authorization_request_endpoint =
             Some(ParUrl::new("https://server.example.com/as/par".into()).unwrap());
 
-        let client = crate::profiles::core::client::Client::from_issuer_metadata(
+        let client: Client = Client::from_issuer_metadata(
             ClientId::new("s6BhdRkqt3".to_string()),
             RedirectUrl::new("https://client.example.org/cb".into()).unwrap(),
             credential_issuer_metadata,
@@ -325,7 +324,7 @@ mod test {
             .pushed_authorization_request(move || state)
             .unwrap()
             .set_pkce_challenge(pkce_challenge)
-            .set_authorization_details::<CoreProfilesAuthorizationDetailsObject>(vec![])
+            .set_authorization_details::<StandardCredentialAuthorizationParams>(vec![])
             .unwrap()
             .prepare_request()
             .unwrap();

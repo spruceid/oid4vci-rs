@@ -1,5 +1,6 @@
-use std::future::Future;
+use std::{fmt::Debug, future::Future, marker::PhantomData};
 
+use indexmap::IndexMap;
 use oauth2::{
     http::{
         self,
@@ -8,11 +9,11 @@ use oauth2::{
     },
     AccessToken, AsyncHttpClient, HttpRequest, HttpResponse, SyncHttpClient,
 };
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::{
     encryption::CredentialResponseEncryption,
-    profiles::CredentialRequestProfile,
+    profile::StandardCredentialRequestParams,
     proof_of_possession::Proof,
     response::CredentialResponse,
     types::CredentialUrl,
@@ -35,49 +36,80 @@ where
     Other(String),
 }
 
+/// Credential request.
+///
+/// # Credential format or identifier.
+///
+/// The `F` parameter must serialize into a struct with *either* of those fields
+/// - `format`: a string that determines the format of the Credential to be
+///   issued.
+/// - `credential_identifier`: a string that identifies a Credential that is
+///   being requested to be issued.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct CredentialRequest<CR>
-where
-    CR: CredentialRequestProfile,
-{
+#[serde(bound = "F: CredentialRequestParams")]
+pub struct CredentialRequest<F: CredentialRequestParams = StandardCredentialRequestParams> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proof: Option<Proof>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub credential_response_encryption: Option<CredentialResponseEncryption>,
 
-    #[serde(flatten, bound = "CR: CredentialRequestProfile")]
-    pub additional_profile_fields: CR,
+    #[serde(flatten)]
+    pub format_or_identifier: CredentialFormatOrIdentifier<F::Format>,
+
+    #[serde(flatten)]
+    pub params: F,
 }
 
-impl<CR> CredentialRequest<CR>
-where
-    CR: CredentialRequestProfile,
-{
-    pub(crate) fn new(additional_profile_fields: CR) -> Self {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CredentialFormatOrIdentifier<F> {
+    #[serde(rename = "format")]
+    Format(F),
+
+    #[serde(rename = "credential_identifier")]
+    Identifier(String),
+}
+
+impl<F: CredentialRequestParams> CredentialRequest<F> {
+    pub(crate) fn new(
+        format_or_identifier: CredentialFormatOrIdentifier<F::Format>,
+        params: F,
+    ) -> Self {
         Self {
             proof: None,
             credential_response_encryption: None,
-            additional_profile_fields,
+            format_or_identifier,
+            params,
         }
     }
 }
 
-pub struct CredentialRequestBuilder<CR>
-where
-    CR: CredentialRequestProfile,
-{
-    body: CredentialRequest<CR>,
-    url: CredentialUrl,
-    access_token: AccessToken,
+/// Credential format request parameters.
+///
+/// Specifies format-specific parameters in a [`CredentialRequest`].
+pub trait CredentialRequestParams: Serialize + DeserializeOwned {
+    type Format: Debug + Clone + PartialEq + Eq + Serialize + DeserializeOwned;
 }
 
-impl<CR> CredentialRequestBuilder<CR>
+pub type AnyCredentialRequestParams = IndexMap<String, serde_json::Value>;
+
+impl CredentialRequestParams for AnyCredentialRequestParams {
+    type Format = String;
+}
+
+pub struct CredentialRequestBuilder<F: CredentialRequestParams, T> {
+    body: CredentialRequest<F>,
+    url: CredentialUrl,
+    access_token: AccessToken,
+    credential_type: PhantomData<T>,
+}
+
+impl<F, T> CredentialRequestBuilder<F, T>
 where
-    CR: CredentialRequestProfile,
+    F: CredentialRequestParams,
 {
     pub(crate) fn new(
-        body: CredentialRequest<CR>,
+        body: CredentialRequest<F>,
         url: CredentialUrl,
         access_token: AccessToken,
     ) -> Self {
@@ -85,15 +117,19 @@ where
             body,
             url,
             access_token,
+            credential_type: PhantomData,
         }
     }
 
-    pub fn additional_profile_fields(&self) -> &CR {
-        &self.body.additional_profile_fields
+    pub fn format_or_identifier(&self) -> &CredentialFormatOrIdentifier<F::Format> {
+        &self.body.format_or_identifier
     }
 
-    pub fn set_additional_profile_fields(mut self, additional_profile_fields: CR) -> Self {
-        self.body.additional_profile_fields = additional_profile_fields;
+    pub fn set_format_or_identifier(
+        mut self,
+        format_or_identifier: CredentialFormatOrIdentifier<F::Format>,
+    ) -> Self {
+        self.body.format_or_identifier = format_or_identifier;
         self
     }
 
@@ -121,12 +157,10 @@ where
     pub fn request<C>(
         self,
         http_client: &C,
-    ) -> Result<
-        CredentialResponse<CR::Response>,
-        CredentialRequestError<<C as SyncHttpClient>::Error>,
-    >
+    ) -> Result<CredentialResponse<T>, CredentialRequestError<C::Error>>
     where
         C: SyncHttpClient,
+        T: DeserializeOwned,
     {
         http_client
             .call(self.prepare_request().map_err(|err| {
@@ -139,15 +173,11 @@ where
     pub fn request_async<'c, C>(
         self,
         http_client: &'c C,
-    ) -> impl Future<
-        Output = Result<
-            CredentialResponse<CR::Response>,
-            CredentialRequestError<<C as AsyncHttpClient<'c>>::Error>,
-        >,
-    > + 'c
+    ) -> impl Future<Output = Result<CredentialResponse<T>, CredentialRequestError<C::Error>>> + 'c
     where
         Self: 'c,
         C: AsyncHttpClient<'c>,
+        T: DeserializeOwned,
     {
         Box::pin(async move {
             let http_response = http_client
@@ -179,8 +209,9 @@ where
     fn credential_response<RE>(
         self,
         http_response: HttpResponse,
-    ) -> Result<CredentialResponse<CR::Response>, CredentialRequestError<RE>>
+    ) -> Result<CredentialResponse<T>, CredentialRequestError<RE>>
     where
+        T: DeserializeOwned,
         RE: std::error::Error + 'static,
     {
         // TODO status 202 if deferred
@@ -226,7 +257,7 @@ mod tests {
 
     #[test]
     fn example_credential_request_object() {
-        let _: crate::profiles::core::credential::Request = serde_json::from_value(json!({
+        let _: CredentialRequest = serde_json::from_value(json!({
             "format": "jwt_vc_json",
             "credential_definition": {
              "type": [
@@ -247,7 +278,7 @@ mod tests {
 
     #[test]
     fn example_credential_request_referenced() {
-        let _: crate::profiles::core::credential::Request = serde_json::from_value(json!({
+        let _: CredentialRequest = serde_json::from_value(json!({
             "credential_identifier": "UniversityDegreeCredential",
             "proof": {
                "proof_type": "jwt",
@@ -262,20 +293,18 @@ mod tests {
 
     #[test]
     fn example_credential_request_deny() {
-        assert!(
-            serde_json::from_value::<crate::profiles::core::credential::Request>(json!({
-                "format": "jwt_vc_json",
-                "credential_identifier": "UniversityDegreeCredential",
-                "proof": {
-                   "proof_type": "jwt",
-                   "jwt": "eyJraWQiOiJkaWQ6ZXhhbXBsZTplYmZlYjFmNzEyZWJjNmYxYzI3NmUxMmVjMjEva2V5cy8
+        assert!(serde_json::from_value::<CredentialRequest>(json!({
+            "format": "jwt_vc_json",
+            "credential_identifier": "UniversityDegreeCredential",
+            "proof": {
+               "proof_type": "jwt",
+               "jwt": "eyJraWQiOiJkaWQ6ZXhhbXBsZTplYmZlYjFmNzEyZWJjNmYxYzI3NmUxMmVjMjEva2V5cy8
                xIiwiYWxnIjoiRVMyNTYiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJzNkJoZFJrcXQzIiwiYXVkIjoiaHR
                0cHM6Ly9zZXJ2ZXIuZXhhbXBsZS5jb20iLCJpYXQiOjE1MzY5NTk5NTksIm5vbmNlIjoidFppZ25zbk
                ZicCJ9.ewdkIkPV50iOeBUqMXCC_aZKPxgihac0aW9EkL1nOzM"
-                }
-            }))
-            .is_err()
-        );
+            }
+        }))
+        .is_err());
     }
 
     #[test]
