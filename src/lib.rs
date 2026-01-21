@@ -62,7 +62,6 @@
 pub use oauth2;
 
 pub mod authorization;
-pub mod batch;
 pub mod client;
 pub mod encryption;
 pub mod issuer;

@@ -351,11 +351,6 @@ new_url_type![
 ];
 
 new_url_type![
-    /// URL of the Credential Issuer's Batch Credential Endpoint.
-    BatchCredentialUrl
-];
-
-new_url_type![
     /// URL of the Credential Issuer's Deferred Credential Endpoint.
     DeferredCredentialUrl
 ];

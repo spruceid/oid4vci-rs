@@ -12,8 +12,8 @@ use crate::{
     profile::StandardCredentialFormatMetadata,
     proof_of_possession::KeyProofType,
     types::{
-        BatchCredentialUrl, CredentialConfigurationId, CredentialUrl, DeferredCredentialUrl,
-        LanguageTag, LogoUri, NotificationUrl,
+        CredentialConfigurationId, CredentialUrl, DeferredCredentialUrl, LanguageTag, LogoUri,
+        NotificationUrl,
     },
     util::discoverable::Discoverable,
 };
@@ -43,9 +43,6 @@ where
     /// This URL *must* use the `https` scheme and *may* contain port, path, and
     /// query parameter components.
     pub credential_endpoint: CredentialUrl,
-
-    /// DEPRECATED in version 1.0
-    pub batch_credential_endpoint: Option<BatchCredentialUrl>,
 
     /// URL of the Credential Issuer's Deferred Credential Endpoint.
     ///
@@ -109,7 +106,6 @@ impl<P: CredentialFormatMetadata> CredentialIssuerMetadata<P> {
             credential_issuer,
             authorization_servers: Vec::new(),
             credential_endpoint,
-            batch_credential_endpoint: None,
             deferred_credential_endpoint: None,
             notification_endpoint: None,
             credential_response_encryption: None,

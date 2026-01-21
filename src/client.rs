@@ -15,7 +15,6 @@ use crate::{
         pushed_authorization::PushedAuthorizationRequest, server::AuthorizationServerMetadata,
         token, AuthorizationRequest,
     },
-    batch::request::{BatchCredentialRequest, BatchCredentialRequestBuilder},
     encryption::CredentialResponseEncryptionMetadata,
     issuer::{
         metadata::{CredentialConfiguration, CredentialIssuerMetadataDisplay},
@@ -24,8 +23,7 @@ use crate::{
     profile::{Profile, StandardProfile},
     request::{CredentialFormatOrIdentifier, CredentialRequest, CredentialRequestBuilder},
     types::{
-        BatchCredentialUrl, CredentialConfigurationId, CredentialUrl, DeferredCredentialUrl,
-        ParUrl, PreAuthorizedCode,
+        CredentialConfigurationId, CredentialUrl, DeferredCredentialUrl, ParUrl, PreAuthorizedCode,
     },
 };
 
@@ -62,7 +60,6 @@ where
     issuer: UriBuf,
     credential_endpoint: CredentialUrl,
     par_auth_url: Option<ParUrl>,
-    batch_credential_endpoint: Option<BatchCredentialUrl>,
     deferred_credential_endpoint: Option<DeferredCredentialUrl>,
     credential_response_encryption: Option<CredentialResponseEncryptionMetadata>,
     credential_configurations_supported:
@@ -88,14 +85,6 @@ where
 
     pub fn set_credential_endpoint(&mut self, value: CredentialUrl) {
         self.credential_endpoint = value;
-    }
-
-    pub fn batch_credential_endpoint(&self) -> &Option<BatchCredentialUrl> {
-        &self.batch_credential_endpoint
-    }
-
-    pub fn set_batch_credential_endpoint(&mut self, value: Option<BatchCredentialUrl>) {
-        self.batch_credential_endpoint = value;
     }
 
     pub fn deferred_credential_endpoint(&self) -> &Option<DeferredCredentialUrl> {
@@ -158,7 +147,6 @@ where
             par_auth_url: authorization_metadata
                 .pushed_authorization_request_endpoint
                 .clone(),
-            batch_credential_endpoint: credential_issuer_metadata.batch_credential_endpoint.clone(),
             deferred_credential_endpoint: credential_issuer_metadata
                 .deferred_credential_endpoint
                 .clone(),
@@ -241,27 +229,6 @@ where
     ) -> CredentialRequestBuilder<P::RequestParams, P::Credential> {
         let body = CredentialRequest::new(id, params);
         CredentialRequestBuilder::new(body, self.credential_endpoint.clone(), access_token)
-    }
-
-    pub fn batch_request_credential(
-        &self,
-        access_token: AccessToken,
-        credentials: Vec<(CredentialFormatOrIdentifier<P::Format>, P::RequestParams)>,
-    ) -> Result<BatchCredentialRequestBuilder<P::RequestParams, P::Credential>, Error> {
-        let Some(endpoint) = &self.batch_credential_endpoint else {
-            return Err(Error::BcrUnsupported);
-        };
-        let body = BatchCredentialRequest::new(
-            credentials
-                .into_iter()
-                .map(|(id, params)| CredentialRequest::new(id, params))
-                .collect(),
-        );
-        Ok(BatchCredentialRequestBuilder::new(
-            body,
-            endpoint.clone(),
-            access_token,
-        ))
     }
 
     fn new_inner_client(
