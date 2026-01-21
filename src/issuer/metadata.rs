@@ -8,7 +8,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
 use crate::{
-    encryption::CredentialResponseEncryptionMetadata,
+    encryption::jwe,
     profile::StandardCredentialFormatMetadata,
     proof_of_possession::KeyProofType,
     types::{
@@ -20,7 +20,7 @@ use crate::{
 
 /// Credential Issuer Metadata.
 ///
-/// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#section-11.2>
+/// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-issuer-metadata>
 #[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(bound = "F: CredentialFormatMetadata")]
@@ -29,10 +29,20 @@ where
     F: CredentialFormatMetadata,
 {
     /// Credential Issuer's identifier.
+    ///
+    /// A Credential Issuer is identified by a case sensitive URL using the
+    /// https scheme that contains scheme, host and, optionally, port number and
+    /// path components, but no query or fragment components.
+    ///
+    /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#credential-issuer-identifier>
     pub credential_issuer: UriBuf,
 
     /// List of OAuth 2.0 Authorization Server (as defined in [RFC8414]) the
     /// Credential Issuer relies on for authorization.
+    ///
+    /// If this parameter is omitted, the entity providing the Credential Issuer
+    /// is also acting as the Authorization Server, i.e., the Credential
+    /// Issuer's identifier is used to obtain the Authorization Server metadata.
     ///
     /// [RFC8414]: <https://www.rfc-editor.org/info/rfc8414>
     #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
@@ -42,7 +52,18 @@ where
     ///
     /// This URL *must* use the `https` scheme and *may* contain port, path, and
     /// query parameter components.
+    ///
+    /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#credential-request>
     pub credential_endpoint: CredentialUrl,
+
+    /// URL of the Credential Issuer's Nonce Endpoint.
+    ///
+    /// This URL *must* use the `https` scheme and *may* contain port, path, and
+    /// query parameter components. If omitted, the Credential Issuer does not
+    /// require the use of `c_nonce`.
+    ///
+    /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#nonce-endpoint>
+    pub nonce_endpoint: Option<UriBuf>,
 
     /// URL of the Credential Issuer's Deferred Credential Endpoint.
     ///
@@ -51,6 +72,8 @@ where
     ///
     /// If omitted, the Credential Issuer does not support the Deferred
     /// Credential Endpoint.
+    ///
+    /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#deferred-credential-issuance>
     pub deferred_credential_endpoint: Option<DeferredCredentialUrl>,
 
     /// URL of the Credential Issuer's Notification Endpoint.
@@ -60,17 +83,23 @@ where
     ///
     /// If omitted, the Credential Issuer does not support the Notification
     /// Endpoint.
+    ///
+    /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#notification-endpoint>
     pub notification_endpoint: Option<NotificationUrl>,
 
     /// Information about whether the Credential Issuer supports encryption of
-    /// the Credential and Batch Credential Response on top of TLS.
+    /// the Credential Request on top of TLS.
+    pub credential_request_encryption: Option<CredentialRequestEncryptionMetadata>,
+
+    /// Information about whether the Credential Issuer supports encryption of
+    /// the Credential Response on top of TLS.
     pub credential_response_encryption: Option<CredentialResponseEncryptionMetadata>,
 
-    /// DEPRECATED in version 1.0
-    pub credential_identifiers_supported: Option<bool>,
-
-    /// Credential Issuer Metadata signed as a JWT.
-    pub signed_metadata: Option<String>, // TODO turn that into an actual `JwsString`.
+    /// Information about the Credential Issuer's support for issuance of
+    /// multiple Credentials in a batch in the Credential Endpoint.
+    ///
+    /// If omitted, the Credential Issuer does not support batch issuance.
+    pub batch_credential_issuance: Option<BatchCredentialIssuanceMetadata>,
 
     /// Credential Issuer display properties.
     #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
@@ -106,43 +135,135 @@ impl<P: CredentialFormatMetadata> CredentialIssuerMetadata<P> {
             credential_issuer,
             authorization_servers: Vec::new(),
             credential_endpoint,
+            nonce_endpoint: None,
             deferred_credential_endpoint: None,
             notification_endpoint: None,
+            credential_request_encryption: None,
             credential_response_encryption: None,
-            credential_identifiers_supported: None,
-            signed_metadata: None,
+            batch_credential_issuance: None,
             display: Vec::new(),
             credential_configurations_supported: IndexMap::new(),
         }
     }
 }
 
+/// Information about whether the Credential Issuer supports encryption of the
+/// Credential Request on top of TLS.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct CredentialRequestEncryptionMetadata {
+    /// Set of JWK public keys to be used by the Wallet as input to a key
+    /// agreement for encryption of the Credential Request.
+    ///
+    /// Must contain at least one key. Each JWK in the set *must* have a `kid`
+    /// (key ID) parameter that uniquely identifies the key.
+    ///
+    /// See: <https://www.rfc-editor.org/info/rfc7591>
+    pub jwks: Vec<ssi::JWK>,
+
+    /// List of the JWE encryption algorithms (`enc` values) supported by the
+    /// Credential Endpoint to decode the Credential Request from a JWT.
+    ///
+    /// Must contain at least one algorithm.
+    pub enc_values_supported: Vec<jwe::EncryptionAlgorithm>,
+
+    /// List of the JWE compression algorithms (`zip` values) supported by the
+    /// Credential Endpoint to uncompress the Credential Request after
+    /// decryption.
+    ///
+    /// If empty, no compression algorithms are supported.
+    #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
+    pub zip_values_supported: Vec<jwe::CompressionAlgorithm>,
+
+    /// Whether the Credential Issuer requires the additional encryption on top
+    /// of TLS for the Credential Requests.
+    ///
+    /// If `true`, the Credential Issuer requires encryption for every
+    /// Credential Request. Otherwise the Wallet *may* choose whether it
+    /// encrypts the request or not.
+    pub encryption_required: bool,
+}
+
+/// Information about whether the Credential Issuer supports encryption of the
+/// Credential Response on top of TLS.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct CredentialResponseEncryptionMetadata {
+    /// List of the JWE encryption algorithms (`alg` values) supported by the
+    /// Credential Endpoint to encode the Credential Response in a JWT.
+    ///
+    /// Must contain at least one value.
+    pub alg_values_supported: Vec<jwe::Algorithm>,
+
+    /// List of the JWE encryption algorithm (`enc` values) supported by the
+    /// Credential Endpoint to encode the Credential Response in a JWT.
+    ///
+    /// Must contain at least one value.
+    pub enc_values_supported: Vec<jwe::EncryptionAlgorithm>,
+
+    /// List of the JWE compression algorithms (`zip` values) supported by the
+    /// Credential Endpoint to uncompress the Credential Response prior to
+    /// encryption.
+    ///
+    /// If empty, no compression algorithms are supported.
+    #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
+    pub zip_values_supported: Vec<jwe::CompressionAlgorithm>,
+
+    /// Whether the Credential Issuer requires the additional encryption on top
+    /// of TLS for the Credential Response.
+    ///
+    /// If `true`, the Credential Issuer requires encryption for every
+    /// Credential Response and therefore the Wallet *must* provide encryption
+    /// keys in the Credential Request. Otherwise the Wallet *may* choose
+    /// whether it provides encryption keys or not.
+    pub encryption_required: bool,
+}
+
+/// Information about the Credential Issuer's support for issuance of multiple
+/// Credentials in a batch in the Credential Endpoint.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct BatchCredentialIssuanceMetadata {
+    /// Integer value specifying the maximum array size for the `proofs`
+    /// parameter in a Credential Request.
+    ///
+    /// It *must* be `2` or greater.
+    pub batch_size: u32,
+}
+
+/// Credential Issuer display properties.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CredentialIssuerMetadataDisplay {
+    /// Display name for the Credential Issuer.
     pub name: Option<String>,
+
+    /// Language of this object.
     pub locale: Option<LanguageTag>,
-    pub logo: Option<MetadataDisplayLogo>,
+
+    /// Information about the logo of the Credential Issuer.
+    pub logo: Option<DisplayLogoMetadata>,
 }
 
 impl CredentialIssuerMetadataDisplay {
     pub fn new(
         name: Option<String>,
         locale: Option<LanguageTag>,
-        logo: Option<MetadataDisplayLogo>,
+        logo: Option<DisplayLogoMetadata>,
     ) -> Self {
         Self { name, locale, logo }
     }
 }
 
+/// Logo of a Credential Issuer.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct MetadataDisplayLogo {
+pub struct DisplayLogoMetadata {
+    /// URI where the Wallet can obtain the logo of the Credential Issuer.
     pub uri: LogoUri,
+
+    /// Alternative text for the logo image.
     pub alt_text: Option<String>,
 }
 
-impl MetadataDisplayLogo {
+impl DisplayLogoMetadata {
     pub fn new(uri: LogoUri, alt_text: Option<String>) -> Self {
         Self { uri, alt_text }
     }
@@ -185,7 +306,7 @@ pub struct AnyCredentialFormatConfiguration {
 impl CredentialFormatMetadata for AnyCredentialFormatConfiguration {
     type Format = String;
 
-    type SigningAlgorithm = String;
+    type SigningAlgorithm = serde_json::Value;
 
     fn id(&self) -> String {
         self.id.clone()
@@ -221,7 +342,11 @@ pub struct CredentialConfiguration<F: CredentialFormatMetadata = StandardCredent
 
     /// Display properties of the supported Credential for different languages.
     #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
-    pub display: Vec<CredentialMetadataDisplay>,
+    pub display: Vec<CredentialDisplay>,
+
+    /// Claims descriptions.
+    #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
+    pub claims: Vec<ClaimDescription>,
 
     /// Credential format and metadata.
     #[serde(flatten)]
@@ -236,6 +361,7 @@ impl<F: CredentialFormatMetadata> CredentialConfiguration<F> {
             credential_signing_alg_values_supported: Vec::new(),
             proof_types_supported: IndexMap::new(),
             display: Vec::new(),
+            claims: Vec::new(),
             format,
         }
     }
@@ -243,7 +369,31 @@ impl<F: CredentialFormatMetadata> CredentialConfiguration<F> {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct KeyProofTypesSupported {
+    /// Algorithms that the Issuer supports for this proof type.
+    ///
+    /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#proof-types>
     pub proof_signing_alg_values_supported: Vec<ssi::jwk::Algorithm>,
+
+    /// Requirements for key attestations.
+    ///
+    /// If omitted, the Credential Issuer does not require a key attestation.
+    /// Parameters may be empty, indicating a key attestation is needed without
+    /// additional constraints.
+    ///
+    /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#keyattestation>
+    pub key_attestations_required: Option<KeyAttestationRequirements>,
+}
+
+/// Requirements for key attestations.
+///
+/// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#keyattestation-apr>
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct KeyAttestationRequirements {
+    /// Accepted values for a key attestation `key_storage` parameter.
+    pub key_storage: Option<Vec<String>>,
+
+    /// Accepted values for a key attestation `user_authentication` parameter.
+    pub user_authentication: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -265,30 +415,50 @@ pub enum CryptographicBindingMethod {
     DidExample,
 
     #[serde(untagged)]
-    Extension(String),
+    Other(String),
 }
 
+/// Display properties of a Credential for a certain language.
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct CredentialMetadataDisplay {
+pub struct CredentialDisplay {
+    /// Display name for the Credential.
     pub name: String,
+
+    /// Language of this object.
     pub locale: Option<LanguageTag>,
-    pub logo: Option<MetadataDisplayLogo>,
+
+    /// Information about the logo of the Credential.
+    pub logo: Option<DisplayLogoMetadata>,
+
+    /// Description of the Credential.
     pub description: Option<String>,
+
+    /// Background color of the Credential.
+    ///
+    /// Represented as a numerical color value defined in
+    /// [CSS Color Module Level 3](https://www.w3.org/TR/2022/REC-css-color-3-20220118/).
     pub background_color: Option<String>,
-    pub background_image: Option<MetadataBackgroundImage>,
+
+    /// Information about the background image of the Credential.
+    pub background_image: Option<BackgroundImageMetadata>,
+
+    /// Text color of the Credential.
+    ///
+    /// Represented as a numerical color value defined in
+    /// [CSS Color Module Level 3](https://www.w3.org/TR/2022/REC-css-color-3-20220118/).
     pub text_color: Option<String>,
 }
 
-impl CredentialMetadataDisplay {
+impl CredentialDisplay {
     pub fn new(
         name: String,
         locale: Option<LanguageTag>,
-        logo: Option<MetadataDisplayLogo>,
+        logo: Option<DisplayLogoMetadata>,
         description: Option<String>,
         background_color: Option<String>,
-        background_image: Option<MetadataBackgroundImage>,
+        background_image: Option<BackgroundImageMetadata>,
         text_color: Option<String>,
     ) -> Self {
         Self {
@@ -303,329 +473,113 @@ impl CredentialMetadataDisplay {
     }
 }
 
+/// Information about the background image of a Credential.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct MetadataBackgroundImage {
+pub struct BackgroundImageMetadata {
+    /// URI where the Wallet can obtain the background image of the Credential.
     pub uri: LogoUri,
 }
 
-impl MetadataBackgroundImage {
+impl BackgroundImageMetadata {
     pub fn new(uri: LogoUri) -> Self {
         Self { uri }
     }
 }
 
+/// Credential claim description.
+///
+/// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#claims-description-issuer-metadata>
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct ClaimDescription {
+    /// Claims path pointer.
+    ///
+    /// Specifies the path to a claim within the credential.
+    ///
+    /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#claims_path_pointer>
+    pub path: Vec<ClaimPathSegment>,
+
+    /// Whether the Credential Issuer will always include this claim in the
+    /// issued Credential.
+    #[serde(default, skip_serializing_if = "crate::util::is_false")]
+    pub mandatory: bool,
+
+    /// Display properties of the claim.
+    #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
+    pub display: Vec<ClaimDisplay>,
+}
+
+/// Claim path segment.
+///
+/// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#claims_path_pointer>
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum ClaimPathSegment {
+    Null,
+    Integer(u64),
+    String(String),
+}
+
+/// Display properties of a credential claim.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct ClaimDisplay {
+    /// Display name for the claim.
+    pub name: Option<String>,
+
+    /// Language of this object.
+    pub locale: Option<LanguageTag>,
+}
+
+/// To test examples that focus on the `credential_configurations_supported`
+/// property.
+#[cfg(test)]
+#[derive(Serialize, Deserialize)]
+#[serde(bound = "F: CredentialFormatMetadata")]
+pub struct CredentialConfigurationsSupported<
+    F: CredentialFormatMetadata = StandardCredentialFormatMetadata,
+> {
+    #[allow(unused)]
+    pub credential_configurations_supported:
+        IndexMap<CredentialConfigurationId, CredentialConfiguration<F>>,
+}
+
 #[cfg(test)]
 mod test {
-    use serde_json::json;
-
     use super::*;
 
     #[test]
-    fn example_credential_issuer_metadata() {
-        let _: CredentialIssuerMetadata = serde_json::from_value(json!({
-            "credential_issuer": "https://credential-issuer.example.com",
-            "authorization_servers": [ "https://server.example.com" ],
-            "credential_endpoint": "https://credential-issuer.example.com",
-            "batch_credential_endpoint": "https://credential-issuer.example.com/batch_credential",
-            "deferred_credential_endpoint": "https://credential-issuer.example.com/deferred_credential",
-            "credential_response_encryption": {
-                "alg_values_supported" : [
-                    "ECDH-ES"
-                ],
-                "enc_values_supported" : [
-                    "A128GCM"
-                ],
-                "encryption_required": false
-            },
-            "display": [
-                {
-                    "name": "Example University",
-                    "locale": "en-US"
-                },
-                {
-                    "name": "Example Université",
-                    "locale": "fr-FR"
-                }
-            ],
-            "credential_configurations_supported": {
-                "UniversityDegreeCredential": {
-                    "format": "jwt_vc_json",
-                    "scope": "UniversityDegree",
-                    "cryptographic_binding_methods_supported": [
-                        "did:example"
-                    ],
-                    "credential_signing_alg_values_supported": [
-                        "ES256"
-                    ],
-                    "credential_definition":{
-                        "@context": [
-                            "https://www.w3.org/2018/credentials/v1",
-                            "https://www.w3.org/2018/credentials/examples/v1"
-                        ],
-                        "type": [
-                            "VerifiableCredential",
-                            "UniversityDegreeCredential"
-                        ],
-                        "credentialSubject": {
-                            "given_name": {
-                                "display": [
-                                    {
-                                        "name": "Given Name",
-                                        "locale": "en-US"
-                                    }
-                                ]
-                            },
-                            "family_name": {
-                                "display": [
-                                    {
-                                        "name": "Surname",
-                                        "locale": "en-US"
-                                    }
-                                ]
-                            },
-                            "degree": {},
-                            "gpa": {
-                                "display": [
-                                    {
-                                        "name": "GPA"
-                                    }
-                                ]
-                            }
-                        }
-                    },
-                    "proof_types_supported": {
-                        "jwt": {
-                            "proof_signing_alg_values_supported": [
-                                "ES256"
-                            ]
-                        }
-                    },
-                    "display": [
-                        {
-                            "name": "University Credential",
-                            "locale": "en-US",
-                            "logo": {
-                                "uri": "https://university.example.edu/public/logo.png",
-                                "alt_text": "a square logo of a university"
-                            },
-                            "background_color": "#12107c",
-                            "background_image": {
-                                "uri": "https://university.example.edu/public/background-image.png"
-                            },
-                            "text_color": "#FFFFFF"
-                        }
-                    ]
-                }
-            }
-        })).unwrap();
+    fn example() {
+        let _: CredentialConfigurationsSupported =
+            serde_json::from_str(include_str!("../tests/issuer/metadata/example.json")).unwrap();
     }
 
     #[test]
-    fn example_credential_metadata_jwt() {
-        let _: CredentialConfiguration = serde_json::from_value(json!({
-            "format": "jwt_vc_json",
-            "id": "UniversityDegree_JWT",
-            "cryptographic_binding_methods_supported": [
-                "did:example"
-            ],
-            "credential_signing_alg_values_supported": [
-                "ES256K"
-            ],
-            "credential_definition":{
-                "@context": [
-                    "https://www.w3.org/2018/credentials/v1",
-                    "https://www.w3.org/2018/credentials/examples/v1"
-                ],
-                "type": [
-                    "VerifiableCredential",
-                    "UniversityDegreeCredential"
-                ],
-                "credentialSubject": {
-                    "given_name": {
-                        "display": [
-                            {
-                                "name": "Given Name",
-                                "locale": "en-US"
-                            }
-                        ]
-                    },
-                    "family_name": {
-                        "display": [
-                            {
-                                "name": "Surname",
-                                "locale": "en-US"
-                            }
-                        ]
-                    },
-                    "degree": {},
-                    "gpa": {
-                        "display": [
-                            {
-                                "name": "GPA"
-                            }
-                        ]
-                    }
-                }
-            },
-            "proof_types_supported": {
-                "jwt": {
-                    "proof_signing_alg_values_supported": [
-                        "ES256"
-                    ]
-                }
-            },
-            "display": [
-                {
-                    "name": "University Credential",
-                    "locale": "en-US",
-                    "logo": {
-                        "uri": "https://exampleuniversity.com/public/logo.png",
-                        "alt_text": "a square logo of a university"
-                    },
-                    "background_color": "#12107c",
-                    "background_image": {
-                        "uri": "https://university.example.edu/public/background-image.png"
-                    },
-                    "text_color": "#FFFFFF"
-                }
-            ]
-        }))
+    fn example_additional() {
+        let _: CredentialIssuerMetadata = serde_json::from_str(include_str!(
+            "../tests/issuer/metadata/example_additional.json"
+        ))
         .unwrap();
     }
 
     #[test]
-    fn example_credential_metadata_ldp() {
-        let _: CredentialConfiguration = serde_json::from_value(json!({
-            "format": "ldp_vc",
-            "cryptographic_binding_methods_supported": [
-                "did:example"
-            ],
-            "credential_signing_alg_values_supported": [
-                "Ed25519Signature2018"
-            ],
-            "credential_definition": {
-                "@context": [
-                    "https://www.w3.org/2018/credentials/v1",
-                    "https://www.w3.org/2018/credentials/examples/v1"
-                ],
-                "type": [
-                    "VerifiableCredential",
-                    "UniversityDegreeCredential"
-                ],
-                "credentialSubject": {
-                    "given_name": {
-                        "display": [
-                            {
-                                "name": "Given Name",
-                                "locale": "en-US"
-                            }
-                        ]
-                    },
-                    "family_name": {
-                        "display": [
-                            {
-                                "name": "Surname",
-                                "locale": "en-US"
-                            }
-                        ]
-                    },
-                    "degree": {},
-                    "gpa": {
-                        "display": [
-                            {
-                                "name": "GPA"
-                            }
-                        ]
-                    }
-                }
-            },
-            "display": [
-                {
-                    "name": "University Credential",
-                    "locale": "en-US",
-                    "logo": {
-                        "uri": "https://exampleuniversity.com/public/logo.png",
-                        "alt_text": "a square logo of a university"
-                    },
-                    "background_color": "#12107c",
-                    "background_image": {
-                        "uri": "https://university.example.edu/public/background-image.png"
-                    },
-                    "text_color": "#FFFFFF"
-                }
-            ]
-        }))
+    fn example_dc_sd_jwt() {
+        let _: CredentialConfigurationsSupported = serde_json::from_str(include_str!(
+            "../tests/profile/dc_sd_jwt/issuer_metadata.json"
+        ))
         .unwrap();
     }
 
     #[test]
-    fn example_credential_metadata_isomdl() {
-        let _: CredentialConfiguration = serde_json::from_value(json!({
-            "format": "mso_mdoc",
-            "doctype": "org.iso.18013.5.1.mDL",
-            "cryptographic_binding_methods_supported": [
-                "mso"
-            ],
-            "credential_signing_alg_values_supported": [
-                "ES256", "ES384", "ES512"
-            ],
-            "display": [
-                {
-                    "name": "Mobile Driving License",
-                    "locale": "en-US",
-                    "logo": {
-                        "uri": "https://examplestate.com/public/mdl.png",
-                        "alt_text": "a square figure of a mobile driving license"
-                    },
-                    "background_color": "#12107c",
-                    "background_image": {
-                        "uri": "https://examplestate.com/public/background-image.png"
-                    },
-                    "text_color": "#FFFFFF"
-                },
-                {
-                    "name": "在籍証明書",
-                    "locale": "ja-JP",
-                    "logo": {
-                        "uri": "https://examplestate.com/public/mdl.png",
-                        "alt_text": "大学のロゴ"
-                    },
-                    "background_color": "#12107c",
-                    "background_image": {
-                        "uri": "https://examplestate.com/public/background-image.png"
-                    },
-                    "text_color": "#FFFFFF"
-                }
-            ],
-            "claims": {
-                "org.iso.18013.5.1": {
-                    "given_name": {
-                        "display": [
-                            {
-                                "name": "Given Name",
-                                "locale": "en-US"
-                            },
-                            {
-                                "name": "名前",
-                                "locale": "ja-JP"
-                            }
-                        ]
-                    },
-                    "family_name": {
-                        "display": [
-                            {
-                                "name": "Surname",
-                                "locale": "en-US"
-                            }
-                        ]
-                    },
-                    "birth_date": {}
-                },
-                "org.iso.18013.5.1.aamva": {
-                    "organ_donor": {}
-                }
-            }
-        }))
+    fn example_mso_mdoc() {
+        let _: CredentialConfigurationsSupported = serde_json::from_str(include_str!(
+            "../tests/profile/mso_mdoc/issuer_metadata.json"
+        ))
         .unwrap();
+    }
+
+    #[test]
+    fn example_w3c_vc() {
+        let _: CredentialConfigurationsSupported =
+            serde_json::from_str(include_str!("../tests/profile/w3c_vc/issuer_metadata.json"))
+                .unwrap();
     }
 }

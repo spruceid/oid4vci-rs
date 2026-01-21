@@ -8,12 +8,12 @@ use crate::{
 
 use super::Profile;
 
+pub mod dc_sd_jwt;
 pub mod mso_mdoc;
-pub mod vc_sd_jwt;
 pub mod w3c_vc;
 
+pub use dc_sd_jwt::FORMAT_DC_SD_JWT;
 pub use mso_mdoc::FORMAT_MSO_MDOC;
-pub use vc_sd_jwt::FORMAT_VC_SD_JWT;
 pub use w3c_vc::{W3cVcFormat, FORMAT_JWT_VC_JSON, FORMAT_JWT_VC_JSON_LD, FORMAT_LDP_VC};
 
 /// Profile including all the standard formats.
@@ -36,7 +36,7 @@ impl Profile for StandardProfile {
 pub enum StandardFormat {
     W3c(W3cVcFormat),
     MsoMdoc,
-    VcSdJwt,
+    DcSdJwt,
     Unknown(String),
 }
 
@@ -47,7 +47,7 @@ impl StandardFormat {
             FORMAT_JWT_VC_JSON_LD => Self::W3c(W3cVcFormat::JwtVcJsonLd),
             FORMAT_LDP_VC => Self::W3c(W3cVcFormat::LdpVc),
             FORMAT_MSO_MDOC => Self::MsoMdoc,
-            FORMAT_VC_SD_JWT => Self::VcSdJwt,
+            FORMAT_DC_SD_JWT => Self::DcSdJwt,
             _ => Self::Unknown(s),
         }
     }
@@ -56,7 +56,7 @@ impl StandardFormat {
         match self {
             Self::W3c(f) => f.as_str(),
             Self::MsoMdoc => FORMAT_MSO_MDOC,
-            Self::VcSdJwt => FORMAT_VC_SD_JWT,
+            Self::DcSdJwt => FORMAT_DC_SD_JWT,
             Self::Unknown(f) => f.as_str(),
         }
     }
@@ -85,20 +85,20 @@ impl<'de> Deserialize<'de> for StandardFormat {
 pub enum StandardCredentialFormatMetadata {
     W3c(w3c_vc::W3cVcFormatMetadata),
     MsoMdoc(mso_mdoc::MsoMdocFormatMetadata),
-    VcSdJwt(vc_sd_jwt::VcSdJwtFormatMetadata),
+    DcSdJwt(dc_sd_jwt::DcSdJwtFormatMetadata),
     Unknown(AnyCredentialFormatConfiguration),
 }
 
 impl CredentialFormatMetadata for StandardCredentialFormatMetadata {
     type Format = StandardFormat;
 
-    type SigningAlgorithm = String;
+    type SigningAlgorithm = serde_json::Value;
 
     fn id(&self) -> StandardFormat {
         match self {
             Self::W3c(f) => StandardFormat::W3c(f.id),
             Self::MsoMdoc(_) => StandardFormat::MsoMdoc,
-            Self::VcSdJwt(_) => StandardFormat::VcSdJwt,
+            Self::DcSdJwt(_) => StandardFormat::DcSdJwt,
             Self::Unknown(other) => StandardFormat::Unknown(other.id.clone()),
         }
     }
@@ -114,7 +114,7 @@ pub struct StandardCredentialAuthorizationParams {
     pub mso_mdoc: mso_mdoc::MsoMdocAuthorizationParams,
 
     #[serde(flatten)]
-    pub vc_sd_jwt: Option<vc_sd_jwt::VcSdJwtAuthorizationParams>,
+    pub dc_sd_jwt: Option<dc_sd_jwt::DcSdJwtAuthorizationParams>,
 }
 
 impl CredentialAuthorizationParams for StandardCredentialAuthorizationParams {
@@ -131,7 +131,7 @@ pub struct StandardCredentialRequestParams {
     pub mso_mdoc: Option<mso_mdoc::MsoMdocRequestParams>,
 
     #[serde(flatten)]
-    pub vc_sd_jwt: Option<vc_sd_jwt::VcSdJwtRequestParams>,
+    pub dc_sd_jwt: Option<dc_sd_jwt::DcSdJwtRequestParams>,
 }
 
 impl CredentialRequestParams for StandardCredentialRequestParams {

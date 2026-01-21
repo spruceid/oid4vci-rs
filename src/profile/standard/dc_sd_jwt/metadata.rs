@@ -3,21 +3,21 @@ use serde_with::skip_serializing_none;
 
 use crate::{issuer::metadata::CredentialFormatMetadata, types::LanguageTag};
 
-use super::MsoMdocFormat;
+use super::DcSdJwtFormat;
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MsoMdocFormatMetadata {
+pub struct DcSdJwtFormatMetadata {
     #[serde(rename = "format")]
-    pub id: MsoMdocFormat,
+    pub id: DcSdJwtFormat,
 
-    pub doctype: String,
+    pub vct: String,
 }
 
-impl CredentialFormatMetadata for MsoMdocFormatMetadata {
-    type Format = MsoMdocFormat;
+impl CredentialFormatMetadata for DcSdJwtFormatMetadata {
+    type Format = DcSdJwtFormat;
 
-    type SigningAlgorithm = i64;
+    type SigningAlgorithm = String;
 
     fn id(&self) -> Self::Format {
         self.id
@@ -26,19 +26,23 @@ impl CredentialFormatMetadata for MsoMdocFormatMetadata {
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MsoMdocClaimMetadata {
-    #[serde(default, skip_serializing_if = "crate::util::is_false")]
+pub struct DcSdJwtClaimMetadata {
+    #[serde(default, skip_serializing_if = "is_false")]
     pub mandatory: bool,
 
     pub value_type: Option<String>,
 
     #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
-    pub display: Vec<MsoMdocClaimDisplay>,
+    pub display: Vec<DcSdJwtClaimDisplay>,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MsoMdocClaimDisplay {
+pub struct DcSdJwtClaimDisplay {
     pub name: Option<String>,
 
     pub locale: Option<LanguageTag>,
@@ -52,12 +56,12 @@ mod tests {
 
     #[test]
     fn roundtrip() {
-        let expected_json: CredentialConfigurationsSupported<MsoMdocFormatMetadata> =
+        let expected_json: CredentialConfigurationsSupported<DcSdJwtFormatMetadata> =
             serde_json::from_str(include_str!(
-                "../../../tests/profile/mso_mdoc/issuer_metadata.json"
+                "../../../tests/profile/dc_sd_jwt/issuer_metadata.json"
             ))
             .unwrap();
-        let credential_configuration: CredentialConfigurationsSupported<MsoMdocFormatMetadata> =
+        let credential_configuration: CredentialConfigurationsSupported<DcSdJwtFormatMetadata> =
             serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(
                 &serde_json::to_string(&expected_json).unwrap(),
             ))

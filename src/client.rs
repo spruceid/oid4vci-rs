@@ -15,9 +15,11 @@ use crate::{
         pushed_authorization::PushedAuthorizationRequest, server::AuthorizationServerMetadata,
         token, AuthorizationRequest,
     },
-    encryption::CredentialResponseEncryptionMetadata,
     issuer::{
-        metadata::{CredentialConfiguration, CredentialIssuerMetadataDisplay},
+        metadata::{
+            CredentialConfiguration, CredentialIssuerMetadataDisplay,
+            CredentialResponseEncryptionMetadata,
+        },
         CredentialIssuerMetadata,
     },
     profile::{Profile, StandardProfile},

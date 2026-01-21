@@ -10,33 +10,33 @@ pub use authorization::*;
 pub use metadata::*;
 pub use request::*;
 
-pub const FORMAT_VC_SD_JWT: &str = "vc+sd-jwt";
+pub const FORMAT_DC_SD_JWT: &str = "dc+sd-jwt";
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct VcSdJwtFormat;
+pub struct DcSdJwtFormat;
 
-impl VcSdJwtFormat {
+impl DcSdJwtFormat {
     pub fn as_str(&self) -> &'static str {
-        FORMAT_VC_SD_JWT
+        FORMAT_DC_SD_JWT
     }
 }
 
 #[derive(Debug, thiserror::Error)]
 #[error("invalid SD-JWT VC format")]
-pub struct InvalidVcSdJwtFormat;
+pub struct InvalidDcSdJwtFormat;
 
-impl FromStr for VcSdJwtFormat {
-    type Err = InvalidVcSdJwtFormat;
+impl FromStr for DcSdJwtFormat {
+    type Err = InvalidDcSdJwtFormat;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            FORMAT_VC_SD_JWT => Ok(Self),
-            _ => Err(InvalidVcSdJwtFormat),
+            FORMAT_DC_SD_JWT => Ok(Self),
+            _ => Err(InvalidDcSdJwtFormat),
         }
     }
 }
 
-impl Serialize for VcSdJwtFormat {
+impl Serialize for DcSdJwtFormat {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -45,7 +45,7 @@ impl Serialize for VcSdJwtFormat {
     }
 }
 
-impl<'de> Deserialize<'de> for VcSdJwtFormat {
+impl<'de> Deserialize<'de> for DcSdJwtFormat {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
