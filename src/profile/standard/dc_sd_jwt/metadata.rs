@@ -24,30 +24,6 @@ impl CredentialFormatMetadata for DcSdJwtFormatMetadata {
     }
 }
 
-#[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DcSdJwtClaimMetadata {
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub mandatory: bool,
-
-    pub value_type: Option<String>,
-
-    #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
-    pub display: Vec<DcSdJwtClaimDisplay>,
-}
-
-fn is_false(b: &bool) -> bool {
-    !*b
-}
-
-#[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DcSdJwtClaimDisplay {
-    pub name: Option<String>,
-
-    pub locale: Option<LanguageTag>,
-}
-
 #[cfg(test)]
 mod tests {
     use crate::issuer::metadata::CredentialConfigurationsSupported;

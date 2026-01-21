@@ -4,11 +4,9 @@ use serde::{Deserialize, Serialize};
 
 mod authorization;
 mod metadata;
-mod request;
 
 pub use authorization::*;
 pub use metadata::*;
-pub use request::*;
 
 pub const FORMAT_DC_SD_JWT: &str = "dc+sd-jwt";
 

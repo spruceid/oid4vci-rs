@@ -4,12 +4,10 @@ use serde::{Deserialize, Serialize};
 
 mod authorization;
 mod metadata;
-mod request;
 mod response;
 
 pub use authorization::*;
 pub use metadata::*;
-pub use request::*;
 pub use response::*;
 
 pub const FORMAT_MSO_MDOC: &str = "mso_mdoc";

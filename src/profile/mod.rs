@@ -47,7 +47,7 @@ pub trait Profile {
     /// Format-specific parameters for each [`CredentialRequest`].
     ///
     /// [`CredentialRequest`]: crate::request::CredentialRequest
-    type RequestParams: CredentialRequestParams<Format = Self::Format>;
+    type RequestParams: CredentialRequestParams;
 
     /// Credential payload type.
     ///

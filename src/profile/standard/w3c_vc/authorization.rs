@@ -4,7 +4,7 @@ use serde_with::skip_serializing_none;
 
 use crate::authorization::CredentialAuthorizationParams;
 
-use super::{W3cClaimRequest, W3cVcFormat};
+use super::W3cVcFormat;
 
 #[skip_serializing_none]
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -28,7 +28,16 @@ pub struct W3cVcDefinitionAuthorization {
         rename = "credentialSubject",
         skip_serializing_if = "IndexMap::is_empty"
     )]
-    pub credential_subject: IndexMap<String, W3cClaimRequest>,
+    pub credential_subject: IndexMap<String, W3cClaimAuthorization>,
+}
+
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct W3cClaimAuthorization {
+    /// Indicate to the Issuer that it only accepts Credential(s) issued with
+    /// the given claim.
+    #[serde(default, skip_serializing_if = "crate::util::is_false")]
+    pub mandatory: bool,
 }
 
 #[cfg(test)]

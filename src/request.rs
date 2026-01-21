@@ -10,10 +10,10 @@ use oauth2::{
     AccessToken, AsyncHttpClient, HttpRequest, HttpResponse, SyncHttpClient,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 
 use crate::{
     encryption::CredentialResponseEncryption,
-    profile::StandardCredentialRequestParams,
     proof_of_possession::Proof,
     response::CredentialResponse,
     types::CredentialUrl,
@@ -37,48 +37,45 @@ where
 }
 
 /// Credential request.
-///
-/// # Credential format or identifier.
-///
-/// The `F` parameter must serialize into a struct with *either* of those fields
-/// - `format`: a string that determines the format of the Credential to be
-///   issued.
-/// - `credential_identifier`: a string that identifies a Credential that is
-///   being requested to be issued.
+#[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(bound = "F: CredentialRequestParams")]
-pub struct CredentialRequest<F: CredentialRequestParams = StandardCredentialRequestParams> {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub proof: Option<Proof>,
+pub struct CredentialRequest<F: CredentialRequestParams = AnyCredentialRequestParams> {
+    /// Identifier of the Credential Dataset that is requested for issuance.
+    pub credential_identifier: String,
 
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Identifier of the ...
+    pub credential_configuration_id: Option<String>,
+
+    /// Proofs of possession.
+    pub proofs: Option<IndexMap<String, Proof>>,
+
     pub credential_response_encryption: Option<CredentialResponseEncryption>,
 
-    #[serde(flatten)]
-    pub format_or_identifier: CredentialFormatOrIdentifier<F::Format>,
-
+    /// Additional format-specific parameters.
     #[serde(flatten)]
     pub params: F,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum CredentialFormatOrIdentifier<F> {
-    #[serde(rename = "format")]
-    Format(F),
-
-    #[serde(rename = "credential_identifier")]
-    Identifier(String),
-}
-
 impl<F: CredentialRequestParams> CredentialRequest<F> {
-    pub(crate) fn new(
-        format_or_identifier: CredentialFormatOrIdentifier<F::Format>,
-        params: F,
-    ) -> Self {
+    /// Creates a new Credential Request.
+    ///
+    /// This will use the default format-specific parameters.
+    pub fn new(credential_identifier: String) -> Self
+    where
+        F: Default,
+    {
+        Self::new_with(credential_identifier, F::default())
+    }
+
+    /// Creates a new Credential Request with the given format-specific
+    /// parameters.
+    pub fn new_with(credential_identifier: String, params: F) -> Self {
         Self {
-            proof: None,
+            credential_identifier,
+            credential_configuration_id: None,
+            proofs: None,
             credential_response_encryption: None,
-            format_or_identifier,
             params,
         }
     }
@@ -87,15 +84,11 @@ impl<F: CredentialRequestParams> CredentialRequest<F> {
 /// Credential format request parameters.
 ///
 /// Specifies format-specific parameters in a [`CredentialRequest`].
-pub trait CredentialRequestParams: Serialize + DeserializeOwned {
-    type Format: Debug + Clone + PartialEq + Eq + Serialize + DeserializeOwned;
-}
+pub trait CredentialRequestParams: Serialize + DeserializeOwned {}
 
 pub type AnyCredentialRequestParams = IndexMap<String, serde_json::Value>;
 
-impl CredentialRequestParams for AnyCredentialRequestParams {
-    type Format = String;
-}
+impl CredentialRequestParams for AnyCredentialRequestParams {}
 
 pub struct CredentialRequestBuilder<F: CredentialRequestParams, T> {
     body: CredentialRequest<F>,
@@ -121,24 +114,21 @@ where
         }
     }
 
-    pub fn format_or_identifier(&self) -> &CredentialFormatOrIdentifier<F::Format> {
-        &self.body.format_or_identifier
+    pub fn credential_identifier(&self) -> &str {
+        &self.body.credential_identifier
     }
 
-    pub fn set_format_or_identifier(
-        mut self,
-        format_or_identifier: CredentialFormatOrIdentifier<F::Format>,
-    ) -> Self {
-        self.body.format_or_identifier = format_or_identifier;
+    pub fn set_credential_identifier(mut self, id: impl Into<String>) -> Self {
+        self.body.credential_identifier = id.into();
         self
     }
 
-    pub fn proof(&self) -> &Option<Proof> {
-        &self.body.proof
+    pub fn proofs(&self) -> Option<&IndexMap<String, Proof>> {
+        self.body.proofs.as_ref()
     }
 
-    pub fn set_proof(mut self, proof: Option<Proof>) -> Self {
-        self.body.proof = proof;
+    pub fn set_proofs(mut self, proofs: Option<IndexMap<String, Proof>>) -> Self {
+        self.body.proofs = proofs;
         self
     }
 

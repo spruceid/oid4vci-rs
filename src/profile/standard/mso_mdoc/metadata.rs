@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-use crate::{issuer::metadata::CredentialFormatMetadata, types::LanguageTag};
+use crate::issuer::metadata::CredentialFormatMetadata;
 
 use super::MsoMdocFormat;
 
@@ -22,26 +22,6 @@ impl CredentialFormatMetadata for MsoMdocFormatMetadata {
     fn id(&self) -> Self::Format {
         self.id
     }
-}
-
-#[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MsoMdocClaimMetadata {
-    #[serde(default, skip_serializing_if = "crate::util::is_false")]
-    pub mandatory: bool,
-
-    pub value_type: Option<String>,
-
-    #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
-    pub display: Vec<MsoMdocClaimDisplay>,
-}
-
-#[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MsoMdocClaimDisplay {
-    pub name: Option<String>,
-
-    pub locale: Option<LanguageTag>,
 }
 
 #[cfg(test)]

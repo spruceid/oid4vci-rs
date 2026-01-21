@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     authorization::CredentialAuthorizationParams,
     issuer::metadata::{AnyCredentialFormatConfiguration, CredentialFormatMetadata},
-    request::CredentialRequestParams,
+    request::AnyCredentialRequestParams,
 };
 
 use super::Profile;
@@ -28,7 +28,7 @@ impl Profile for StandardProfile {
     type Format = StandardFormat;
     type FormatConfiguration = StandardCredentialFormatMetadata;
     type AuthorizationParams = StandardCredentialAuthorizationParams;
-    type RequestParams = StandardCredentialRequestParams;
+    type RequestParams = AnyCredentialRequestParams;
     type Credential = serde_json::Value;
 }
 
@@ -118,22 +118,5 @@ pub struct StandardCredentialAuthorizationParams {
 }
 
 impl CredentialAuthorizationParams for StandardCredentialAuthorizationParams {
-    type Format = StandardFormat;
-}
-
-#[derive(Debug, Default, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct StandardCredentialRequestParams {
-    #[serde(flatten)]
-    pub w3c_vc: Option<w3c_vc::W3cVcRequestParams>,
-
-    #[serde(flatten)]
-    pub mso_mdoc: Option<mso_mdoc::MsoMdocRequestParams>,
-
-    #[serde(flatten)]
-    pub dc_sd_jwt: Option<dc_sd_jwt::DcSdJwtRequestParams>,
-}
-
-impl CredentialRequestParams for StandardCredentialRequestParams {
     type Format = StandardFormat;
 }

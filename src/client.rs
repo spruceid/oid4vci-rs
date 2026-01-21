@@ -23,7 +23,7 @@ use crate::{
         CredentialIssuerMetadata,
     },
     profile::{Profile, StandardProfile},
-    request::{CredentialFormatOrIdentifier, CredentialRequest, CredentialRequestBuilder},
+    request::{CredentialRequest, CredentialRequestBuilder},
     types::{
         CredentialConfigurationId, CredentialUrl, DeferredCredentialUrl, ParUrl, PreAuthorizedCode,
     },
@@ -226,10 +226,12 @@ where
     pub fn request_credential(
         &self,
         access_token: AccessToken,
-        id: CredentialFormatOrIdentifier<P::Format>,
-        params: P::RequestParams,
-    ) -> CredentialRequestBuilder<P::RequestParams, P::Credential> {
-        let body = CredentialRequest::new(id, params);
+        credential_identifier: impl Into<String>,
+    ) -> CredentialRequestBuilder<P::RequestParams, P::Credential>
+    where
+        P::RequestParams: Default,
+    {
+        let body = CredentialRequest::new(credential_identifier.into());
         CredentialRequestBuilder::new(body, self.credential_endpoint.clone(), access_token)
     }
 

@@ -4,12 +4,10 @@ use serde::{Deserialize, Serialize};
 
 mod authorization;
 mod metadata;
-mod request;
 mod response;
 
 pub use authorization::*;
 pub use metadata::*;
-pub use request::*;
 
 pub const FORMAT_JWT_VC_JSON: &str = "jwt_vc_json";
 pub const FORMAT_JWT_VC_JSON_LD: &str = "jwt_vc_json-ld";
