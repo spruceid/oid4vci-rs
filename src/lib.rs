@@ -1,6 +1,6 @@
-//! This library provides a Rust implementation of [OID4VCI draft-13].
+//! This library provides a Rust implementation of [OID4VCI 1.0].
 //!
-//! [OID4VCI draft-13]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#name-pre-authorized-code-flow>
+//! [OID4VCI 1.0]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html>
 //!
 //! # Client Usage
 //!
@@ -93,7 +93,7 @@
 //! module.
 //!
 //! [`AuthorizationServerMetadata`]: crate::authorization::server::metadata::AuthorizationServerMetadata
-//! [`AuthorizationRequest`]: crate::authorization::AuthorizationRequest
+//! [`AuthorizationRequest`]: oauth2::AuthorizationRequest
 //! [`AuthorizationCode`]: oauth2::AuthorizationCode
 //!
 //! ## Issuance
@@ -113,7 +113,7 @@
 /// - [`StandardProfile`]: Implements the profile defined by the OID4VCI
 ///   specification's [Appendix A].
 ///
-/// [Appendix A]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#appendix-A>
+/// [Appendix A]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-format-profiles>
 pub use oauth2;
 
 pub mod authorization;

@@ -272,7 +272,7 @@ impl DisplayLogoMetadata {
 /// identifying the format. It may also include additional format-specific
 /// fields, all serializable as JSON.
 ///
-/// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#section-11.2.3>
+/// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-issuer-metadata-p>
 pub trait CredentialFormatMetadata: Clone + Serialize + DeserializeOwned {
     /// Credential format identifier.
     type Format;
@@ -310,7 +310,7 @@ impl CredentialFormatMetadata for AnyCredentialFormatConfiguration {
 /// Credential Issuer Metadata `credential_configurations_supported` parameter
 /// value.
 ///
-/// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#section-11.2.3>
+/// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-issuer-metadata-p>
 #[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(bound = "F: CredentialFormatMetadata")]

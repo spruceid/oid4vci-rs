@@ -129,7 +129,7 @@ pub struct CredentialAuthorizationDetailsResponse<
 /// Specifies format-specific parameters in a
 /// [`CredentialAuthorizationDetailsObject`].
 ///
-/// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#section-5.1.1>
+/// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-using-authorization-details>
 pub trait CredentialAuthorizationParams:
     'static + Send + Sync + Debug + Serialize + DeserializeOwned
 {

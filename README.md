@@ -2,9 +2,64 @@
 
 <!-- cargo-rdme start -->
 
-This library provides a Rust implementation of [OID4VCI draft-13].
+This library provides a Rust implementation of [OID4VCI 1.0].
 
-[OID4VCI draft-13]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#name-pre-authorized-code-flow>
+[OID4VCI 1.0]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html>
+
+## Client Usage
+
+You can create a basic client implementation using the
+[`SimpleOid4vciClient`] type as follows:
+
+```rust
+use oid4vci::client::{SimpleOid4vciClient, Oid4vciClient, CredentialTokenState};
+
+// Setup client.
+let client = SimpleOid4vciClient::new(client_id);
+
+// Start processing the credential offer.
+let state = client
+  .process_offer(&http_client, credential_offer)
+  .await?;
+
+// Depending on the grant type, more authentication steps may be necessary.
+let credential_token = match state {
+  CredentialTokenState::RequiresAuthentication(state) => {
+    let full_redirect_url = state.proceed(&http_client, redirect_url);
+    let auth_code = do_authentication(full_redirect_url);
+    state.proceed(auth_code)?
+  }
+  CredentialTokenState::RequiresTxCode(state) => {
+    let tx_code = ask_for_tx_code(state.tx_code_definition());
+    state.proceed(tx_code)?;
+  }
+  CredentialTokenState::Ready(token) => token,
+};
+
+// Select what credential to issue.
+let credential_id = credential_token.default_credential_id()?;
+
+// Create a proof of possession.
+let nonce = credential_token.get_nonce(&http_client)?;
+let proof = create_proof(nonce);
+
+// Issue credential.
+let response = client
+    .query_credential(&http_client, &credential_token, credential_id, Some(proof))?;
+```
+
+The client's behavior can be tweaked by replacing the
+[`SimpleOid4vciClient`] type with a custom [`Oid4vciClient`] implementation.
+
+[`SimpleOid4vciClient`]: https://docs.rs/oid4vci/latest/oid4vci/client/struct.SimpleOid4vciClient.html
+[`Oid4vciClient`]: https://docs.rs/oid4vci/latest/oid4vci/client/trait.Oid4vciClient.html
+
+## Server Usage
+
+Servers can be created by implementing the [`Oid4vciServer`] trait.
+An example implementation can be found in the `example` folder.
+
+[`Oid4vciServer`]: https://docs.rs/oid4vci/latest/oid4vci/server/trait.Oid4vciServer.html
 
 ## Protocol Overview
 
@@ -42,7 +97,7 @@ All the code related to Authorization is located in the [`authorization`]
 module.
 
 [`AuthorizationServerMetadata`]: https://docs.rs/oid4vci/latest/oid4vci/authorization/server/metadata/struct.AuthorizationServerMetadata.html
-[`AuthorizationRequest`]: https://docs.rs/oid4vci/latest/oid4vci/authorization/struct.AuthorizationRequest.html
+[`AuthorizationRequest`]: oauth2::AuthorizationRequest
 [`AuthorizationCode`]: oauth2::AuthorizationCode
 
 ### Issuance
@@ -51,6 +106,12 @@ module.
 9. Issuer returns a [`CredentialResponse`], with the Credential(s).
 
 [`CredentialRequest`]: https://docs.rs/oid4vci/latest/oid4vci/request/struct.CredentialRequest.html
-[`CredentialResponse`]: https://docs.rs/oid4vci/latest/oid4vci/response/struct.CredentialResponse.html
+[`CredentialResponse`]: https://docs.rs/oid4vci/latest/oid4vci/response/enum.CredentialResponse.html
+
+## Profiles
+
+The supported credential formats are defined by the [`Profile`] trait
+implementation. This library provides two built-in profiles:
+- [`AnyProfile`]: Format-agnostic profile. Accepts everything, but won't
 
 <!-- cargo-rdme end -->

@@ -28,7 +28,7 @@ pub use standard::*;
 /// - [`StandardProfile`]: Implements the profile defined by the OID4VCI
 ///   specification's [Appendix A].
 ///
-/// [Appendix A]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#appendix-A>
+/// [Appendix A]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-format-profiles>
 pub trait Profile: 'static {
     /// Credential format identifier.
     ///
