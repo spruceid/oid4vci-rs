@@ -20,7 +20,7 @@ use oid4vci::{
         Stateful,
     },
     client::{
-        AuthenticationRequired, CredentialToken, CredentialTokenState, Oid4vciClient,
+        AuthorizationCodeRequired, CredentialToken, CredentialTokenState, Oid4vciClient,
         SimpleOid4vciClient, WaitingForTxCode,
     },
     proof::{jwt::create_jwt_proof, Proofs},
@@ -80,7 +80,7 @@ async fn run(params: Params) -> Result<(), anyhow::Error> {
         .await?;
 
     let credential_token = match state {
-        CredentialTokenState::RequiresAuthentication(state) => {
+        CredentialTokenState::RequiresAuthorizationCode(state) => {
             require_authentication(&http_client, state, params.auto_auth).await?
         }
         CredentialTokenState::RequiresTxCode(state) => {
@@ -130,7 +130,7 @@ async fn run(params: Params) -> Result<(), anyhow::Error> {
 /// immediately.
 async fn require_authentication<C: Oid4vciClient>(
     http_client: &reqwest::Client,
-    authentication: AuthenticationRequired<C>,
+    authentication: AuthorizationCodeRequired<C>,
     auto_auth: bool,
 ) -> Result<CredentialToken<C::Profile>, anyhow::Error> {
     let port = 1234;

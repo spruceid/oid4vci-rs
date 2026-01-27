@@ -43,7 +43,12 @@ use crate::{
 };
 
 /// OID4VCI client.
+///
+/// Unless you need custom ways of configuring authorization and token requests,
+/// you probably want to use the [`SimpleOid4vciClient`] implementation
+/// directly.
 pub trait Oid4vciClient: Clone {
+    /// OID4VCI profile.
     type Profile: Profile;
 
     /// Returns the OAuth2 client identifier.
@@ -130,8 +135,8 @@ pub trait Oid4vciClient: Clone {
 
                 let issuer_state = grant.issuer_state.clone();
 
-                Ok(CredentialTokenState::RequiresAuthentication(
-                    AuthenticationRequired {
+                Ok(CredentialTokenState::RequiresAuthorizationCode(
+                    AuthorizationCodeRequired {
                         client: self.clone(),
                         credential_offer,
                         issuer_metadata,
@@ -225,8 +230,8 @@ pub trait Oid4vciClient: Clone {
 
                 let issuer_state = grant.issuer_state.clone();
 
-                Ok(CredentialTokenState::RequiresAuthentication(
-                    AuthenticationRequired {
+                Ok(CredentialTokenState::RequiresAuthorizationCode(
+                    AuthorizationCodeRequired {
                         client: self.clone(),
                         credential_offer,
                         issuer_metadata,
@@ -330,7 +335,7 @@ pub trait Oid4vciClient: Clone {
             .map_err(Into::into)
     }
 
-    fn query_credential<'c>(
+    fn query_credential(
         &self,
         http_client: &impl SyncHttpClient,
         token: &CredentialToken<Self::Profile>,
@@ -343,7 +348,7 @@ pub trait Oid4vciClient: Clone {
         self.query_credential_with(http_client, token, credential, proofs, Default::default())
     }
 
-    fn query_credential_with<'c>(
+    fn query_credential_with(
         &self,
         http_client: &impl SyncHttpClient,
         token: &CredentialToken<Self::Profile>,
@@ -417,6 +422,13 @@ impl<P: Profile> Default for CredentialRequestConfiguration<P> {
     }
 }
 
+/// Credential Token.
+///
+/// Stores the necessary information to query a credential through the
+/// [`Oid4vciClient::query_credential`] method.
+///
+/// You can use the [`Self::get_nonce`] method to query a nonce value from the
+/// server, to use with proof of possessions.
 pub struct CredentialToken<P: Profile = StandardProfile> {
     issuer_metadata: ProfileCredentialIssuerMetadata<P>,
     credential_offer: CredentialOfferParameters,
@@ -528,13 +540,16 @@ impl<P: Profile> CredentialToken<P> {
     }
 }
 
-/// Credential Token state.
+/// Credential Token State.
+///
+/// When querying a Credential Authorization Token to the Authorization Server,
+/// it may ask for further authentication. This can be either querying an
+/// Authorization Code, or a Transaction Code for Pre-Authorized Code grants.
+/// If the Pre-Authorized Code grant doesn't require a Transaction Code, the
+/// token will directly be `Ready`.
 pub enum CredentialTokenState<C: Oid4vciClient> {
-    /// Credential Token requires authentication.
-    ///
-    /// The given [`WaitingForAuthentication`] object provides the redirect URL
-    /// the user agent must got to.
-    RequiresAuthentication(AuthenticationRequired<C>),
+    /// Credential Token requires an Authorization Code.
+    RequiresAuthorizationCode(AuthorizationCodeRequired<C>),
 
     /// Credential Token requires a Transaction Code.
     RequiresTxCode(WaitingForTxCode<C::Profile>),
@@ -598,7 +613,16 @@ impl<P: Profile> WaitingForTxCode<P> {
     }
 }
 
-pub struct AuthenticationRequired<C: Oid4vciClient = SimpleOid4vciClient> {
+/// Credential Token is protected behind an Authorization Code.
+///
+/// This type holds the necessary information to perform Authorization and then
+/// resume the Credential Token query.
+///
+/// You can get a redirect URL by calling the [`Self::proceed`] method, then
+/// redirect the user agent. Once the application gets the Authorization Code,
+/// you can proceed with the query by calling
+/// [`WaitingForAuthorizationCode::proceed`].
+pub struct AuthorizationCodeRequired<C: Oid4vciClient = SimpleOid4vciClient> {
     client: C,
     credential_offer: CredentialOfferParameters,
     issuer_metadata: ProfileCredentialIssuerMetadata<C::Profile>,
@@ -606,12 +630,12 @@ pub struct AuthenticationRequired<C: Oid4vciClient = SimpleOid4vciClient> {
     authorization_server_metadata: AuthorizationServerMetadata,
 }
 
-impl<C: Oid4vciClient> AuthenticationRequired<C> {
+impl<C: Oid4vciClient> AuthorizationCodeRequired<C> {
     pub async fn proceed_async<'c>(
         self,
         http_client: &'c impl AsyncHttpClient<'c>,
         redirect_url: RedirectUrl,
-    ) -> Result<WaitingForAuthentication<C>, ClientError> {
+    ) -> Result<WaitingForAuthorizationCode<C>, ClientError> {
         let (pkce_code_challenge, pkce_code_verifier) = PkceCodeChallenge::new_random_sha256();
 
         let oauth2_client: OAuth2AuthCodeClient<C::Profile> =
@@ -656,7 +680,7 @@ impl<C: Oid4vciClient> AuthenticationRequired<C> {
                 .url(),
         };
 
-        Ok(WaitingForAuthentication {
+        Ok(WaitingForAuthorizationCode {
             client: self.client,
             oauth2_client,
             issuer_metadata: self.issuer_metadata,
@@ -672,7 +696,7 @@ impl<C: Oid4vciClient> AuthenticationRequired<C> {
         self,
         http_client: &impl SyncHttpClient,
         redirect_url: RedirectUrl,
-    ) -> Result<WaitingForAuthentication<C>, ClientError> {
+    ) -> Result<WaitingForAuthorizationCode<C>, ClientError> {
         let (pkce_code_challenge, pkce_code_verifier) = PkceCodeChallenge::new_random_sha256();
 
         let oauth2_client: OAuth2AuthCodeClient<C::Profile> =
@@ -714,7 +738,7 @@ impl<C: Oid4vciClient> AuthenticationRequired<C> {
                 .url(),
         };
 
-        Ok(WaitingForAuthentication {
+        Ok(WaitingForAuthorizationCode {
             client: self.client,
             oauth2_client,
             issuer_metadata: self.issuer_metadata,
@@ -727,7 +751,11 @@ impl<C: Oid4vciClient> AuthenticationRequired<C> {
     }
 }
 
-pub struct WaitingForAuthentication<C: Oid4vciClient> {
+/// Waiting for an Authorization Code.
+///
+/// Holds the necessary information to proceed with the Credential Request when
+/// the Authorization Code is received.
+pub struct WaitingForAuthorizationCode<C: Oid4vciClient> {
     client: C,
     issuer_metadata: ProfileCredentialIssuerMetadata<C::Profile>,
     credential_offer: CredentialOfferParameters,
@@ -738,7 +766,7 @@ pub struct WaitingForAuthentication<C: Oid4vciClient> {
     state: CsrfToken,
 }
 
-impl<C: Oid4vciClient> WaitingForAuthentication<C> {
+impl<C: Oid4vciClient> WaitingForAuthorizationCode<C> {
     pub fn redirect_url(&self) -> &Url {
         &self.redirect_url
     }
@@ -896,6 +924,9 @@ fn select_authorization_server<'a>(
     }
 }
 
+/// Simple OID4VCI client.
+///
+/// Uses the default methods implementations of [`Oid4vciClient`].
 pub struct SimpleOid4vciClient<P = StandardProfile> {
     client_id: ClientId,
     profile: PhantomData<P>,
