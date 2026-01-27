@@ -127,6 +127,7 @@ pub mod profile;
 pub mod proof;
 pub mod request;
 pub mod response;
+#[cfg(feature = "axum")]
 pub mod server;
 pub mod types;
 pub mod util;

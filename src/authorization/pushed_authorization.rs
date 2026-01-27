@@ -236,6 +236,7 @@ pub struct PushedAuthorizationResponse {
     pub expires_in: u64,
 }
 
+#[cfg(feature = "axum")]
 mod axum {
     use ::axum::{
         body::Body,

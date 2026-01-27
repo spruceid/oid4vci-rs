@@ -130,6 +130,7 @@ pub fn default_grant_types_supported() -> Vec<GrantType> {
     vec![GrantType::AuthorizationCode, GrantType::Implicit]
 }
 
+#[cfg(feature = "axum")]
 mod axum {
     use ::axum::{
         body::Body,

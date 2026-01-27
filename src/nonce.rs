@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use crate::util::http::MIME_TYPE_JSON;
-
 /// Nonce Response.
 ///
 /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-nonce-response>
@@ -11,6 +9,7 @@ pub struct NonceResponse {
 }
 
 /// Axum support.
+#[cfg(feature = "axum")]
 mod axum {
     use ::axum::{
         body::Body,
@@ -20,6 +19,8 @@ mod axum {
         },
         response::{IntoResponse, Response},
     };
+
+    use crate::util::http::MIME_TYPE_JSON;
 
     use super::*;
 

@@ -535,6 +535,7 @@ pub struct CredentialConfigurationsSupported<
     pub credential_configurations_supported: IndexMap<String, CredentialConfiguration<F>>,
 }
 
+#[cfg(feature = "axum")]
 mod axum {
     use ::axum::{
         body::Body,

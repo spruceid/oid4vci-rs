@@ -231,6 +231,7 @@ impl CredentialOfferParameters {
     }
 }
 
+#[cfg(feature = "axum")]
 mod axum {
     use ::axum::{
         body::Body,

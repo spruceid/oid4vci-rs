@@ -61,6 +61,7 @@ impl ErrorResponseType for ErrorType {}
 
 pub type ErrorResponse = StandardErrorResponse<ErrorType>;
 
+#[cfg(feature = "axum")]
 mod axum {
     use ::axum::{
         body::Body,

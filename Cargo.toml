@@ -17,6 +17,9 @@ reqwest = ["oauth2/reqwest"]
 # MSO mDoc encoding/decoding with the `isomdl` library.
 isomdl = ["dep:isomdl"]
 
+# Axum support.
+axum = ["dep:axum", "dep:axum-extra"]
+
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -40,8 +43,8 @@ ssi-jwk = "0.3.2"
 json-ld = "0.21.2"
 
 # Server only
-axum = "0.8.8"
-axum-extra = { version = "0.12.5", features = ["typed-header"] }
+axum = { version = "0.8.8", optional = true }
+axum-extra = { version = "0.12.5", features = ["typed-header"], optional = true }
 
 # `ssi` support.
 ssi = { version = "0.14", features = ["secp256r1"], optional = true }
@@ -52,7 +55,7 @@ isomdl = { git = "https://github.com/spruceid/isomdl", rev = "7608053", optional
 [dev-dependencies]
 assert-json-diff = "2.0.2"
 tokio = { version = "1.25.0", features = ["macros", "rt-multi-thread", "fs"] }
-oid4vci = { path = ".", features = ["reqwest", "ssi"] }
+oid4vci = { path = ".", features = ["reqwest", "axum", "ssi"] }
 clap = { version = "4.5.54", features = ["derive"] }
 env_logger = "0.11.8"
 log = "0.4.29"
