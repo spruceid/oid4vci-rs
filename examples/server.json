@@ -1,14 +1,4 @@
 {
-  "port": 3000,
-  "grants": {
-    "pre_authorized": {
-      "enabled": false,
-      "tx_code": {}
-    },
-    "authorization": {
-      "enabled": true
-    }
-  },
   "credential_configurations": {
     "test_credential_configuration": {
       "format": "dc+sd+jwt",
@@ -23,6 +13,5 @@
         "test_credential": {}
       }
     }
-  },
-  "par": true
+  }
 }
