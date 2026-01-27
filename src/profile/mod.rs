@@ -1,12 +1,21 @@
 use crate::{
-    authorization::CredentialAuthorizationParams, issuer::metadata::CredentialFormatMetadata,
-    request::CredentialRequestParams,
+    authorization::{
+        authorization_details::{
+            CredentialAuthorizationDetailsRequest, CredentialAuthorizationDetailsResponse,
+            CredentialAuthorizationParams,
+        },
+        request::AuthorizationRequestParams,
+    },
+    issuer::{metadata::CredentialFormatMetadata, CredentialIssuerMetadata},
+    request::{CredentialRequest, CredentialRequestParams},
+    response::CredentialResponse,
 };
 
 mod any;
 mod standard;
 
 pub use any::*;
+use serde::{de::DeserializeOwned, Serialize};
 pub use standard::*;
 
 /// Credential profile.
@@ -20,7 +29,7 @@ pub use standard::*;
 ///   specification's [Appendix A].
 ///
 /// [Appendix A]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#appendix-A>
-pub trait Profile {
+pub trait Profile: 'static {
     /// Credential format identifier.
     ///
     /// This types contains the identifiers of all the supported credential
@@ -32,7 +41,7 @@ pub trait Profile {
     /// Format-specific metadata provided by the [`CredentialIssuerMetadata`].
     ///
     /// [`CredentialIssuerMetadata`]: crate::issuer::CredentialIssuerMetadata
-    type FormatConfiguration: CredentialFormatMetadata<Format = Self::Format>;
+    type FormatMetadata: CredentialFormatMetadata<Format = Self::Format>;
 
     /// Credential format authorization details parameters.
     ///
@@ -40,7 +49,7 @@ pub trait Profile {
     /// [`CredentialAuthorizationDetailsObject`].
     ///
     /// [`CredentialAuthorizationDetailsObject`]: crate::authorization::CredentialAuthorizationDetailsObject
-    type AuthorizationParams: CredentialAuthorizationParams<Format = Self::Format>;
+    type AuthorizationParams: CredentialAuthorizationParams;
 
     /// Credential format request parameters.
     ///
@@ -54,5 +63,21 @@ pub trait Profile {
     /// Data type returned in a [`CredentialResponse`].
     ///
     /// [`CredentialResponse`]: crate::response::CredentialResponse
-    type Credential;
+    type Credential: 'static + Send + Sync + Serialize + DeserializeOwned;
 }
+
+pub type ProfileCredentialIssuerMetadata<P> =
+    CredentialIssuerMetadata<<P as Profile>::FormatMetadata>;
+
+pub type ProfileCredentialAuthorizationDetailsRequest<P> =
+    CredentialAuthorizationDetailsRequest<<P as Profile>::AuthorizationParams>;
+
+pub type ProfileCredentialAuthorizationDetailsResponse<P> =
+    CredentialAuthorizationDetailsResponse<<P as Profile>::AuthorizationParams>;
+
+pub type ProfileCredentialRequest<P> = CredentialRequest<<P as Profile>::RequestParams>;
+
+pub type ProfileCredentialResponse<P> = CredentialResponse<<P as Profile>::Credential>;
+
+pub type ProfileAuthorizationRequestParams<P> =
+    AuthorizationRequestParams<<P as Profile>::AuthorizationParams>;

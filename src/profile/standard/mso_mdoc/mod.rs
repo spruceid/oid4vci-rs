@@ -2,12 +2,12 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-mod authorization;
 mod metadata;
+#[cfg(feature = "isomdl")]
 mod response;
 
-pub use authorization::*;
 pub use metadata::*;
+#[cfg(feature = "isomdl")]
 pub use response::*;
 
 pub const FORMAT_MSO_MDOC: &str = "mso_mdoc";

@@ -1,16 +1,14 @@
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-use crate::{issuer::metadata::CredentialFormatMetadata, types::LanguageTag};
+use crate::issuer::metadata::CredentialFormatMetadata;
 
 use super::DcSdJwtFormat;
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "format", rename = "dc+sd-jwt")]
 pub struct DcSdJwtFormatMetadata {
-    #[serde(rename = "format")]
-    pub id: DcSdJwtFormat,
-
     pub vct: String,
 }
 
@@ -20,7 +18,7 @@ impl CredentialFormatMetadata for DcSdJwtFormatMetadata {
     type SigningAlgorithm = String;
 
     fn id(&self) -> Self::Format {
-        self.id
+        DcSdJwtFormat
     }
 }
 

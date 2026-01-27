@@ -1,249 +1,935 @@
-use std::marker::PhantomData;
+use std::{borrow::Cow, marker::PhantomData};
 
-use indexmap::IndexMap;
 use iref::{Uri, UriBuf};
 use oauth2::{
     basic::{BasicErrorResponse, BasicRevocationErrorResponse, BasicTokenIntrospectionResponse},
-    AccessToken, AuthUrl, AuthorizationCode, ClientId, CodeTokenRequest, ConfigurationError,
-    CsrfToken, EndpointMaybeSet, EndpointNotSet, EndpointSet, RedirectUrl, StandardRevocableToken,
-    TokenUrl,
+    http::{Method, StatusCode},
+    url::Url,
+    AccessToken, AsyncHttpClient, AuthorizationCode, ClientId, CsrfToken, EndpointNotSet,
+    EndpointSet, HttpRequest, HttpResponse, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl,
+    Scope, StandardRevocableToken, SyncHttpClient, TokenResponse,
 };
 
 use crate::{
     authorization::{
-        pre_authorized_code::PreAuthorizedCodeTokenRequest,
-        pushed_authorization::PushedAuthorizationRequest, server::AuthorizationServerMetadata,
-        token, AuthorizationRequest,
-    },
-    issuer::{
-        metadata::{
-            CredentialConfiguration, CredentialIssuerMetadataDisplay,
-            CredentialResponseEncryptionMetadata,
+        authorization_details::{
+            CredentialAuthorizationDetailsRequest, CredentialAuthorizationParams,
+            TokenRequestAuthorizationDetails,
         },
-        CredentialIssuerMetadata,
+        pre_authorized_code::PreAuthorizedCodeClient,
+        pushed_authorization::OAuth2PushAuthorizationClient,
+        request::Oid4vciAuthorizationRequest,
+        server::AuthorizationServerMetadata,
+        token::{self, CredentialTokenResponse},
     },
-    profile::{Profile, StandardProfile},
-    request::{CredentialRequest, CredentialRequestBuilder},
-    types::{
-        CredentialConfigurationId, CredentialUrl, DeferredCredentialUrl, ParUrl, PreAuthorizedCode,
+    issuer::{metadata::CredentialFormatMetadata, CredentialIssuerMetadata},
+    nonce::NonceResponse,
+    offer::{
+        AuthorizationCodeGrant, CredentialOfferError, CredentialOfferParameters,
+        PreAuthorizedCodeGrant, TxCodeDefinition,
     },
+    profile::{
+        ProfileCredentialAuthorizationDetailsRequest,
+        ProfileCredentialAuthorizationDetailsResponse, ProfileCredentialIssuerMetadata,
+        ProfileCredentialResponse,
+    },
+    proof::Proofs,
+    request::{CredentialIdentifierOrConfigurationId, CredentialRequest},
+    util::{
+        discoverable::Discoverable,
+        http::{check_content_type, HttpError, MIME_TYPE_JSON},
+    },
+    CredentialOffer, Profile, StandardProfile,
 };
 
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("Batch Credential Request are not supported by this issuer")]
-    BcrUnsupported,
-    #[error("Pushed Authorization Requests are not supported by this issuer")]
-    ParUnsupported,
-    #[error("Authorization Requests are not supported by this issuer: {0}")]
-    AuthUnsupported(ConfigurationError),
-    #[error("An error occurred when discovering metadata: {0}")]
-    MetadataDiscovery(anyhow::Error),
+/// OID4VCI client.
+pub trait Oid4vciClient: Clone {
+    type Profile: Profile;
+
+    /// Returns the OAuth2 client identifier.
+    fn client_id(&self) -> &ClientId;
+
+    /// Configures the credentials requested for issuance in an Authorization
+    /// Request.
+    ///
+    /// Implementors do not need to set the `locations` value of the
+    /// authorization details manually.
+    fn configure_authorization_request(
+        &self,
+        _issuer_metadata: &ProfileCredentialIssuerMetadata<Self::Profile>,
+        _offer: &CredentialOfferParameters,
+    ) -> Result<CredentialRequestConfiguration<Self::Profile>, ClientError> {
+        Ok(CredentialRequestConfiguration::default())
+    }
+
+    /// Configures the credential requested for issuance in a Token Request.
+    ///
+    /// Implementors do not need to set the `locations` value of the
+    /// authorization details manually.
+    fn configure_token_request(
+        &self,
+        _issuer_metadata: &ProfileCredentialIssuerMetadata<Self::Profile>,
+        _offer: &CredentialOfferParameters,
+    ) -> Result<Vec<ProfileCredentialAuthorizationDetailsRequest<Self::Profile>>, ClientError> {
+        Ok(Vec::new())
+    }
+
+    /// Selects the preferred grant.
+    ///
+    /// The default implementation favors the `pre_authorized_code` grant.
+    fn select_grant<'a>(
+        &self,
+        credential_offer: &'a CredentialOfferParameters,
+    ) -> Result<GrantSelection<'a>, ClientError> {
+        credential_offer
+            .grants
+            .pre_authorized_code
+            .as_ref()
+            .map(Cow::Borrowed)
+            .map(GrantSelection::PreAuthorizedCode)
+            .or_else(|| {
+                credential_offer
+                    .grants
+                    .authorization_code
+                    .as_ref()
+                    .map(Cow::Borrowed)
+                    .map(GrantSelection::AuthorizationCode)
+            })
+            .ok_or(ClientError::MissingGrant)
+    }
+
+    /// Process a credential offer.
+    #[allow(async_fn_in_trait)]
+    async fn process_offer_async<'c>(
+        &self,
+        http_client: &'c impl AsyncHttpClient<'c>,
+        credential_offer: CredentialOffer,
+    ) -> Result<CredentialTokenState<Self>, ClientError> {
+        let credential_offer = credential_offer.resolve_async(http_client).await?;
+
+        let issuer_metadata =
+            CredentialIssuerMetadata::<<Self::Profile as Profile>::FormatMetadata>::discover_async(
+                http_client,
+                &credential_offer.credential_issuer,
+            )
+            .await?;
+
+        match self.select_grant(&credential_offer)? {
+            GrantSelection::AuthorizationCode(grant) => {
+                let authorization_server_url = select_authorization_server(
+                    grant.authorization_server.as_deref(),
+                    &credential_offer.credential_issuer,
+                    &issuer_metadata.authorization_servers,
+                )?;
+
+                let authorization_server_metadata = AuthorizationServerMetadata::discover_async(
+                    http_client,
+                    authorization_server_url,
+                )
+                .await?;
+
+                let issuer_state = grant.issuer_state.clone();
+
+                Ok(CredentialTokenState::RequiresAuthentication(
+                    AuthenticationRequired {
+                        client: self.clone(),
+                        credential_offer,
+                        issuer_metadata,
+                        issuer_state,
+                        authorization_server_metadata,
+                    },
+                ))
+            }
+            GrantSelection::PreAuthorizedCode(grant) => {
+                let authorization_server_url = select_authorization_server(
+                    grant.authorization_server.as_deref(),
+                    &credential_offer.credential_issuer,
+                    &issuer_metadata.authorization_servers,
+                )?;
+
+                let authorization_server_metadata = AuthorizationServerMetadata::discover_async(
+                    http_client,
+                    authorization_server_url,
+                )
+                .await?;
+
+                let oauth2_client: OAuth2PreAuthClient<Self::Profile> =
+                    oauth2::Client::new(self.client_id().clone())
+                        .set_token_uri(authorization_server_metadata.token_endpoint);
+
+                match grant.tx_code.clone() {
+                    Some(tx_code_definition) => {
+                        let pre_authorized_code = grant.pre_authorized_code.clone();
+
+                        Ok(CredentialTokenState::RequiresTxCode(WaitingForTxCode {
+                            issuer_metadata,
+                            credential_offer,
+                            oauth2_client,
+                            pre_authorized_code,
+                            tx_code_definition,
+                        }))
+                    }
+                    None => {
+                        let mut authorization_details =
+                            self.configure_token_request(&issuer_metadata, &credential_offer)?;
+
+                        set_locations(&issuer_metadata, &mut authorization_details);
+
+                        let response = oauth2_client
+                            .exchange_pre_authorized_code(&grant.pre_authorized_code)
+                            .set_anonymous_client_if(
+                                authorization_server_metadata
+                                    .pre_authorized_grant_anonymous_access_supported,
+                            )
+                            .set_authorization_details(&authorization_details)
+                            .request_async(http_client)
+                            .await
+                            .map_err(|_| ClientError::Authorization)?;
+
+                        Ok(CredentialTokenState::Ready(CredentialToken {
+                            issuer_metadata,
+                            credential_offer,
+                            requested_scopes: Vec::new(),
+                            response,
+                        }))
+                    }
+                }
+            }
+        }
+    }
+
+    /// Process a credential offer.
+    fn process_offer(
+        &self,
+        http_client: &impl SyncHttpClient,
+        credential_offer: CredentialOffer,
+    ) -> Result<CredentialTokenState<Self>, ClientError> {
+        let credential_offer = credential_offer.resolve(http_client)?;
+
+        let issuer_metadata =
+            CredentialIssuerMetadata::<<Self::Profile as Profile>::FormatMetadata>::discover(
+                http_client,
+                &credential_offer.credential_issuer,
+            )?;
+
+        match self.select_grant(&credential_offer)? {
+            GrantSelection::AuthorizationCode(grant) => {
+                let authorization_server_url = select_authorization_server(
+                    grant.authorization_server.as_deref(),
+                    &credential_offer.credential_issuer,
+                    &issuer_metadata.authorization_servers,
+                )?;
+
+                let authorization_server_metadata =
+                    AuthorizationServerMetadata::discover(http_client, authorization_server_url)?;
+
+                let issuer_state = grant.issuer_state.clone();
+
+                Ok(CredentialTokenState::RequiresAuthentication(
+                    AuthenticationRequired {
+                        client: self.clone(),
+                        credential_offer,
+                        issuer_metadata,
+                        issuer_state,
+                        authorization_server_metadata,
+                    },
+                ))
+            }
+            GrantSelection::PreAuthorizedCode(grant) => {
+                let authorization_server_url = select_authorization_server(
+                    grant.authorization_server.as_deref(),
+                    &credential_offer.credential_issuer,
+                    &issuer_metadata.authorization_servers,
+                )?;
+
+                let authorization_server_metadata =
+                    AuthorizationServerMetadata::discover(http_client, authorization_server_url)?;
+
+                let oauth2_client: OAuth2PreAuthClient<Self::Profile> =
+                    oauth2::Client::new(self.client_id().clone())
+                        .set_token_uri(authorization_server_metadata.token_endpoint);
+
+                match grant.tx_code.clone() {
+                    Some(tx_code_definition) => {
+                        let pre_authorized_code = grant.pre_authorized_code.clone();
+
+                        Ok(CredentialTokenState::RequiresTxCode(WaitingForTxCode {
+                            issuer_metadata,
+                            credential_offer,
+                            oauth2_client,
+                            pre_authorized_code,
+                            tx_code_definition,
+                        }))
+                    }
+                    None => {
+                        let mut authorization_details =
+                            self.configure_token_request(&issuer_metadata, &credential_offer)?;
+
+                        set_locations(&issuer_metadata, &mut authorization_details);
+
+                        let response = oauth2_client
+                            .exchange_pre_authorized_code(&grant.pre_authorized_code)
+                            .set_anonymous_client_if(
+                                authorization_server_metadata
+                                    .pre_authorized_grant_anonymous_access_supported,
+                            )
+                            .set_authorization_details(&authorization_details)
+                            .request(http_client)
+                            .map_err(|_| ClientError::Authorization)?;
+
+                        Ok(CredentialTokenState::Ready(CredentialToken {
+                            issuer_metadata,
+                            credential_offer,
+                            requested_scopes: Vec::new(),
+                            response,
+                        }))
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(async_fn_in_trait)]
+    async fn query_credential_async<'c>(
+        &self,
+        http_client: &'c impl AsyncHttpClient<'c>,
+        token: &CredentialToken<Self::Profile>,
+        credential: CredentialIdentifierOrConfigurationId,
+        proofs: Option<Proofs>,
+    ) -> Result<ProfileCredentialResponse<Self::Profile>, ClientError>
+    where
+        <Self::Profile as Profile>::RequestParams: Default,
+    {
+        self.query_credential_with_async(http_client, token, credential, proofs, Default::default())
+            .await
+    }
+
+    #[allow(async_fn_in_trait)]
+    async fn query_credential_with_async<'c>(
+        &self,
+        http_client: &'c impl AsyncHttpClient<'c>,
+        token: &CredentialToken<Self::Profile>,
+        credential: CredentialIdentifierOrConfigurationId,
+        proofs: Option<Proofs>,
+        params: <Self::Profile as Profile>::RequestParams,
+    ) -> Result<ProfileCredentialResponse<Self::Profile>, ClientError> {
+        let request = CredentialRequest {
+            credential,
+            proofs,
+            credential_response_encryption: None, // TODO support encryption
+            params,
+        };
+
+        request
+            .send_async(
+                http_client,
+                &token.issuer_metadata.credential_endpoint,
+                token.get(),
+            )
+            .await
+            .map_err(Into::into)
+    }
+
+    fn query_credential<'c>(
+        &self,
+        http_client: &impl SyncHttpClient,
+        token: &CredentialToken<Self::Profile>,
+        credential: CredentialIdentifierOrConfigurationId,
+        proofs: Option<Proofs>,
+    ) -> Result<ProfileCredentialResponse<Self::Profile>, ClientError>
+    where
+        <Self::Profile as Profile>::RequestParams: Default,
+    {
+        self.query_credential_with(http_client, token, credential, proofs, Default::default())
+    }
+
+    fn query_credential_with<'c>(
+        &self,
+        http_client: &impl SyncHttpClient,
+        token: &CredentialToken<Self::Profile>,
+        credential: CredentialIdentifierOrConfigurationId,
+        proofs: Option<Proofs>,
+        params: <Self::Profile as Profile>::RequestParams,
+    ) -> Result<ProfileCredentialResponse<Self::Profile>, ClientError> {
+        let request = CredentialRequest {
+            credential,
+            proofs,
+            credential_response_encryption: None, // TODO support encryption
+            params,
+        };
+
+        request
+            .send(
+                http_client,
+                &token.issuer_metadata.credential_endpoint,
+                token.get(),
+            )
+            .map_err(Into::into)
+    }
 }
 
-type OAuth2Client<C> = oauth2::Client<
+fn set_locations<F, C>(
+    issuer_metadata: &CredentialIssuerMetadata<F>,
+    authorization_details: &mut [CredentialAuthorizationDetailsRequest<C>],
+) where
+    F: CredentialFormatMetadata,
+    C: CredentialAuthorizationParams,
+{
+    if !issuer_metadata.authorization_servers.is_empty() {
+        for d in authorization_details {
+            if !d.locations.contains(&issuer_metadata.credential_issuer) {
+                d.locations.push(issuer_metadata.credential_issuer.clone());
+            }
+        }
+    }
+}
+
+/// Selected grant.
+pub enum GrantSelection<'a> {
+    /// Authorization Code Flow.
+    ///
+    /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-authorization-code-flow>
+    AuthorizationCode(Cow<'a, AuthorizationCodeGrant>),
+
+    /// Pre-Authorized Code Flow.
+    ///
+    /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-pre-authorized-code-flow>
+    PreAuthorizedCode(Cow<'a, PreAuthorizedCodeGrant>),
+}
+
+/// Credential selection configuration in an Authorization Request.
+pub struct CredentialRequestConfiguration<P: Profile> {
+    /// Request credential by configuration and parameters.
+    pub authorization_details: Vec<ProfileCredentialAuthorizationDetailsRequest<P>>,
+
+    /// Request credential by scope.
+    ///
+    /// Credential Issuers *must* ignore unknown scope values in a request.
+    pub scopes: Vec<Scope>,
+}
+
+impl<P: Profile> Default for CredentialRequestConfiguration<P> {
+    fn default() -> Self {
+        Self {
+            authorization_details: Vec::new(),
+            scopes: Vec::new(),
+        }
+    }
+}
+
+pub struct CredentialToken<P: Profile = StandardProfile> {
+    issuer_metadata: ProfileCredentialIssuerMetadata<P>,
+    credential_offer: CredentialOfferParameters,
+    requested_scopes: Vec<Scope>,
+    response: CredentialTokenResponse<<P as Profile>::AuthorizationParams>,
+}
+
+impl<P: Profile> CredentialToken<P> {
+    pub fn get(&self) -> &AccessToken {
+        self.response.access_token()
+    }
+
+    pub fn credential_issuer(&self) -> &Uri {
+        &self.credential_offer.credential_issuer
+    }
+
+    pub fn credential_offer(&self) -> &CredentialOfferParameters {
+        &self.credential_offer
+    }
+
+    pub fn scopes(&self) -> &[Scope] {
+        self.response
+            .scopes()
+            .map(Vec::as_slice)
+            .unwrap_or(&self.requested_scopes)
+    }
+
+    pub fn authorization_details(&self) -> &[ProfileCredentialAuthorizationDetailsResponse<P>] {
+        &self.response.extra_fields().authorization_details
+    }
+
+    pub fn default_credential_id(
+        &self,
+    ) -> Result<CredentialIdentifierOrConfigurationId, ClientError> {
+        match self.authorization_details() {
+            [] => match self
+                .credential_offer
+                .credential_configuration_ids
+                .as_slice()
+            {
+                [id] => Ok(CredentialIdentifierOrConfigurationId::ConfigurationId(
+                    id.clone(),
+                )),
+                _ => Err(ClientError::AmbiguousCredentialOffer),
+            },
+            [details] => match details.credential_identifiers.as_slice() {
+                [id] => Ok(CredentialIdentifierOrConfigurationId::Identifier(
+                    id.clone(),
+                )),
+                _ => Err(ClientError::AmbiguousCredentialOffer),
+            },
+            _ => Err(ClientError::AmbiguousCredentialOffer),
+        }
+    }
+
+    pub async fn get_nonce_async<C>(&self, http_client: &C) -> Result<Option<String>, ClientError>
+    where
+        C: for<'c> AsyncHttpClient<'c>,
+    {
+        match self.nonce_request() {
+            Some((uri, request)) => {
+                let response = http_client
+                    .call(request)
+                    .await
+                    .map_err(HttpError::query(uri))?;
+                self.process_nonce_response(uri, response)
+                    .map(|r| Some(r.c_nonce))
+                    .map_err(Into::into)
+            }
+            None => Ok(None),
+        }
+    }
+
+    pub fn get_nonce<C>(&self, http_client: &C) -> Result<Option<String>, ClientError>
+    where
+        C: SyncHttpClient,
+    {
+        match self.nonce_request() {
+            Some((uri, request)) => {
+                let response = http_client.call(request).map_err(HttpError::query(uri))?;
+                self.process_nonce_response(uri, response)
+                    .map(|r| Some(r.c_nonce))
+                    .map_err(Into::into)
+            }
+            None => Ok(None),
+        }
+    }
+
+    fn nonce_request(&self) -> Option<(&Uri, HttpRequest)> {
+        let url = self.issuer_metadata.nonce_endpoint.as_deref()?;
+        let mut request = HttpRequest::new(Vec::new());
+        *request.method_mut() = Method::POST;
+        *request.uri_mut() = url.as_str().parse().unwrap();
+        Some((url, request))
+    }
+
+    fn process_nonce_response(
+        &self,
+        uri: &Uri,
+        response: HttpResponse,
+    ) -> Result<NonceResponse, HttpError> {
+        let status = response.status();
+        if status != StatusCode::OK {
+            return Err(HttpError::ServerError(uri.to_owned(), status));
+        }
+
+        check_content_type(uri, response.headers(), MIME_TYPE_JSON)?;
+        serde_json::from_slice(response.body()).map_err(HttpError::json(uri))
+    }
+}
+
+/// Credential Token state.
+pub enum CredentialTokenState<C: Oid4vciClient> {
+    /// Credential Token requires authentication.
+    ///
+    /// The given [`WaitingForAuthentication`] object provides the redirect URL
+    /// the user agent must got to.
+    RequiresAuthentication(AuthenticationRequired<C>),
+
+    /// Credential Token requires a Transaction Code.
+    RequiresTxCode(WaitingForTxCode<C::Profile>),
+
+    /// Credential Token is ready.
+    Ready(CredentialToken<C::Profile>),
+}
+
+pub struct WaitingForTxCode<P: Profile = StandardProfile> {
+    issuer_metadata: ProfileCredentialIssuerMetadata<P>,
+    credential_offer: CredentialOfferParameters,
+    oauth2_client: OAuth2PreAuthClient<P>,
+    pre_authorized_code: String,
+    tx_code_definition: TxCodeDefinition,
+}
+
+impl<P: Profile> WaitingForTxCode<P> {
+    pub fn tx_code_definition(&self) -> &TxCodeDefinition {
+        &self.tx_code_definition
+    }
+
+    pub async fn proceed_async<'c>(
+        self,
+        http_client: &'c impl AsyncHttpClient<'c>,
+        tx_code: &str,
+    ) -> Result<CredentialToken<P>, ClientError> {
+        let response = self
+            .oauth2_client
+            .exchange_pre_authorized_code(&self.pre_authorized_code)
+            .set_tx_code(tx_code)
+            .request_async(http_client)
+            .await
+            .map_err(|_| ClientError::Authorization)?;
+
+        Ok(CredentialToken {
+            issuer_metadata: self.issuer_metadata,
+            credential_offer: self.credential_offer,
+            requested_scopes: Vec::new(),
+            response,
+        })
+    }
+
+    pub fn proceed(
+        self,
+        http_client: &impl SyncHttpClient,
+        tx_code: &str,
+    ) -> Result<CredentialToken<P>, ClientError> {
+        let response = self
+            .oauth2_client
+            .exchange_pre_authorized_code(&self.pre_authorized_code)
+            .set_tx_code(tx_code)
+            .request(http_client)
+            .map_err(|_| ClientError::Authorization)?;
+
+        Ok(CredentialToken {
+            issuer_metadata: self.issuer_metadata,
+            credential_offer: self.credential_offer,
+            requested_scopes: Vec::new(),
+            response,
+        })
+    }
+}
+
+pub struct AuthenticationRequired<C: Oid4vciClient = SimpleOid4vciClient> {
+    client: C,
+    credential_offer: CredentialOfferParameters,
+    issuer_metadata: ProfileCredentialIssuerMetadata<C::Profile>,
+    issuer_state: Option<String>,
+    authorization_server_metadata: AuthorizationServerMetadata,
+}
+
+impl<C: Oid4vciClient> AuthenticationRequired<C> {
+    pub async fn proceed_async<'c>(
+        self,
+        http_client: &'c impl AsyncHttpClient<'c>,
+        redirect_url: RedirectUrl,
+    ) -> Result<WaitingForAuthentication<C>, ClientError> {
+        let (pkce_code_challenge, pkce_code_verifier) = PkceCodeChallenge::new_random_sha256();
+
+        let oauth2_client: OAuth2AuthCodeClient<C::Profile> =
+            oauth2::Client::new(self.client.client_id().clone())
+                .set_redirect_uri(redirect_url)
+                .set_auth_uri(
+                    self.authorization_server_metadata
+                        .authorization_endpoint
+                        .ok_or(ClientError::MissingAuthorizationEndpoint)?,
+                )
+                .set_token_uri(self.authorization_server_metadata.token_endpoint);
+
+        let mut configuration = self
+            .client
+            .configure_authorization_request(&self.issuer_metadata, &self.credential_offer)?;
+
+        set_locations(
+            &self.issuer_metadata,
+            &mut configuration.authorization_details,
+        );
+
+        let (redirect_url, state) = match &self
+            .authorization_server_metadata
+            .pushed_authorization_request_endpoint
+        {
+            Some(par_endpoint_url) => {
+                oauth2_client
+                    .push_authorize_url(par_endpoint_url, CsrfToken::new_random)
+                    .add_scopes(configuration.scopes.iter().cloned())
+                    .set_authorization_details(configuration.authorization_details)
+                    .set_issuer_state_option(self.issuer_state.as_deref())
+                    .set_pkce_challenge(pkce_code_challenge)
+                    .request_async(http_client)
+                    .await?
+            }
+            None => oauth2_client
+                .authorize_url(CsrfToken::new_random)
+                .add_scopes(configuration.scopes.iter().cloned())
+                .set_authorization_details(configuration.authorization_details)
+                .set_issuer_state_option(self.issuer_state.as_deref())
+                .set_pkce_challenge(pkce_code_challenge)
+                .url(),
+        };
+
+        Ok(WaitingForAuthentication {
+            client: self.client,
+            oauth2_client,
+            issuer_metadata: self.issuer_metadata,
+            credential_offer: self.credential_offer,
+            requested_scopes: configuration.scopes,
+            pkce_code_verifier,
+            redirect_url,
+            state,
+        })
+    }
+
+    pub fn proceed(
+        self,
+        http_client: &impl SyncHttpClient,
+        redirect_url: RedirectUrl,
+    ) -> Result<WaitingForAuthentication<C>, ClientError> {
+        let (pkce_code_challenge, pkce_code_verifier) = PkceCodeChallenge::new_random_sha256();
+
+        let oauth2_client: OAuth2AuthCodeClient<C::Profile> =
+            oauth2::Client::new(self.client.client_id().clone())
+                .set_redirect_uri(redirect_url)
+                .set_auth_uri(
+                    self.authorization_server_metadata
+                        .authorization_endpoint
+                        .ok_or(ClientError::MissingAuthorizationEndpoint)?,
+                )
+                .set_token_uri(self.authorization_server_metadata.token_endpoint);
+
+        let mut configuration = self
+            .client
+            .configure_authorization_request(&self.issuer_metadata, &self.credential_offer)?;
+
+        set_locations(
+            &self.issuer_metadata,
+            &mut configuration.authorization_details,
+        );
+
+        let (redirect_url, state) = match &self
+            .authorization_server_metadata
+            .pushed_authorization_request_endpoint
+        {
+            Some(par_endpoint_url) => oauth2_client
+                .push_authorize_url(par_endpoint_url, CsrfToken::new_random)
+                .add_scopes(configuration.scopes.iter().cloned())
+                .set_authorization_details(configuration.authorization_details)
+                .set_issuer_state_option(self.issuer_state.as_deref())
+                .set_pkce_challenge(pkce_code_challenge)
+                .request(http_client)?,
+            None => oauth2_client
+                .authorize_url(CsrfToken::new_random)
+                .add_scopes(configuration.scopes.iter().cloned())
+                .set_authorization_details(configuration.authorization_details)
+                .set_issuer_state_option(self.issuer_state.as_deref())
+                .set_pkce_challenge(pkce_code_challenge)
+                .url(),
+        };
+
+        Ok(WaitingForAuthentication {
+            client: self.client,
+            oauth2_client,
+            issuer_metadata: self.issuer_metadata,
+            credential_offer: self.credential_offer,
+            requested_scopes: configuration.scopes,
+            pkce_code_verifier,
+            redirect_url,
+            state,
+        })
+    }
+}
+
+pub struct WaitingForAuthentication<C: Oid4vciClient> {
+    client: C,
+    issuer_metadata: ProfileCredentialIssuerMetadata<C::Profile>,
+    credential_offer: CredentialOfferParameters,
+    oauth2_client: OAuth2AuthCodeClient<C::Profile>,
+    requested_scopes: Vec<Scope>,
+    pkce_code_verifier: PkceCodeVerifier,
+    redirect_url: Url,
+    state: CsrfToken,
+}
+
+impl<C: Oid4vciClient> WaitingForAuthentication<C> {
+    pub fn redirect_url(&self) -> &Url {
+        &self.redirect_url
+    }
+
+    pub fn state(&self) -> &CsrfToken {
+        &self.state
+    }
+
+    pub async fn proceed_async<H>(
+        self,
+        http_client: &H,
+        authorization_code: AuthorizationCode,
+    ) -> Result<CredentialToken<C::Profile>, ClientError>
+    where
+        H: for<'c> AsyncHttpClient<'c>,
+    {
+        let mut authorization_details = self
+            .client
+            .configure_token_request(&self.issuer_metadata, &self.credential_offer)?;
+
+        set_locations(&self.issuer_metadata, &mut authorization_details);
+
+        let response = self
+            .oauth2_client
+            .exchange_code(authorization_code)
+            .set_authorization_details(&authorization_details)
+            .set_pkce_verifier(self.pkce_code_verifier)
+            .request_async(http_client)
+            .await
+            .map_err(|_| ClientError::Authorization)?;
+
+        Ok(CredentialToken {
+            issuer_metadata: self.issuer_metadata,
+            credential_offer: self.credential_offer,
+            requested_scopes: self.requested_scopes,
+            response,
+        })
+    }
+
+    pub fn proceed<H>(
+        self,
+        http_client: &H,
+        authorization_code: AuthorizationCode,
+    ) -> Result<CredentialToken<C::Profile>, ClientError>
+    where
+        H: SyncHttpClient,
+    {
+        let mut authorization_details = self
+            .client
+            .configure_token_request(&self.issuer_metadata, &self.credential_offer)?;
+
+        set_locations(&self.issuer_metadata, &mut authorization_details);
+
+        let response = self
+            .oauth2_client
+            .exchange_code(authorization_code)
+            .set_authorization_details(&authorization_details)
+            .set_pkce_verifier(self.pkce_code_verifier)
+            .request(http_client)
+            .map_err(|_| ClientError::Authorization)?;
+
+        Ok(CredentialToken {
+            issuer_metadata: self.issuer_metadata,
+            credential_offer: self.credential_offer,
+            requested_scopes: self.requested_scopes,
+            response,
+        })
+    }
+}
+
+/// Client error.
+#[derive(Debug, thiserror::Error)]
+pub enum ClientError {
+    /// Error with the credential offer.
+    #[error(transparent)]
+    CredentialOffer(#[from] CredentialOfferError),
+
+    /// The credential offer doesn't have any grant, and the client doesn't
+    /// have any built-in grant.
+    #[error("missing grant")]
+    MissingGrant,
+
+    #[error(transparent)]
+    Http(#[from] HttpError),
+
+    #[error("missing authorization server")]
+    MissingAuthorizationServer,
+
+    #[error("ambiguous authorization server")]
+    AmbiguousAuthorizationServer,
+
+    #[error("invalid authorization server")]
+    InvalidAuthorizationServer,
+
+    #[error("missing authorization endpoint")]
+    MissingAuthorizationEndpoint,
+
+    #[error("authorization failed")]
+    Authorization,
+
+    /// The wallet is lost and doesn't know what credential to pick.
+    #[error("ambiguous credential offer")]
+    AmbiguousCredentialOffer,
+
+    #[error("{0}")]
+    Other(String),
+}
+
+/// Inner OAuth2 client.
+type OAuth2AuthCodeClient<P> = oauth2::Client<
     BasicErrorResponse,
-    token::Response<<C as Profile>::AuthorizationParams>,
+    token::CredentialTokenResponse<<P as Profile>::AuthorizationParams>,
     BasicTokenIntrospectionResponse,
     StandardRevocableToken,
     BasicRevocationErrorResponse,
-    EndpointMaybeSet,
+    EndpointSet,
     EndpointNotSet,
     EndpointNotSet,
     EndpointNotSet,
     EndpointSet,
 >;
 
-pub struct Client<C = StandardProfile>
-where
-    C: Profile,
-{
-    inner: OAuth2Client<C>,
-    issuer: UriBuf,
-    credential_endpoint: CredentialUrl,
-    par_auth_url: Option<ParUrl>,
-    deferred_credential_endpoint: Option<DeferredCredentialUrl>,
-    credential_response_encryption: Option<CredentialResponseEncryptionMetadata>,
-    credential_configurations_supported:
-        IndexMap<CredentialConfigurationId, CredentialConfiguration<C::FormatConfiguration>>,
-    display: Vec<CredentialIssuerMetadataDisplay>,
+/// Inner OAuth2 client.
+type OAuth2PreAuthClient<P> = oauth2::Client<
+    BasicErrorResponse,
+    token::CredentialTokenResponse<<P as Profile>::AuthorizationParams>,
+    BasicTokenIntrospectionResponse,
+    StandardRevocableToken,
+    BasicRevocationErrorResponse,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointSet,
+>;
+
+fn select_authorization_server<'a>(
+    grant_authorization_server: Option<&'a Uri>,
+    issuer: &'a Uri,
+    issuer_authorization_servers: &'a [UriBuf],
+) -> Result<&'a Uri, ClientError> {
+    match grant_authorization_server {
+        Some(url) => {
+            if issuer_authorization_servers.iter().any(|u| u == url) {
+                Ok(url)
+            } else {
+                Err(ClientError::InvalidAuthorizationServer)
+            }
+        }
+        None => match issuer_authorization_servers.split_first() {
+            Some((url, [])) => Ok(url),
+            Some(_) => Err(ClientError::AmbiguousAuthorizationServer),
+            None => Ok(issuer),
+        },
+    }
 }
 
-impl<P> Client<P>
-where
-    P: Profile,
-{
-    pub fn issuer(&self) -> &Uri {
-        &self.issuer
-    }
+pub struct SimpleOid4vciClient<P = StandardProfile> {
+    client_id: ClientId,
+    profile: PhantomData<P>,
+}
 
-    pub fn set_issuer(&mut self, value: UriBuf) {
-        self.issuer = value;
-    }
-
-    pub fn credential_endpoint(&self) -> &CredentialUrl {
-        &self.credential_endpoint
-    }
-
-    pub fn set_credential_endpoint(&mut self, value: CredentialUrl) {
-        self.credential_endpoint = value;
-    }
-
-    pub fn deferred_credential_endpoint(&self) -> &Option<DeferredCredentialUrl> {
-        &self.deferred_credential_endpoint
-    }
-
-    pub fn set_deferred_credential_endpoint(&mut self, value: Option<DeferredCredentialUrl>) {
-        self.deferred_credential_endpoint = value;
-    }
-
-    pub fn credential_response_encryption(&self) -> &Option<CredentialResponseEncryptionMetadata> {
-        &self.credential_response_encryption
-    }
-
-    pub fn set_credential_response_encryption(
-        &mut self,
-        value: Option<CredentialResponseEncryptionMetadata>,
-    ) {
-        self.credential_response_encryption = value;
-    }
-
-    pub fn credential_configurations_supported(
-        &self,
-    ) -> &IndexMap<CredentialConfigurationId, CredentialConfiguration<P::FormatConfiguration>> {
-        &self.credential_configurations_supported
-    }
-
-    pub fn set_credential_configurations_supported(
-        &mut self,
-        value: IndexMap<CredentialConfigurationId, CredentialConfiguration<P::FormatConfiguration>>,
-    ) {
-        self.credential_configurations_supported = value;
-    }
-
-    pub fn display(&self) -> &Vec<CredentialIssuerMetadataDisplay> {
-        &self.display
-    }
-
-    pub fn set_display(&mut self, value: Vec<CredentialIssuerMetadataDisplay>) {
-        self.display = value;
-    }
-
-    pub fn from_issuer_metadata(
-        client_id: ClientId,
-        redirect_uri: RedirectUrl,
-        credential_issuer_metadata: CredentialIssuerMetadata<P::FormatConfiguration>,
-        authorization_metadata: AuthorizationServerMetadata,
-    ) -> Self {
-        let inner = Self::new_inner_client(
-            client_id,
-            redirect_uri,
-            authorization_metadata.authorization_endpoint.clone(),
-            authorization_metadata.token_endpoint.clone(),
-        );
-
+impl<P> Clone for SimpleOid4vciClient<P> {
+    fn clone(&self) -> Self {
         Self {
-            inner,
-            issuer: credential_issuer_metadata.credential_issuer.clone(),
-            credential_endpoint: credential_issuer_metadata.credential_endpoint.clone(),
-            par_auth_url: authorization_metadata
-                .pushed_authorization_request_endpoint
-                .clone(),
-            deferred_credential_endpoint: credential_issuer_metadata
-                .deferred_credential_endpoint
-                .clone(),
-            credential_response_encryption: credential_issuer_metadata
-                .credential_response_encryption
-                .clone(),
-            credential_configurations_supported: credential_issuer_metadata
-                .credential_configurations_supported
-                .clone(),
-            display: credential_issuer_metadata.display.clone(),
+            client_id: self.client_id.clone(),
+            profile: PhantomData,
         }
     }
+}
 
-    pub fn pushed_authorization_request<S>(
-        &self,
-        state_fn: S,
-    ) -> Result<PushedAuthorizationRequest<'_>, Error>
-    where
-        S: FnOnce() -> CsrfToken,
-    {
-        let Some(par_url) = self.par_auth_url.as_ref() else {
-            return Err(Error::ParUnsupported);
-        };
-        let inner = self.authorize_url(state_fn)?;
-        Ok(PushedAuthorizationRequest::new(
-            inner,
-            par_url.clone(),
-            self.inner
-                .auth_uri()
-                .cloned()
-                .ok_or(Error::AuthUnsupported(ConfigurationError::MissingUrl(
-                    "authorization",
-                )))?,
-        ))
+impl SimpleOid4vciClient {
+    pub fn new(client_id: ClientId) -> Self {
+        Self::new_with_profile(client_id, StandardProfile)
     }
+}
 
-    pub fn authorize_url<S>(&self, state_fn: S) -> Result<AuthorizationRequest<'_>, Error>
-    where
-        S: FnOnce() -> CsrfToken,
-    {
-        let inner = self
-            .inner
-            .authorize_url(state_fn)
-            .map_err(Error::AuthUnsupported)?;
-        Ok(AuthorizationRequest::new(inner))
-    }
-
-    pub fn exchange_code(
-        &self,
-        code: AuthorizationCode,
-    ) -> CodeTokenRequest<'_, BasicErrorResponse, token::Response<P::AuthorizationParams>> {
-        self.inner.exchange_code(code)
-    }
-
-    pub fn exchange_pre_authorized_code(
-        &self,
-        pre_authorized_code: PreAuthorizedCode,
-    ) -> PreAuthorizedCodeTokenRequest<
-        '_,
-        BasicErrorResponse,
-        token::Response<P::AuthorizationParams>,
-    > {
-        PreAuthorizedCodeTokenRequest {
-            auth_type: self.inner.auth_type(),
-            client_id: Some(self.inner.client_id()),
-            client_secret: None,
-            code: pre_authorized_code,
-            extra_params: Vec::new(),
-            token_url: self.inner.token_uri(),
-            tx_code: None,
-            _phantom: PhantomData,
+impl<P: Profile> SimpleOid4vciClient<P> {
+    pub fn new_with_profile(client_id: ClientId, profile: P) -> Self {
+        std::mem::drop(profile); // It's just a marker.
+        Self {
+            client_id,
+            profile: PhantomData,
         }
     }
+}
 
-    pub fn request_credential(
-        &self,
-        access_token: AccessToken,
-        credential_identifier: impl Into<String>,
-    ) -> CredentialRequestBuilder<P::RequestParams, P::Credential>
-    where
-        P::RequestParams: Default,
-    {
-        let body = CredentialRequest::new(credential_identifier.into());
-        CredentialRequestBuilder::new(body, self.credential_endpoint.clone(), access_token)
-    }
+impl<P: Profile> Oid4vciClient for SimpleOid4vciClient<P> {
+    type Profile = P;
 
-    fn new_inner_client(
-        client_id: ClientId,
-        redirect_uri: RedirectUrl,
-        auth_url: Option<AuthUrl>,
-        token_url: TokenUrl,
-    ) -> OAuth2Client<P> {
-        oauth2::Client::new(client_id)
-            .set_redirect_uri(redirect_uri)
-            .set_auth_uri_option(auth_url)
-            .set_token_uri(token_url)
+    fn client_id(&self) -> &ClientId {
+        &self.client_id
     }
 }

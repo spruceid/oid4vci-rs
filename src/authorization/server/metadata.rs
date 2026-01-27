@@ -1,18 +1,13 @@
 use anyhow::{bail, Result};
 use iref::{uri_ref, Uri, UriBuf};
 use oauth2::{
-    AsyncHttpClient, AuthUrl, IntrospectionUrl, PkceCodeChallengeMethod, ResponseType,
-    RevocationUrl, Scope, SyncHttpClient, TokenUrl,
+    AuthUrl, IntrospectionUrl, PkceCodeChallengeMethod, ResponseType, RevocationUrl, Scope,
+    TokenUrl,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value as Json};
-use tracing::{info, warn};
 
-use crate::{
-    issuer::{metadata::CredentialFormatMetadata, CredentialIssuerMetadata},
-    types::{JsonWebKeySetUrl, ParUrl, RegistrationUrl, ResponseMode},
-    util::discoverable::Discoverable,
-};
+use crate::util::discoverable::Discoverable;
 
 /// Authorization Server Metadata.
 ///
@@ -43,12 +38,12 @@ pub struct AuthorizationServerMetadata {
     pub issuer: UriBuf,
     pub authorization_endpoint: Option<AuthUrl>,
     pub token_endpoint: TokenUrl,
-    pub jwks_uri: Option<JsonWebKeySetUrl>,
-    pub registration_endpoint: Option<RegistrationUrl>,
+    pub jwks_uri: Option<UriBuf>,
+    pub registration_endpoint: Option<UriBuf>,
     pub scopes_supported: Option<Vec<Scope>>,
     pub response_types_supported: Option<Vec<ResponseType>>,
     #[serde(default = "default_response_modes_supported")]
-    pub response_modes_supported: Vec<ResponseMode>,
+    pub response_modes_supported: Vec<String>,
     #[serde(default = "default_grant_types_supported")]
     pub grant_types_supported: Vec<GrantType>,
     pub revocation_endpoint: Option<RevocationUrl>,
@@ -56,7 +51,7 @@ pub struct AuthorizationServerMetadata {
     pub code_challenge_methods_supported: Option<Vec<PkceCodeChallengeMethod>>,
     #[serde(default, rename = "pre-authorized_grant_anonymous_access_supported")]
     pub pre_authorized_grant_anonymous_access_supported: bool,
-    pub pushed_authorization_request_endpoint: Option<ParUrl>,
+    pub pushed_authorization_request_endpoint: Option<UriBuf>,
     #[serde(default)]
     pub require_pushed_authorization_requests: bool,
     #[serde(flatten)]
@@ -85,141 +80,19 @@ impl AuthorizationServerMetadata {
         }
     }
 
+    pub fn with_authorization_endpoint(self, authorization_endpoint: AuthUrl) -> Self {
+        Self {
+            authorization_endpoint: Some(authorization_endpoint),
+            ..self
+        }
+    }
+
     pub fn additional_fields(&self) -> &Map<String, Json> {
         &self.additional_fields
     }
 
     pub fn additional_fields_mut(&mut self) -> &mut Map<String, Json> {
         &mut self.additional_fields
-    }
-
-    /// Discover the authorization server metadata, potentially from a list of authorization
-    /// servers in the credential issuer metadata.
-    ///
-    /// Optionally the grant type and authorization server (i.e. from the credential offer) can be
-    /// provided to help select the correct authorization server.
-    pub fn discover_from_credential_issuer_metadata<C, F>(
-        http_client: &C,
-        credential_issuer_metadata: &CredentialIssuerMetadata<F>,
-        grant_type: Option<&GrantType>,
-        authorization_server: Option<&Uri>,
-    ) -> Result<Self, anyhow::Error>
-    where
-        C: SyncHttpClient,
-        C::Error: Send + Sync,
-        F: CredentialFormatMetadata,
-    {
-        let credential_issuer_authorization_server_metadata =
-            Self::discover(&credential_issuer_metadata.credential_issuer, http_client);
-        let Some(grant_type) = grant_type else {
-            // If grants is not present or is empty, the Wallet MUST determine the Grant Types the
-            // Credential Issuer's Authorization Server supports using the respective metadata.
-            // When multiple grants are present, it is at the Wallet's discretion which one to use.
-            // https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#section-4.1.1-2.3
-            return credential_issuer_authorization_server_metadata;
-        };
-
-        // the Wallet can use to identify the Authorization Server to use with this grant type
-        // when authorization_servers parameter in the Credential Issuer metadata has multiple
-        // entries. It MUST NOT be used otherwise.
-        // https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#section-4.1.1-4.1.2.2
-        if let Some(server) = authorization_server {
-            if credential_issuer_metadata.authorization_servers.len() > 1
-                && credential_issuer_metadata
-                    .authorization_servers
-                    .iter()
-                    .any(|uri| uri == server)
-            {
-                return Self::discover(server, http_client);
-            }
-        }
-
-        for auth_server in &credential_issuer_metadata.authorization_servers {
-            let response = Self::discover(auth_server, http_client);
-            match response {
-                Ok(response) => {
-                    if response
-                        .grant_types_supported
-                        .iter()
-                        .any(|gt| gt == grant_type)
-                    {
-                        return Ok(response);
-                    } else {
-                        info!("Auth server not supporting grant type, trying the next one");
-                    }
-                }
-                Err(e) => {
-                    warn!("Error fetching auth server metadata, trying the next one: {e:?}");
-                }
-            }
-        }
-
-        // Fallback to credential issuer authorization server.
-        credential_issuer_authorization_server_metadata
-    }
-
-    /// Discover the authorization server metadata, potentially from a list of authorization
-    /// servers in the credential issuer metadata.
-    ///
-    /// Optionally the grant type and authorization server (i.e. from the credential offer) can be
-    /// provided to help select the correct authorization server.
-    pub async fn discover_from_credential_issuer_metadata_async<'c, C, F>(
-        http_client: &'c C,
-        credential_issuer_metadata: &CredentialIssuerMetadata<F>,
-        grant_type: Option<&GrantType>,
-        authorization_server: Option<&Uri>,
-    ) -> Result<Self, anyhow::Error>
-    where
-        C: AsyncHttpClient<'c>,
-        C::Error: Send + Sync,
-        F: CredentialFormatMetadata,
-    {
-        let credential_issuer_authorization_server_metadata =
-            Self::discover_async(&credential_issuer_metadata.credential_issuer, http_client).await;
-        let Some(grant_type) = grant_type else {
-            // If grants is not present or is empty, the Wallet MUST determine the Grant Types the
-            // Credential Issuer's Authorization Server supports using the respective metadata.
-            // When multiple grants are present, it is at the Wallet's discretion which one to use.
-            // https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#section-4.1.1-2.3
-            return credential_issuer_authorization_server_metadata;
-        };
-
-        // the Wallet can use to identify the Authorization Server to use with this grant type
-        // when authorization_servers parameter in the Credential Issuer metadata has multiple
-        // entries. It MUST NOT be used otherwise.
-        // https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#section-4.1.1-4.1.2.2
-        if let Some(server) = authorization_server {
-            if credential_issuer_metadata.authorization_servers.len() > 1
-                && credential_issuer_metadata
-                    .authorization_servers
-                    .iter()
-                    .any(|uri| uri == server)
-            {
-                return Self::discover_async(server, http_client).await;
-            }
-        }
-        for auth_server in &credential_issuer_metadata.authorization_servers {
-            let response = Self::discover_async(auth_server, http_client).await;
-            match response {
-                Ok(response) => {
-                    if response
-                        .grant_types_supported
-                        .iter()
-                        .any(|gt| gt == grant_type)
-                    {
-                        return Ok(response);
-                    } else {
-                        info!("Auth server not supporting grant type, trying the next one");
-                    }
-                }
-                Err(e) => {
-                    warn!("Error fetching auth server metadata, trying the next one: {e:?}");
-                }
-            }
-        }
-
-        // Fallback to credential issuer authorization server.
-        credential_issuer_authorization_server_metadata
     }
 }
 
@@ -249,13 +122,43 @@ pub enum GrantType {
     Extension(String),
 }
 
-pub fn default_response_modes_supported() -> Vec<ResponseMode> {
-    vec![
-        ResponseMode::new("query".to_owned()),
-        ResponseMode::new("fragment".to_owned()),
-    ]
+pub fn default_response_modes_supported() -> Vec<String> {
+    vec!["query".to_owned(), "fragment".to_owned()]
 }
 
 pub fn default_grant_types_supported() -> Vec<GrantType> {
     vec![GrantType::AuthorizationCode, GrantType::Implicit]
+}
+
+mod axum {
+    use ::axum::{
+        body::Body,
+        http::{header::CONTENT_TYPE, StatusCode},
+        response::{IntoResponse, Response},
+    };
+
+    use crate::util::http::MIME_TYPE_JSON;
+
+    use super::*;
+
+    impl IntoResponse for AuthorizationServerMetadata {
+        fn into_response(self) -> Response {
+            (&self).into_response()
+        }
+    }
+
+    impl IntoResponse for &AuthorizationServerMetadata {
+        fn into_response(self) -> ::axum::response::Response {
+            Response::builder()
+                .status(StatusCode::OK)
+                .header(CONTENT_TYPE, MIME_TYPE_JSON)
+                .body(Body::from(
+                    serde_json::to_vec(self)
+                        // UNWRAP SAFETY: Authorization Server Metadata is
+                        //                always serializable as JSON.
+                        .unwrap(),
+                ))
+                .unwrap()
+        }
+    }
 }

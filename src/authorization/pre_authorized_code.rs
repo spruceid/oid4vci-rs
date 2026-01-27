@@ -1,4 +1,4 @@
-use std::{borrow::Cow, error::Error, future::Future, marker::PhantomData};
+use std::{borrow::Cow, error::Error, marker::PhantomData};
 
 use base64::prelude::*;
 use oauth2::{
@@ -7,19 +7,73 @@ use oauth2::{
         header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
         HeaderValue, StatusCode,
     },
-    AsyncHttpClient, AuthType, ClientId, ClientSecret, ErrorResponse, HttpRequest, HttpResponse,
-    RequestTokenError, Scope, SyncHttpClient, TokenResponse, TokenUrl,
+    url::Url,
+    AsyncHttpClient, AuthType, ClientId, ClientSecret, EndpointSet, EndpointState, ErrorResponse,
+    HttpRequest, HttpResponse, RequestTokenError, RevocableToken, Scope, SyncHttpClient,
+    TokenIntrospectionResponse, TokenResponse, TokenUrl,
 };
 use serde::de::DeserializeOwned;
-use url::Url;
 
-use crate::{
-    types::{PreAuthorizedCode, TxCode},
-    util::http::{MIME_TYPE_FORM_URLENCODED, MIME_TYPE_JSON},
-};
+use crate::util::http::{MIME_TYPE_FORM_URLENCODED, MIME_TYPE_JSON};
+
+pub trait PreAuthorizedCodeClient {
+    type Error: 'static + ErrorResponse;
+    type Response: TokenResponse;
+
+    fn exchange_pre_authorized_code<'a>(
+        &'a self,
+        pre_authorized_code: &'a str,
+    ) -> PreAuthorizedCodeTokenRequest<'a, Self::Error, Self::Response>;
+}
+
+impl<TE, TR, TIR, RT, TRE, HasAuthUrl, HasDeviceAuthUrl, HasIntrospectionUrl, HasRevocationUrl>
+    PreAuthorizedCodeClient
+    for oauth2::Client<
+        TE,
+        TR,
+        TIR,
+        RT,
+        TRE,
+        HasAuthUrl,
+        HasDeviceAuthUrl,
+        HasIntrospectionUrl,
+        HasRevocationUrl,
+        EndpointSet,
+    >
+where
+    TE: ErrorResponse + 'static,
+    TR: TokenResponse,
+    TIR: TokenIntrospectionResponse,
+    RT: RevocableToken,
+    TRE: ErrorResponse + 'static,
+    HasAuthUrl: EndpointState,
+    HasDeviceAuthUrl: EndpointState,
+    HasIntrospectionUrl: EndpointState,
+    HasRevocationUrl: EndpointState,
+{
+    type Error = TE;
+    type Response = TR;
+
+    fn exchange_pre_authorized_code<'a>(
+        &'a self,
+        pre_authorized_code: &'a str,
+    ) -> PreAuthorizedCodeTokenRequest<'a, TE, TR> {
+        PreAuthorizedCodeTokenRequest {
+            auth_type: self.auth_type(),
+            client_id: Some(self.client_id()),
+            client_secret: None,
+            pre_authorized_code,
+            extra_params: Vec::new(),
+            token_url: self.token_uri(),
+            tx_code: None,
+            _phantom: PhantomData,
+        }
+    }
+}
 
 /// A request to exchange an authorization code for an access token.
 ///
+/// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-offer-parameters>
 /// See <https://tools.ietf.org/html/rfc6749#section-4.1.3>.
 #[derive(Debug)]
 pub struct PreAuthorizedCodeTokenRequest<'a, TE, TR>
@@ -30,12 +84,13 @@ where
     pub(crate) auth_type: &'a AuthType,
     pub(crate) client_id: Option<&'a ClientId>,
     pub(crate) client_secret: Option<&'a ClientSecret>,
-    pub(crate) code: PreAuthorizedCode,
+    pub(crate) pre_authorized_code: &'a str,
     pub(crate) extra_params: Vec<(Cow<'a, str>, Cow<'a, str>)>,
     pub(crate) token_url: &'a TokenUrl,
-    pub(crate) tx_code: Option<&'a TxCode>,
+    pub(crate) tx_code: Option<&'a str>,
     pub(crate) _phantom: PhantomData<(TE, TR)>,
 }
+
 impl<'a, TE, TR> PreAuthorizedCodeTokenRequest<'a, TE, TR>
 where
     TE: ErrorResponse + 'static,
@@ -63,13 +118,15 @@ where
         self
     }
 
-    pub fn set_tx_code(mut self, tx_code: &'a TxCode) -> Self {
+    pub fn set_tx_code(mut self, tx_code: &'a str) -> Self {
         self.tx_code = Some(tx_code);
         self
     }
 
-    pub fn set_anonymous_client(mut self) -> Self {
-        self.client_id = None;
+    pub fn set_anonymous_client_if(mut self, condition: bool) -> Self {
+        if condition {
+            self.client_id = None;
+        }
         self
     }
 
@@ -82,11 +139,11 @@ where
                 "grant_type",
                 "urn:ietf:params:oauth:grant-type:pre-authorized_code",
             ),
-            ("pre-authorized_code", self.code.secret()),
+            ("pre-authorized_code", self.pre_authorized_code),
         ];
 
         if let Some(tx_code) = self.tx_code {
-            params.push(("tx_code", tx_code.secret()))
+            params.push(("tx_code", tx_code))
         }
 
         endpoint_request(
@@ -113,15 +170,14 @@ where
     }
 
     /// Asynchronously sends the request to the authorization server and returns a Future.
-    pub fn request_async<'c, C>(
+    pub async fn request_async<'c, C>(
         self,
         http_client: &'c C,
-    ) -> impl Future<Output = Result<TR, RequestTokenError<<C as AsyncHttpClient<'c>>::Error, TE>>> + 'c
+    ) -> Result<TR, RequestTokenError<<C as AsyncHttpClient<'c>>::Error, TE>>
     where
-        Self: 'c,
         C: AsyncHttpClient<'c>,
     {
-        Box::pin(async move { endpoint_response(http_client.call(self.prepare_request()?).await?) })
+        endpoint_response(http_client.call(self.prepare_request()?).await?)
     }
 }
 

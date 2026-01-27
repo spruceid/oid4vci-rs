@@ -1,5 +1,5 @@
 use crate::{
-    authorization::AnyCredentialAuthorizationParams,
+    authorization::authorization_details::AnyCredentialAuthorizationParams,
     issuer::metadata::AnyCredentialFormatConfiguration, request::AnyCredentialRequestParams,
 };
 
@@ -12,7 +12,7 @@ pub struct AnyProfile;
 
 impl Profile for AnyProfile {
     type Format = String;
-    type FormatConfiguration = AnyCredentialFormatConfiguration;
+    type FormatMetadata = AnyCredentialFormatConfiguration;
     type AuthorizationParams = AnyCredentialAuthorizationParams;
     type RequestParams = AnyCredentialRequestParams;
     type Credential = serde_json::Value;

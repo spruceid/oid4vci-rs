@@ -2,11 +2,9 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-mod authorization;
 mod metadata;
 mod response;
 
-pub use authorization::*;
 pub use metadata::*;
 
 pub const FORMAT_JWT_VC_JSON: &str = "jwt_vc_json";

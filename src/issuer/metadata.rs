@@ -3,19 +3,14 @@ use std::fmt::Debug;
 use anyhow::bail;
 use indexmap::IndexMap;
 use iref::{uri_ref, Uri, UriBuf, UriRef};
+use langtag::LangTagBuf;
 use oauth2::Scope;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
+use ssi_jwk::JWK;
 
 use crate::{
-    encryption::jwe,
-    profile::StandardCredentialFormatMetadata,
-    proof_of_possession::KeyProofType,
-    types::{
-        CredentialConfigurationId, CredentialUrl, DeferredCredentialUrl, LanguageTag, LogoUri,
-        NotificationUrl,
-    },
-    util::discoverable::Discoverable,
+    encryption::jwe, profile::StandardCredentialFormatMetadata, util::discoverable::Discoverable,
 };
 
 /// Credential Issuer Metadata.
@@ -54,7 +49,7 @@ where
     /// query parameter components.
     ///
     /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#credential-request>
-    pub credential_endpoint: CredentialUrl,
+    pub credential_endpoint: UriBuf,
 
     /// URL of the Credential Issuer's Nonce Endpoint.
     ///
@@ -74,7 +69,7 @@ where
     /// Credential Endpoint.
     ///
     /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#deferred-credential-issuance>
-    pub deferred_credential_endpoint: Option<DeferredCredentialUrl>,
+    pub deferred_credential_endpoint: Option<UriBuf>,
 
     /// URL of the Credential Issuer's Notification Endpoint.
     ///
@@ -85,7 +80,7 @@ where
     /// Endpoint.
     ///
     /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#notification-endpoint>
-    pub notification_endpoint: Option<NotificationUrl>,
+    pub notification_endpoint: Option<UriBuf>,
 
     /// Information about whether the Credential Issuer supports encryption of
     /// the Credential Request on top of TLS.
@@ -103,15 +98,14 @@ where
 
     /// Credential Issuer display properties.
     #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
-    pub display: Vec<CredentialIssuerMetadataDisplay>,
+    pub display: Vec<CredentialIssuerDisplay>,
 
     /// Specifics of the Credential that the Credential Issuer supports issuance
     /// of.
     ///
     /// List of name/value pairs, where each name is a unique identifier of the
     /// supported Credential being described.
-    pub credential_configurations_supported:
-        IndexMap<CredentialConfigurationId, CredentialConfiguration<F>>,
+    pub credential_configurations_supported: IndexMap<String, CredentialConfiguration<F>>,
 }
 
 impl<P: CredentialFormatMetadata> Discoverable for CredentialIssuerMetadata<P> {
@@ -130,7 +124,7 @@ impl<P: CredentialFormatMetadata> Discoverable for CredentialIssuerMetadata<P> {
 }
 
 impl<P: CredentialFormatMetadata> CredentialIssuerMetadata<P> {
-    pub fn new(credential_issuer: UriBuf, credential_endpoint: CredentialUrl) -> Self {
+    pub fn new(credential_issuer: UriBuf, credential_endpoint: UriBuf) -> Self {
         Self {
             credential_issuer,
             authorization_servers: Vec::new(),
@@ -158,7 +152,7 @@ pub struct CredentialRequestEncryptionMetadata {
     /// (key ID) parameter that uniquely identifies the key.
     ///
     /// See: <https://www.rfc-editor.org/info/rfc7591>
-    pub jwks: Vec<ssi::JWK>,
+    pub jwks: Vec<JWK>,
 
     /// List of the JWE encryption algorithms (`enc` values) supported by the
     /// Credential Endpoint to decode the Credential Request from a JWT.
@@ -231,24 +225,24 @@ pub struct BatchCredentialIssuanceMetadata {
 /// Credential Issuer display properties.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct CredentialIssuerMetadataDisplay {
+pub struct CredentialIssuerDisplay {
     /// Display name for the Credential Issuer.
     pub name: Option<String>,
 
     /// Language of this object.
-    pub locale: Option<LanguageTag>,
+    pub locale: Option<LangTagBuf>,
 
     /// Information about the logo of the Credential Issuer.
     pub logo: Option<DisplayLogoMetadata>,
 }
 
-impl CredentialIssuerMetadataDisplay {
-    pub fn new(
-        name: Option<String>,
-        locale: Option<LanguageTag>,
-        logo: Option<DisplayLogoMetadata>,
-    ) -> Self {
-        Self { name, locale, logo }
+impl CredentialIssuerDisplay {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: Some(name.into()),
+            locale: None,
+            logo: None,
+        }
     }
 }
 
@@ -257,14 +251,14 @@ impl CredentialIssuerMetadataDisplay {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct DisplayLogoMetadata {
     /// URI where the Wallet can obtain the logo of the Credential Issuer.
-    pub uri: LogoUri,
+    pub uri: UriBuf,
 
     /// Alternative text for the logo image.
     pub alt_text: Option<String>,
 }
 
 impl DisplayLogoMetadata {
-    pub fn new(uri: LogoUri, alt_text: Option<String>) -> Self {
+    pub fn new(uri: UriBuf, alt_text: Option<String>) -> Self {
         Self { uri, alt_text }
     }
 }
@@ -338,7 +332,7 @@ pub struct CredentialConfiguration<F: CredentialFormatMetadata = StandardCredent
 
     /// Specifics of the key proof(s) that the Credential Issuer supports.
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
-    pub proof_types_supported: IndexMap<KeyProofType, KeyProofTypesSupported>,
+    pub proof_types_supported: IndexMap<String, KeyProofTypesSupported>,
 
     /// Display properties of the supported Credential for different languages.
     #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
@@ -372,7 +366,7 @@ pub struct KeyProofTypesSupported {
     /// Algorithms that the Issuer supports for this proof type.
     ///
     /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#proof-types>
-    pub proof_signing_alg_values_supported: Vec<ssi::jwk::Algorithm>,
+    pub proof_signing_alg_values_supported: Vec<ssi_jwk::Algorithm>,
 
     /// Requirements for key attestations.
     ///
@@ -427,7 +421,7 @@ pub struct CredentialDisplay {
     pub name: String,
 
     /// Language of this object.
-    pub locale: Option<LanguageTag>,
+    pub locale: Option<LangTagBuf>,
 
     /// Information about the logo of the Credential.
     pub logo: Option<DisplayLogoMetadata>,
@@ -454,7 +448,7 @@ pub struct CredentialDisplay {
 impl CredentialDisplay {
     pub fn new(
         name: String,
-        locale: Option<LanguageTag>,
+        locale: Option<LangTagBuf>,
         logo: Option<DisplayLogoMetadata>,
         description: Option<String>,
         background_color: Option<String>,
@@ -477,11 +471,11 @@ impl CredentialDisplay {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct BackgroundImageMetadata {
     /// URI where the Wallet can obtain the background image of the Credential.
-    pub uri: LogoUri,
+    pub uri: UriBuf,
 }
 
 impl BackgroundImageMetadata {
-    pub fn new(uri: LogoUri) -> Self {
+    pub fn new(uri: UriBuf) -> Self {
         Self { uri }
     }
 }
@@ -489,7 +483,7 @@ impl BackgroundImageMetadata {
 /// Credential claim description.
 ///
 /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#claims-description-issuer-metadata>
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct ClaimDescription {
     /// Claims path pointer.
     ///
@@ -511,7 +505,7 @@ pub struct ClaimDescription {
 /// Claim path segment.
 ///
 /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#claims_path_pointer>
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
 pub enum ClaimPathSegment {
     Null,
@@ -520,13 +514,13 @@ pub enum ClaimPathSegment {
 }
 
 /// Display properties of a credential claim.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct ClaimDisplay {
     /// Display name for the claim.
     pub name: Option<String>,
 
     /// Language of this object.
-    pub locale: Option<LanguageTag>,
+    pub locale: Option<LangTagBuf>,
 }
 
 /// To test examples that focus on the `credential_configurations_supported`
@@ -538,8 +532,45 @@ pub struct CredentialConfigurationsSupported<
     F: CredentialFormatMetadata = StandardCredentialFormatMetadata,
 > {
     #[allow(unused)]
-    pub credential_configurations_supported:
-        IndexMap<CredentialConfigurationId, CredentialConfiguration<F>>,
+    pub credential_configurations_supported: IndexMap<String, CredentialConfiguration<F>>,
+}
+
+mod axum {
+    use ::axum::{
+        body::Body,
+        http::{header::CONTENT_TYPE, StatusCode},
+        response::{IntoResponse, Response},
+    };
+
+    use crate::util::http::MIME_TYPE_JSON;
+
+    use super::*;
+
+    impl<P> IntoResponse for CredentialIssuerMetadata<P>
+    where
+        P: CredentialFormatMetadata,
+    {
+        fn into_response(self) -> Response {
+            (&self).into_response()
+        }
+    }
+
+    impl<P> IntoResponse for &CredentialIssuerMetadata<P>
+    where
+        P: CredentialFormatMetadata,
+    {
+        fn into_response(self) -> ::axum::response::Response {
+            Response::builder()
+                .status(StatusCode::OK)
+                .header(CONTENT_TYPE, MIME_TYPE_JSON)
+                .body(Body::from(
+                    serde_json::to_vec(self)
+                        // UNWRAP SAFETY: Issuer Metadata is always serializable as JSON.
+                        .unwrap(),
+                ))
+                .unwrap()
+        }
+    }
 }
 
 #[cfg(test)]

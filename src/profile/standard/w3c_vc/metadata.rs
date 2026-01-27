@@ -28,7 +28,7 @@ impl CredentialFormatMetadata for W3cVcFormatMetadata {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct W3cVcDefinitionMetadata {
     #[serde(rename = "@context")]
-    pub context: Vec<ssi::json_ld::syntax::ContextEntry>,
+    pub context: Vec<json_ld::syntax::ContextEntry>,
 
     pub r#type: Vec<String>,
 }

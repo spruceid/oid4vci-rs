@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    authorization::CredentialAuthorizationParams,
+    authorization::authorization_details::AnyCredentialAuthorizationParams,
     issuer::metadata::{AnyCredentialFormatConfiguration, CredentialFormatMetadata},
     request::AnyCredentialRequestParams,
 };
@@ -26,8 +26,8 @@ pub struct StandardProfile;
 
 impl Profile for StandardProfile {
     type Format = StandardFormat;
-    type FormatConfiguration = StandardCredentialFormatMetadata;
-    type AuthorizationParams = StandardCredentialAuthorizationParams;
+    type FormatMetadata = StandardCredentialFormatMetadata;
+    type AuthorizationParams = AnyCredentialAuthorizationParams;
     type RequestParams = AnyCredentialRequestParams;
     type Credential = serde_json::Value;
 }
@@ -102,21 +102,4 @@ impl CredentialFormatMetadata for StandardCredentialFormatMetadata {
             Self::Unknown(other) => StandardFormat::Unknown(other.id.clone()),
         }
     }
-}
-
-#[derive(Debug, Default, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct StandardCredentialAuthorizationParams {
-    #[serde(flatten)]
-    pub w3c_vc: Option<w3c_vc::W3cVcAuthorizationParams>,
-
-    #[serde(flatten)]
-    pub mso_mdoc: mso_mdoc::MsoMdocAuthorizationParams,
-
-    #[serde(flatten)]
-    pub dc_sd_jwt: Option<dc_sd_jwt::DcSdJwtAuthorizationParams>,
-}
-
-impl CredentialAuthorizationParams for StandardCredentialAuthorizationParams {
-    type Format = StandardFormat;
 }

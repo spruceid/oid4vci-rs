@@ -2,6 +2,61 @@
 //!
 //! [OID4VCI draft-13]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-ID1.html#name-pre-authorized-code-flow>
 //!
+//! # Client Usage
+//!
+//! You can create a basic client implementation using the
+//! [`SimpleOid4vciClient`] type as follows:
+//!
+//! ```ignore
+//! use oid4vci::client::{SimpleOid4vciClient, Oid4vciClient, CredentialTokenState};
+//!
+//! // Setup client.
+//! let client = SimpleOid4vciClient::new(client_id);
+//!
+//! // Start processing the credential offer.
+//! let state = client
+//!   .process_offer(&http_client, credential_offer)
+//!   .await?;
+//!
+//! // Depending on the grant type, more authentication steps may be necessary.
+//! let credential_token = match state {
+//!   CredentialTokenState::RequiresAuthentication(state) => {
+//!     let full_redirect_url = state.proceed(&http_client, redirect_url);
+//!     let auth_code = do_authentication(full_redirect_url);
+//!     state.proceed(auth_code)?
+//!   }
+//!   CredentialTokenState::RequiresTxCode(state) => {
+//!     let tx_code = ask_for_tx_code(state.tx_code_definition());
+//!     state.proceed(tx_code)?;
+//!   }
+//!   CredentialTokenState::Ready(token) => token,
+//! };
+//!
+//! // Select what credential to issue.
+//! let credential_id = credential_token.default_credential_id()?;
+//!
+//! // Create a proof of possession.
+//! let nonce = credential_token.get_nonce(&http_client)?;
+//! let proof = create_proof(nonce);
+//!
+//! // Issue credential.
+//! let response = client
+//!     .query_credential(&http_client, &credential_token, credential_id, Some(proof))?;
+//! ```
+//!
+//! The client's behavior can be tweaked by replacing the
+//! [`SimpleOid4vciClient`] type with a custom [`Oid4vciClient`] implementation.
+//!
+//! [`SimpleOid4vciClient`]: crate::client::SimpleOid4vciClient
+//! [`Oid4vciClient`]: crate::client::Oid4vciClient
+//!
+//! # Server Usage
+//!
+//! Servers can be created by implementing the [`Oid4vciServer`] trait.
+//! An example implementation can be found in the `example` folder.
+//!
+//! [`Oid4vciServer`]: crate::server::Oid4vciServer
+//!
 //! # Protocol Overview
 //!
 //! Here is a simplified overview of the OID4VCI protocol, referencing the
@@ -65,12 +120,14 @@ pub mod authorization;
 pub mod client;
 pub mod encryption;
 pub mod issuer;
+pub mod nonce;
 pub mod notification;
 pub mod offer;
 pub mod profile;
-pub mod proof_of_possession;
+pub mod proof;
 pub mod request;
 pub mod response;
+pub mod server;
 pub mod types;
 pub mod util;
 

@@ -1,4 +1,3 @@
-use anyhow::{bail, Context, Result};
 use iref::{Uri, UriRef};
 use oauth2::{
     http::{self, header::ACCEPT, HeaderValue, Method, StatusCode},
@@ -6,68 +5,65 @@ use oauth2::{
 };
 use serde::de::DeserializeOwned;
 
-use crate::util::http::check_content_type;
+use crate::util::http::{check_content_type, HttpError};
 
 use super::http::MIME_TYPE_JSON;
 
 pub trait Discoverable: DeserializeOwned {
     const WELL_KNOWN_URI_REF: &UriRef;
 
-    fn validate(&self, issuer: &Uri) -> Result<()>;
+    fn validate(&self, issuer: &Uri) -> Result<(), anyhow::Error>;
 
-    fn discover<C>(base_url: &Uri, http_client: &C) -> Result<Self>
-    where
-        C: SyncHttpClient,
-        C::Error: Send + Sync,
-    {
+    fn discover(http_client: &impl SyncHttpClient, base_url: &Uri) -> Result<Self, HttpError> {
         let discovery_url = Self::WELL_KNOWN_URI_REF.resolved(base_url);
-        let discovery_request = discovery_request(&discovery_url)?;
-        let http_response = http_client.call(discovery_request)?;
-        discovery_response(base_url, &discovery_url, http_response)
+        let discovery_request = discovery_request(&discovery_url);
+        let http_response = http_client
+            .call(discovery_request)
+            .map_err(HttpError::query(base_url))?;
+        discovery_response(base_url, http_response)
     }
 
     #[allow(async_fn_in_trait)]
-    async fn discover_async<'c, C>(base_url: &Uri, http_client: &'c C) -> Result<Self>
-    where
-        C: AsyncHttpClient<'c>,
-        C::Error: Send + Sync,
-    {
+    async fn discover_async<'c>(
+        http_client: &'c impl AsyncHttpClient<'c>,
+        base_url: &Uri,
+    ) -> Result<Self, HttpError> {
         let discovery_url = Self::WELL_KNOWN_URI_REF.resolved(base_url);
-        let discovery_request = discovery_request(&discovery_url)?;
-        let http_response = http_client.call(discovery_request).await?;
-        discovery_response(base_url, &discovery_url, http_response)
+        let discovery_request = discovery_request(&discovery_url);
+        let http_response = http_client
+            .call(discovery_request)
+            .await
+            .map_err(HttpError::query(base_url))?;
+        discovery_response(base_url, http_response)
     }
 }
 
-fn discovery_request(discovery_url: &Uri) -> Result<HttpRequest> {
+fn discovery_request(discovery_url: &Uri) -> HttpRequest {
     http::Request::builder()
         .uri(discovery_url.to_string())
         .method(Method::GET)
         .header(ACCEPT, HeaderValue::from_static(MIME_TYPE_JSON))
         .body(Vec::new())
-        .context("failed to prepare request")
+        // SAFETY: discovery query is always valid.
+        .unwrap()
 }
 
 fn discovery_response<T: Discoverable>(
     base_url: &Uri,
-    discovery_url: &Uri,
     discovery_response: HttpResponse,
-) -> Result<T> {
-    if discovery_response.status() != StatusCode::OK {
-        bail!(
-            "HTTP status code {} at {}",
-            discovery_response.status(),
-            discovery_url
-        )
+) -> Result<T, HttpError> {
+    let status = discovery_response.status();
+    if status != StatusCode::OK {
+        return Err(HttpError::ServerError(base_url.to_owned(), status));
     }
 
-    check_content_type(discovery_response.headers(), MIME_TYPE_JSON)?;
+    check_content_type(base_url, discovery_response.headers(), MIME_TYPE_JSON)?;
 
-    let metadata = serde_path_to_error::deserialize::<_, T>(
-        &mut serde_json::Deserializer::from_slice(discovery_response.body()),
-    )?;
-
-    metadata.validate(base_url)?;
+    let metadata: T =
+        serde_json::from_slice(discovery_response.body()).map_err(HttpError::json(base_url))?;
+    metadata
+        .validate(base_url)
+        .map_err(HttpError::invalid(base_url))?;
 
     Ok(metadata)
 }

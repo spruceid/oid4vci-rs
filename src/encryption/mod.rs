@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
-use ssi::jwk::JWK;
-
-pub use crate::types::{CredentialUrl, DeferredCredentialUrl, ParUrl};
+use ssi_jwk::JWK;
 
 pub mod jwe;
 

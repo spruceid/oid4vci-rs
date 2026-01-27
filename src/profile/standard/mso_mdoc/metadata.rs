@@ -7,10 +7,8 @@ use super::MsoMdocFormat;
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "format", rename = "mso_mdoc")]
 pub struct MsoMdocFormatMetadata {
-    #[serde(rename = "format")]
-    pub id: MsoMdocFormat,
-
     pub doctype: String,
 }
 
@@ -20,7 +18,7 @@ impl CredentialFormatMetadata for MsoMdocFormatMetadata {
     type SigningAlgorithm = i64;
 
     fn id(&self) -> Self::Format {
-        self.id
+        MsoMdocFormat
     }
 }
 

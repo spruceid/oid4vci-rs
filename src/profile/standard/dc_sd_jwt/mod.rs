@@ -2,10 +2,8 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-mod authorization;
 mod metadata;
 
-pub use authorization::*;
 pub use metadata::*;
 
 pub const FORMAT_DC_SD_JWT: &str = "dc+sd-jwt";
