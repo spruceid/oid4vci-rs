@@ -18,11 +18,11 @@
 //!   .process_offer(&http_client, credential_offer)
 //!   .await?;
 //!
-//! // Depending on the grant type, more authentication steps may be necessary.
+//! // Depending on the grant type, more authorization steps may be necessary.
 //! let credential_token = match state {
-//!   CredentialTokenState::RequiresAuthentication(state) => {
+//!   CredentialTokenState::RequiresAuthorization(state) => {
 //!     let full_redirect_url = state.proceed(&http_client, redirect_url);
-//!     let auth_code = do_authentication(full_redirect_url);
+//!     let auth_code = do_authorization(full_redirect_url);
 //!     state.proceed(auth_code)?
 //!   }
 //!   CredentialTokenState::RequiresTxCode(state) => {
