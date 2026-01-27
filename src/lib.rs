@@ -77,6 +77,7 @@
 //! [`CredentialOffer`]: crate::offer::CredentialOffer
 //! [`CredentialIssuerMetadata`]: crate::issuer::metadata::CredentialIssuerMetadata
 //! [`Discoverable`]: crate::util::discoverable::Discoverable
+//! [`offer`]: crate::offer
 //!
 //! ## Authorization
 //!
@@ -95,6 +96,7 @@
 //! [`AuthorizationServerMetadata`]: crate::authorization::server::metadata::AuthorizationServerMetadata
 //! [`AuthorizationRequest`]: oauth2::AuthorizationRequest
 //! [`AuthorizationCode`]: oauth2::AuthorizationCode
+//! [`authorization`]: crate::authorization
 //!
 //! ## Issuance
 //!
@@ -109,11 +111,14 @@
 //! The supported credential formats are defined by the [`Profile`] trait
 //! implementation. This library provides two built-in profiles:
 //! - [`AnyProfile`]: Format-agnostic profile. Accepts everything, but won't
-///   interpret anything.
-/// - [`StandardProfile`]: Implements the profile defined by the OID4VCI
-///   specification's [Appendix A].
-///
-/// [Appendix A]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-format-profiles>
+//!   interpret anything.
+//! - [`StandardProfile`]: Implements the profile defined by the OID4VCI
+//!   specification's [Appendix A].
+//!
+//! [`Profile`]: crate::profile::Profile
+//! [`AnyProfile`]: crate::profile::any::AnyProfile
+//! [`StandardProfile`]: crate::profile::standard::StandardProfile
+//! [Appendix A]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-format-profiles>
 pub use oauth2;
 
 pub mod authorization;

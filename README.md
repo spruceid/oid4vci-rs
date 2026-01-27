@@ -22,11 +22,11 @@ let state = client
   .process_offer(&http_client, credential_offer)
   .await?;
 
-// Depending on the grant type, more authentication steps may be necessary.
+// Depending on the grant type, more authorization steps may be necessary.
 let credential_token = match state {
-  CredentialTokenState::RequiresAuthentication(state) => {
+  CredentialTokenState::RequiresAuthorization(state) => {
     let full_redirect_url = state.proceed(&http_client, redirect_url);
-    let auth_code = do_authentication(full_redirect_url);
+    let auth_code = do_authorization(full_redirect_url);
     state.proceed(auth_code)?
   }
   CredentialTokenState::RequiresTxCode(state) => {
@@ -81,6 +81,7 @@ All the code related to Credential Offer is located in the
 [`CredentialOffer`]: https://docs.rs/oid4vci/latest/oid4vci/offer/enum.CredentialOffer.html
 [`CredentialIssuerMetadata`]: https://docs.rs/oid4vci/latest/oid4vci/issuer/metadata/struct.CredentialIssuerMetadata.html
 [`Discoverable`]: https://docs.rs/oid4vci/latest/oid4vci/util/discoverable/trait.Discoverable.html
+[`offer`]: https://docs.rs/oid4vci/latest/oid4vci/offer/
 
 ### Authorization
 
@@ -99,6 +100,7 @@ module.
 [`AuthorizationServerMetadata`]: https://docs.rs/oid4vci/latest/oid4vci/authorization/server/metadata/struct.AuthorizationServerMetadata.html
 [`AuthorizationRequest`]: oauth2::AuthorizationRequest
 [`AuthorizationCode`]: oauth2::AuthorizationCode
+[`authorization`]: https://docs.rs/oid4vci/latest/oid4vci/authorization/
 
 ### Issuance
 
@@ -113,5 +115,13 @@ module.
 The supported credential formats are defined by the [`Profile`] trait
 implementation. This library provides two built-in profiles:
 - [`AnyProfile`]: Format-agnostic profile. Accepts everything, but won't
+  interpret anything.
+- [`StandardProfile`]: Implements the profile defined by the OID4VCI
+  specification's [Appendix A].
+
+[`Profile`]: https://docs.rs/oid4vci/latest/oid4vci/profile/trait.Profile.html
+[`AnyProfile`]: https://docs.rs/oid4vci/latest/oid4vci/profile/any/struct.AnyProfile.html
+[`StandardProfile`]: https://docs.rs/oid4vci/latest/oid4vci/profile/standard/struct.StandardProfile.html
+[Appendix A]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-format-profiles>
 
 <!-- cargo-rdme end -->
