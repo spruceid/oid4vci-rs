@@ -1,7 +1,7 @@
 {
   "credential_configurations": {
     "test_credential_configuration": {
-      "format": "dc+sd+jwt",
+      "format": "dc+sd-jwt",
       "scope": "test_scope",
       "vct": "test_vct",
       "display": [

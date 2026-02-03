@@ -102,7 +102,6 @@ impl<S: Oid4vciServer> Oid4vciRouter<S> for axum::Router<Arc<S>> {
 }
 
 /// Credential Issuer Metadata Endpoint.
-
 async fn metadata<S>(State(server): State<Arc<S>>) -> impl IntoResponse
 where
     S: Oid4vciServer,
@@ -117,7 +116,6 @@ where
 /// Nonce Endpoint.
 ///
 /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-nonce-endpoint>
-
 async fn nonce<S>(State(server): State<Arc<S>>) -> impl IntoResponse
 where
     S: Oid4vciServer,
@@ -129,7 +127,6 @@ where
 }
 
 /// Credential Endpoint.
-
 async fn credential<S>(
     State(server): State<Arc<S>>,
     TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
@@ -143,7 +140,6 @@ where
 }
 
 /// Deferred Credential Endpoint.
-
 async fn deferred_credential<S>(
     State(server): State<Arc<S>>,
     TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
@@ -159,7 +155,6 @@ where
 }
 
 /// Notification Endpoint.
-
 async fn notification<S>(
     State(server): State<Arc<S>>,
     TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,

@@ -22,6 +22,7 @@ pub use w3c_vc::{W3cVcFormat, FORMAT_JWT_VC_JSON, FORMAT_JWT_VC_JSON_LD, FORMAT_
 /// specification's [Appendix A].
 ///
 /// [Appendix A]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-format-profiles>
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StandardProfile;
 
 impl Profile for StandardProfile {

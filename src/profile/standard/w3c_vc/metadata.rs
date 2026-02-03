@@ -27,9 +27,13 @@ impl CredentialFormatMetadata for W3cVcFormatMetadata {
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct W3cVcDefinitionMetadata {
+    /// Array of JSON-LD contexts.
+    ///
+    /// Required unless the credential format is [`W3cVcFormat::JwtVcJson`].
     #[serde(rename = "@context")]
-    pub context: Vec<json_ld::syntax::ContextEntry>,
+    pub context: Option<Vec<json_ld::syntax::ContextEntry>>,
 
+    /// Types supported by the credential.
     pub r#type: Vec<String>,
 }
 

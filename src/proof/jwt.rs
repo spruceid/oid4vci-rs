@@ -17,7 +17,7 @@ mod ssi {
             chrono::{DateTime, Utc},
             cose::ValidateCoseHeader,
             jws::{JwsSigner, ValidateJwsHeader},
-            jwt::ClaimSet,
+            jwt::{ClaimSet, ExpirationTime, IssuedAt, NotBefore, NumericDate},
             ClaimsValidity, DateTimeProvider, InvalidClaims, Jws, JwsBuf, JwsPayload,
             ProofValidationError, ResolverProvider, SignatureError, ValidateClaims,
         },
@@ -27,13 +27,13 @@ mod ssi {
 
     use super::{super::VerificationError, JWT_PROOF_JOSE_TYP};
 
-    pub struct JwtProofVerifier<'a, R> {
+    pub struct JwtProofVerifier<'a, R: ?Sized> {
         pub issuer: &'a Uri,
         pub jwk_resolver: &'a R,
         pub time_tolerance: Option<Duration>,
     }
 
-    impl<'a, R> JwtProofVerifier<'a, R> {
+    impl<'a, R: ?Sized> JwtProofVerifier<'a, R> {
         pub fn new(issuer: &'a Uri, jwk_resolver: &'a R) -> Self {
             Self {
                 issuer,
@@ -52,7 +52,7 @@ mod ssi {
 
     impl<R> JwtProofVerifier<'_, R>
     where
-        R: JWKResolver,
+        R: ?Sized + JWKResolver,
     {
         /// Verify a list of JWT proofs.
         ///
@@ -60,7 +60,7 @@ mod ssi {
         pub async fn verify_list(
             &self,
             client_id: Option<&ClientId>,
-            jwts: &[String],
+            jwts: &[JwsBuf],
         ) -> Result<Vec<JWK>, VerificationError> {
             let mut result = Vec::with_capacity(jwts.len());
 
@@ -77,11 +77,9 @@ mod ssi {
         pub async fn verify(
             &self,
             client_id: Option<&ClientId>,
-            jwt: &str,
+            jwt: &Jws,
         ) -> Result<JWK, VerificationError> {
-            let jws = Jws::new(jwt).map_err(|_| ProofValidationError::InvalidProof)?;
-
-            let decoded = jws
+            let decoded = jwt
                 .decode()
                 .map_err(|_| ProofValidationError::InvalidProof)?
                 .try_map(|bytes| serde_json::from_slice::<JwtProofBody>(&bytes))
@@ -122,16 +120,16 @@ mod ssi {
         audience: UriBuf,
         expire_in: Option<Duration>,
         nonce: Option<String>,
-        signer: &impl JwsSigner,
+        signer: impl JwsSigner,
     ) -> Result<JwsBuf, SignatureError> {
         let now = Utc::now();
 
         let body = JwtProofBody {
-            issuer,
-            audience,
-            issued_at: now,
-            not_before: None,
-            expires_at: expire_in.map(|d| now + d),
+            iss: issuer,
+            aud: audience,
+            iat: IssuedAt(jws_numeric_date(now)),
+            nbf: None,
+            exp: expire_in.map(|d| ExpirationTime(jws_numeric_date(now + d))),
             nonce,
         };
 
@@ -150,24 +148,23 @@ mod ssi {
         /// It *must* be omitted if the access token authorizing the issuance call
         /// was obtained from a Pre-Authorized Code Flow through anonymous access to
         /// the Token Endpoint.
-        #[serde(rename = "iss")]
-        pub issuer: Option<String>,
+        pub iss: Option<String>,
 
         /// Credential Issuer Identifier.
         #[serde(rename = "aud")]
-        pub audience: UriBuf,
+        pub aud: UriBuf,
 
         /// Time at which the key proof was issued.
         #[serde(rename = "iat")]
-        pub issued_at: DateTime<Utc>,
+        pub iat: IssuedAt,
 
         /// Time from which the key proof may be verified.
         #[serde(rename = "nbf")]
-        pub not_before: Option<DateTime<Utc>>,
+        pub nbf: Option<NotBefore>,
 
         /// Proof expiration time.
         #[serde(rename = "exp")]
-        pub expires_at: Option<DateTime<Utc>>,
+        pub exp: Option<ExpirationTime>,
 
         /// Server-provided `c_nonce` value.
         ///
@@ -218,6 +215,9 @@ mod ssi {
             _protected: &ssi::claims::cose::ProtectedHeader,
             _unprotected: &ssi::claims::cose::Header,
         ) -> ClaimsValidity {
+            // TODO validate key controller.
+            // `ssi` doesn't provide the necessary tools right now.
+
             // if let Some(jwk) = &params.controller_jwk {
             //     if jwk != &self.controller.jwk {
             //         return Err(VerificationError::InvalidJWK);
@@ -243,33 +243,33 @@ mod ssi {
 
             let time_tolerance = params.time_tolerance.unwrap_or_default();
 
-            if let Some(not_before) = self.not_before {
-                if (now + time_tolerance) < not_before {
-                    return Err(InvalidClaims::Premature {
-                        now,
-                        valid_from: not_before,
-                    });
-                }
+            if let Some(not_before) = self.nbf {
+                not_before.verify(now + time_tolerance)?;
             }
 
-            if let Some(expires_at) = self.expires_at {
-                if (now - time_tolerance) > expires_at {
-                    return Err(InvalidClaims::Expired {
-                        now,
-                        valid_until: expires_at,
-                    });
-                }
+            if let Some(expires_at) = self.exp {
+                expires_at.verify(now - time_tolerance)?;
             }
 
-            if self.issuer.as_deref() != params.client_id.map(|c| c.as_str()) {
+            if self.iss.as_deref() != params.client_id.map(|c| c.as_str()) {
                 return Err(InvalidClaims::Other("Invalid issuer".to_owned()));
             }
 
-            if self.audience != params.issuer {
+            if self.aud != params.issuer {
                 return Err(InvalidClaims::Other("Invalid audience".to_owned()));
             }
 
             Ok(())
         }
+    }
+
+    #[cfg(feature = "integer-ts")]
+    fn jws_numeric_date(d: DateTime<Utc>) -> NumericDate {
+        d.timestamp().try_into().unwrap()
+    }
+
+    #[cfg(not(feature = "integer-ts"))]
+    fn jws_numeric_date(d: DateTime<Utc>) -> NumericDate {
+        d.into()
     }
 }

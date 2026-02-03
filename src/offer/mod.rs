@@ -3,6 +3,8 @@
 //! See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4>
 #![allow(clippy::large_enum_variant, deprecated)]
 
+use std::str::FromStr;
+
 use iref::{
     uri::{Query, QueryBuf, SchemeBuf},
     Uri, UriBuf,
@@ -24,6 +26,9 @@ pub use grant::*;
 /// Credential Offer-related errors.
 #[derive(Debug, thiserror::Error)]
 pub enum CredentialOfferError {
+    #[error("credential offer is not an URI")]
+    InvalidUri,
+
     /// Credential Offer could not be decoded.
     #[error("could not decode credential offer: {0}")]
     Decoding(String),
@@ -126,7 +131,7 @@ impl CredentialOffer {
         http_client: &C,
     ) -> Result<CredentialOfferParameters, CredentialOfferError>
     where
-        C: SyncHttpClient,
+        C: ?Sized + SyncHttpClient,
     {
         match self {
             CredentialOffer::Value(params) => Ok(params),
@@ -142,10 +147,13 @@ impl CredentialOffer {
     ///
     /// This will either return the `credential_offer` value, or dereference the
     /// `credential_offer_uri` URL.
-    pub async fn resolve_async<'c>(
+    pub async fn resolve_async<H>(
         self,
-        http_client: &'c impl AsyncHttpClient<'c>,
-    ) -> Result<CredentialOfferParameters, CredentialOfferError> {
+        http_client: &H,
+    ) -> Result<CredentialOfferParameters, CredentialOfferError>
+    where
+        H: ?Sized + for<'c> AsyncHttpClient<'c>,
+    {
         match self {
             CredentialOffer::Value(params) => Ok(params),
             CredentialOffer::Reference(uri) => {
@@ -180,6 +188,15 @@ impl CredentialOffer {
 
         check_content_type(uri, response.headers(), MIME_TYPE_JSON)?;
         serde_json::from_slice(response.body()).map_err(HttpError::json(uri))
+    }
+}
+
+impl FromStr for CredentialOffer {
+    type Err = CredentialOfferError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let uri = Uri::new(s).map_err(|_| CredentialOfferError::InvalidUri)?;
+        Self::from_uri(uri)
     }
 }
 

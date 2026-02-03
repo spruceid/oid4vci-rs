@@ -20,6 +20,12 @@ isomdl = ["dep:isomdl"]
 # Axum support.
 axum = ["dep:axum", "dep:axum-extra"]
 
+# Integer JWT timestamps only.
+#
+# Just because some implementations don't like non-integer timestamps in JWTs
+# (even though they should).
+integer-ts = []
+
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -39,7 +45,8 @@ indexmap = "2.13.0"
 iref = { version = "3.2.2", features = ["macros"] }
 pct-str = "2.0.0"
 langtag = { version = "0.4.0", features = ["serde"] }
-ssi-jwk = "0.3.2"
+ssi-jwk = "0.4"
+ssi-jws = "0.4"
 json-ld = "0.21.2"
 
 # Server only

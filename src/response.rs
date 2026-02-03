@@ -2,6 +2,8 @@ use oauth2::{ErrorResponseType, StandardErrorResponse};
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
+use crate::Oid4vciCredential;
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum CredentialResponse<T = serde_json::Value> {
@@ -14,7 +16,7 @@ pub enum CredentialResponse<T = serde_json::Value> {
 #[serde(bound(deserialize = "T: Deserialize<'de>"))]
 pub struct ImmediateCredentialResponse<T = serde_json::Value> {
     #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
-    pub credentials: Vec<T>,
+    pub credentials: Vec<Oid4vciCredential<T>>,
 
     /// Identifies one or more Credentials issued in one Credential Response.
     ///
@@ -23,7 +25,7 @@ pub struct ImmediateCredentialResponse<T = serde_json::Value> {
 }
 
 impl<T> ImmediateCredentialResponse<T> {
-    pub fn new(credentials: Vec<T>) -> Self {
+    pub fn new(credentials: Vec<Oid4vciCredential<T>>) -> Self {
         Self {
             credentials,
             notification_id: None,

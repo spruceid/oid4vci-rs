@@ -22,7 +22,10 @@ use crate::{
         server::AuthorizationServerMetadata,
         token::{self, CredentialTokenResponse},
     },
-    issuer::{metadata::CredentialFormatMetadata, CredentialIssuerMetadata},
+    issuer::{
+        metadata::{CredentialConfiguration, CredentialFormatMetadata},
+        CredentialIssuerMetadata,
+    },
     nonce::NonceResponse,
     offer::{
         AuthorizationCodeGrant, CredentialOfferError, CredentialOfferParameters,
@@ -34,7 +37,7 @@ use crate::{
         ProfileCredentialResponse,
     },
     proof::Proofs,
-    request::{CredentialIdentifierOrConfigurationId, CredentialRequest},
+    request::{CredentialOrConfigurationId, CredentialOrConfigurationIdRef, CredentialRequest},
     util::{
         discoverable::Discoverable,
         http::{check_content_type, HttpError, MIME_TYPE_JSON},
@@ -61,10 +64,24 @@ pub trait Oid4vciClient: Clone {
     /// authorization details manually.
     fn configure_authorization_request(
         &self,
-        _issuer_metadata: &ProfileCredentialIssuerMetadata<Self::Profile>,
-        _offer: &CredentialOfferParameters,
+        offer: &ResolvedCredentialOffer<Self::Profile>,
+        _authorization_server_metadata: &AuthorizationServerMetadata,
     ) -> Result<CredentialRequestConfiguration<Self::Profile>, ClientError> {
-        Ok(CredentialRequestConfiguration::default())
+        let mut result = CredentialRequestConfiguration::default();
+
+        for id in &offer.params.credential_configuration_ids {
+            if let Some(conf) = offer
+                .issuer_metadata
+                .credential_configurations_supported
+                .get(id)
+            {
+                if let Some(scope) = &conf.scope {
+                    result.scopes.push(scope.clone());
+                }
+            }
+        }
+
+        Ok(result)
     }
 
     /// Configures the credential requested for issuance in a Token Request.
@@ -73,8 +90,7 @@ pub trait Oid4vciClient: Clone {
     /// authorization details manually.
     fn configure_token_request(
         &self,
-        _issuer_metadata: &ProfileCredentialIssuerMetadata<Self::Profile>,
-        _offer: &CredentialOfferParameters,
+        _offer: &ResolvedCredentialOffer<Self::Profile>,
     ) -> Result<Vec<ProfileCredentialAuthorizationDetailsRequest<Self::Profile>>, ClientError> {
         Ok(Vec::new())
     }
@@ -103,28 +119,67 @@ pub trait Oid4vciClient: Clone {
             .ok_or(ClientError::MissingGrant)
     }
 
-    /// Process a credential offer.
+    /// Resolves a credential offer, fetching its parameter and issuer metadata.
     #[allow(async_fn_in_trait)]
-    async fn process_offer_async<'c>(
+    async fn resolve_offer_async<C>(
         &self,
-        http_client: &'c impl AsyncHttpClient<'c>,
+        http_client: &C,
         credential_offer: CredentialOffer,
-    ) -> Result<CredentialTokenState<Self>, ClientError> {
-        let credential_offer = credential_offer.resolve_async(http_client).await?;
+    ) -> Result<ResolvedCredentialOffer<Self::Profile>, ClientError>
+    where
+        C: ?Sized + for<'c> AsyncHttpClient<'c>,
+    {
+        let params = credential_offer.resolve_async(http_client).await?;
 
         let issuer_metadata =
             CredentialIssuerMetadata::<<Self::Profile as Profile>::FormatMetadata>::discover_async(
                 http_client,
-                &credential_offer.credential_issuer,
+                &params.credential_issuer,
             )
             .await?;
 
-        match self.select_grant(&credential_offer)? {
+        Ok(ResolvedCredentialOffer {
+            params,
+            issuer_metadata,
+        })
+    }
+
+    /// Resolves a credential offer, fetching its parameter and issuer metadata.
+    fn resolve_offer(
+        &self,
+        http_client: &(impl ?Sized + SyncHttpClient),
+        credential_offer: CredentialOffer,
+    ) -> Result<ResolvedCredentialOffer<Self::Profile>, ClientError> {
+        let params = credential_offer.resolve(http_client)?;
+
+        let issuer_metadata =
+            CredentialIssuerMetadata::<<Self::Profile as Profile>::FormatMetadata>::discover(
+                http_client,
+                &params.credential_issuer,
+            )?;
+
+        Ok(ResolvedCredentialOffer {
+            params,
+            issuer_metadata,
+        })
+    }
+
+    /// Process a credential offer.
+    #[allow(async_fn_in_trait)]
+    async fn accept_offer_async<C>(
+        &self,
+        http_client: &C,
+        credential_offer: ResolvedCredentialOffer<Self::Profile>,
+    ) -> Result<CredentialTokenState<Self>, ClientError>
+    where
+        C: ?Sized + for<'c> AsyncHttpClient<'c>,
+    {
+        match self.select_grant(&credential_offer.params)? {
             GrantSelection::AuthorizationCode(grant) => {
                 let authorization_server_url = select_authorization_server(
                     grant.authorization_server.as_deref(),
-                    &credential_offer.credential_issuer,
-                    &issuer_metadata.authorization_servers,
+                    &credential_offer.params.credential_issuer,
+                    &credential_offer.issuer_metadata.authorization_servers,
                 )?;
 
                 let authorization_server_metadata = AuthorizationServerMetadata::discover_async(
@@ -139,7 +194,6 @@ pub trait Oid4vciClient: Clone {
                     AuthorizationCodeRequired {
                         client: self.clone(),
                         credential_offer,
-                        issuer_metadata,
                         issuer_state,
                         authorization_server_metadata,
                     },
@@ -148,8 +202,8 @@ pub trait Oid4vciClient: Clone {
             GrantSelection::PreAuthorizedCode(grant) => {
                 let authorization_server_url = select_authorization_server(
                     grant.authorization_server.as_deref(),
-                    &credential_offer.credential_issuer,
-                    &issuer_metadata.authorization_servers,
+                    &credential_offer.params.credential_issuer,
+                    &credential_offer.issuer_metadata.authorization_servers,
                 )?;
 
                 let authorization_server_metadata = AuthorizationServerMetadata::discover_async(
@@ -166,8 +220,7 @@ pub trait Oid4vciClient: Clone {
                     Some(tx_code_definition) => {
                         let pre_authorized_code = grant.pre_authorized_code.clone();
 
-                        Ok(CredentialTokenState::RequiresTxCode(WaitingForTxCode {
-                            issuer_metadata,
+                        Ok(CredentialTokenState::RequiresTxCode(TxCodeRequired {
                             credential_offer,
                             oauth2_client,
                             pre_authorized_code,
@@ -176,9 +229,12 @@ pub trait Oid4vciClient: Clone {
                     }
                     None => {
                         let mut authorization_details =
-                            self.configure_token_request(&issuer_metadata, &credential_offer)?;
+                            self.configure_token_request(&credential_offer)?;
 
-                        set_locations(&issuer_metadata, &mut authorization_details);
+                        set_locations(
+                            &credential_offer.issuer_metadata,
+                            &mut authorization_details,
+                        );
 
                         let response = oauth2_client
                             .exchange_pre_authorized_code(&grant.pre_authorized_code)
@@ -192,7 +248,6 @@ pub trait Oid4vciClient: Clone {
                             .map_err(|_| ClientError::Authorization)?;
 
                         Ok(CredentialTokenState::Ready(CredentialToken {
-                            issuer_metadata,
                             credential_offer,
                             requested_scopes: Vec::new(),
                             response,
@@ -204,25 +259,17 @@ pub trait Oid4vciClient: Clone {
     }
 
     /// Process a credential offer.
-    fn process_offer(
+    fn accept_offer(
         &self,
         http_client: &impl SyncHttpClient,
-        credential_offer: CredentialOffer,
+        credential_offer: ResolvedCredentialOffer<Self::Profile>,
     ) -> Result<CredentialTokenState<Self>, ClientError> {
-        let credential_offer = credential_offer.resolve(http_client)?;
-
-        let issuer_metadata =
-            CredentialIssuerMetadata::<<Self::Profile as Profile>::FormatMetadata>::discover(
-                http_client,
-                &credential_offer.credential_issuer,
-            )?;
-
-        match self.select_grant(&credential_offer)? {
+        match self.select_grant(&credential_offer.params)? {
             GrantSelection::AuthorizationCode(grant) => {
                 let authorization_server_url = select_authorization_server(
                     grant.authorization_server.as_deref(),
-                    &credential_offer.credential_issuer,
-                    &issuer_metadata.authorization_servers,
+                    &credential_offer.params.credential_issuer,
+                    &credential_offer.issuer_metadata.authorization_servers,
                 )?;
 
                 let authorization_server_metadata =
@@ -234,7 +281,6 @@ pub trait Oid4vciClient: Clone {
                     AuthorizationCodeRequired {
                         client: self.clone(),
                         credential_offer,
-                        issuer_metadata,
                         issuer_state,
                         authorization_server_metadata,
                     },
@@ -243,8 +289,8 @@ pub trait Oid4vciClient: Clone {
             GrantSelection::PreAuthorizedCode(grant) => {
                 let authorization_server_url = select_authorization_server(
                     grant.authorization_server.as_deref(),
-                    &credential_offer.credential_issuer,
-                    &issuer_metadata.authorization_servers,
+                    &credential_offer.params.credential_issuer,
+                    &credential_offer.issuer_metadata.authorization_servers,
                 )?;
 
                 let authorization_server_metadata =
@@ -258,8 +304,7 @@ pub trait Oid4vciClient: Clone {
                     Some(tx_code_definition) => {
                         let pre_authorized_code = grant.pre_authorized_code.clone();
 
-                        Ok(CredentialTokenState::RequiresTxCode(WaitingForTxCode {
-                            issuer_metadata,
+                        Ok(CredentialTokenState::RequiresTxCode(TxCodeRequired {
                             credential_offer,
                             oauth2_client,
                             pre_authorized_code,
@@ -268,9 +313,12 @@ pub trait Oid4vciClient: Clone {
                     }
                     None => {
                         let mut authorization_details =
-                            self.configure_token_request(&issuer_metadata, &credential_offer)?;
+                            self.configure_token_request(&credential_offer)?;
 
-                        set_locations(&issuer_metadata, &mut authorization_details);
+                        set_locations(
+                            &credential_offer.issuer_metadata,
+                            &mut authorization_details,
+                        );
 
                         let response = oauth2_client
                             .exchange_pre_authorized_code(&grant.pre_authorized_code)
@@ -283,7 +331,6 @@ pub trait Oid4vciClient: Clone {
                             .map_err(|_| ClientError::Authorization)?;
 
                         Ok(CredentialTokenState::Ready(CredentialToken {
-                            issuer_metadata,
                             credential_offer,
                             requested_scopes: Vec::new(),
                             response,
@@ -295,29 +342,39 @@ pub trait Oid4vciClient: Clone {
     }
 
     #[allow(async_fn_in_trait)]
-    async fn query_credential_async<'c>(
+    async fn exchange_credential_async<H>(
         &self,
-        http_client: &'c impl AsyncHttpClient<'c>,
+        http_client: &H,
         token: &CredentialToken<Self::Profile>,
-        credential: CredentialIdentifierOrConfigurationId,
+        credential: CredentialOrConfigurationId,
         proofs: Option<Proofs>,
     ) -> Result<ProfileCredentialResponse<Self::Profile>, ClientError>
     where
+        H: ?Sized + for<'c> AsyncHttpClient<'c>,
         <Self::Profile as Profile>::RequestParams: Default,
     {
-        self.query_credential_with_async(http_client, token, credential, proofs, Default::default())
-            .await
+        self.exchange_credential_with_async(
+            http_client,
+            token,
+            credential,
+            proofs,
+            Default::default(),
+        )
+        .await
     }
 
     #[allow(async_fn_in_trait)]
-    async fn query_credential_with_async<'c>(
+    async fn exchange_credential_with_async<H>(
         &self,
-        http_client: &'c impl AsyncHttpClient<'c>,
+        http_client: &H,
         token: &CredentialToken<Self::Profile>,
-        credential: CredentialIdentifierOrConfigurationId,
+        credential: CredentialOrConfigurationId,
         proofs: Option<Proofs>,
         params: <Self::Profile as Profile>::RequestParams,
-    ) -> Result<ProfileCredentialResponse<Self::Profile>, ClientError> {
+    ) -> Result<ProfileCredentialResponse<Self::Profile>, ClientError>
+    where
+        H: ?Sized + for<'c> AsyncHttpClient<'c>,
+    {
         let request = CredentialRequest {
             credential,
             proofs,
@@ -328,31 +385,34 @@ pub trait Oid4vciClient: Clone {
         request
             .send_async(
                 http_client,
-                &token.issuer_metadata.credential_endpoint,
+                &token.credential_offer.issuer_metadata.credential_endpoint,
                 token.get(),
             )
             .await
             .map_err(Into::into)
     }
 
-    fn query_credential(
+    /// Exchange a Credential Token against one or more Credential(s).
+    fn exchange_credential(
         &self,
         http_client: &impl SyncHttpClient,
         token: &CredentialToken<Self::Profile>,
-        credential: CredentialIdentifierOrConfigurationId,
+        credential: CredentialOrConfigurationId,
         proofs: Option<Proofs>,
     ) -> Result<ProfileCredentialResponse<Self::Profile>, ClientError>
     where
         <Self::Profile as Profile>::RequestParams: Default,
     {
-        self.query_credential_with(http_client, token, credential, proofs, Default::default())
+        self.exchange_credential_with(http_client, token, credential, proofs, Default::default())
     }
 
-    fn query_credential_with(
+    /// Exchange a Credential Token against one or more Credential(s), with
+    /// custom request parameters.
+    fn exchange_credential_with(
         &self,
         http_client: &impl SyncHttpClient,
         token: &CredentialToken<Self::Profile>,
-        credential: CredentialIdentifierOrConfigurationId,
+        credential: CredentialOrConfigurationId,
         proofs: Option<Proofs>,
         params: <Self::Profile as Profile>::RequestParams,
     ) -> Result<ProfileCredentialResponse<Self::Profile>, ClientError> {
@@ -366,7 +426,7 @@ pub trait Oid4vciClient: Clone {
         request
             .send(
                 http_client,
-                &token.issuer_metadata.credential_endpoint,
+                &token.credential_offer.issuer_metadata.credential_endpoint,
                 token.get(),
             )
             .map_err(Into::into)
@@ -422,6 +482,28 @@ impl<P: Profile> Default for CredentialRequestConfiguration<P> {
     }
 }
 
+/// Resolved Credential Offer.
+///
+/// Contains the credential offer parameters and issuer metadata, fetched from
+/// the initial offer.
+///
+/// Can be used with [`Oid4vciClient::accept_offer`] to get a
+/// [`CredentialToken`].
+#[derive(Debug)]
+pub struct ResolvedCredentialOffer<P: Profile = StandardProfile> {
+    pub params: CredentialOfferParameters,
+    pub issuer_metadata: ProfileCredentialIssuerMetadata<P>,
+}
+
+impl<P: Profile> Clone for ResolvedCredentialOffer<P> {
+    fn clone(&self) -> Self {
+        Self {
+            params: self.params.clone(),
+            issuer_metadata: self.issuer_metadata.clone(),
+        }
+    }
+}
+
 /// Credential Token.
 ///
 /// Stores the necessary information to query a credential through the
@@ -430,8 +512,7 @@ impl<P: Profile> Default for CredentialRequestConfiguration<P> {
 /// You can use the [`Self::get_nonce`] method to query a nonce value from the
 /// server, to use with proof of possessions.
 pub struct CredentialToken<P: Profile = StandardProfile> {
-    issuer_metadata: ProfileCredentialIssuerMetadata<P>,
-    credential_offer: CredentialOfferParameters,
+    credential_offer: ResolvedCredentialOffer<P>,
     requested_scopes: Vec<Scope>,
     response: CredentialTokenResponse<<P as Profile>::AuthorizationParams>,
 }
@@ -442,10 +523,10 @@ impl<P: Profile> CredentialToken<P> {
     }
 
     pub fn credential_issuer(&self) -> &Uri {
-        &self.credential_offer.credential_issuer
+        &self.credential_offer.params.credential_issuer
     }
 
-    pub fn credential_offer(&self) -> &CredentialOfferParameters {
+    pub fn credential_offer(&self) -> &ResolvedCredentialOffer<P> {
         &self.credential_offer
     }
 
@@ -460,24 +541,66 @@ impl<P: Profile> CredentialToken<P> {
         &self.response.extra_fields().authorization_details
     }
 
-    pub fn default_credential_id(
-        &self,
-    ) -> Result<CredentialIdentifierOrConfigurationId, ClientError> {
+    /// Returns the configuration behind the given credential or configuration
+    /// id.
+    pub fn credential_configuration_id<'a>(
+        &'a self,
+        credential: impl Into<CredentialOrConfigurationIdRef<'a>>,
+    ) -> Option<&'a str> {
+        match credential.into() {
+            CredentialOrConfigurationIdRef::Credential(id) => self
+                .response
+                .extra_fields()
+                .authorization_details
+                .iter()
+                .find_map(|details| {
+                    details
+                        .credential_identifiers
+                        .iter()
+                        .any(|cid| cid == id)
+                        .then_some(details.credential_configuration_id.as_str())
+                }),
+            CredentialOrConfigurationIdRef::Configuration(id) => Some(id),
+        }
+    }
+
+    /// Returns the configuration behind the given credential or configuration
+    /// id.
+    pub fn credential_configuration<'a>(
+        &'a self,
+        credential: impl Into<CredentialOrConfigurationIdRef<'a>>,
+    ) -> Option<(&'a str, &'a CredentialConfiguration<P::FormatMetadata>)> {
+        self.credential_configuration_id(credential).and_then(|id| {
+            self.credential_offer
+                .issuer_metadata
+                .credential_configurations_supported
+                .get(id)
+                .map(|conf| (id, conf))
+        })
+    }
+
+    /// Returns the credential format of the given credential or configuration.
+    pub fn credential_format<'a>(
+        &'a self,
+        credential: impl Into<CredentialOrConfigurationIdRef<'a>>,
+    ) -> Option<P::Format> {
+        self.credential_configuration(credential)
+            .map(|(_, conf)| conf.format.id())
+    }
+
+    pub fn default_credential_id(&self) -> Result<CredentialOrConfigurationId, ClientError> {
         match self.authorization_details() {
             [] => match self
                 .credential_offer
+                .params
                 .credential_configuration_ids
                 .as_slice()
             {
-                [id] => Ok(CredentialIdentifierOrConfigurationId::ConfigurationId(
-                    id.clone(),
-                )),
+                [id] => Ok(CredentialOrConfigurationId::Configuration(id.clone())),
                 _ => Err(ClientError::AmbiguousCredentialOffer),
             },
             [details] => match details.credential_identifiers.as_slice() {
-                [id] => Ok(CredentialIdentifierOrConfigurationId::Identifier(
-                    id.clone(),
-                )),
+                [id] => Ok(CredentialOrConfigurationId::Credential(id.clone())),
                 _ => Err(ClientError::AmbiguousCredentialOffer),
             },
             _ => Err(ClientError::AmbiguousCredentialOffer),
@@ -518,7 +641,11 @@ impl<P: Profile> CredentialToken<P> {
     }
 
     fn nonce_request(&self) -> Option<(&Uri, HttpRequest)> {
-        let url = self.issuer_metadata.nonce_endpoint.as_deref()?;
+        let url = self
+            .credential_offer
+            .issuer_metadata
+            .nonce_endpoint
+            .as_deref()?;
         let mut request = HttpRequest::new(Vec::new());
         *request.method_mut() = Method::POST;
         *request.uri_mut() = url.as_str().parse().unwrap();
@@ -547,26 +674,25 @@ impl<P: Profile> CredentialToken<P> {
 /// Authorization Code, or a Transaction Code for Pre-Authorized Code grants.
 /// If the Pre-Authorized Code grant doesn't require a Transaction Code, the
 /// token will directly be `Ready`.
-pub enum CredentialTokenState<C: Oid4vciClient> {
+pub enum CredentialTokenState<C: Oid4vciClient = SimpleOid4vciClient> {
     /// Credential Token requires an Authorization Code.
     RequiresAuthorizationCode(AuthorizationCodeRequired<C>),
 
     /// Credential Token requires a Transaction Code.
-    RequiresTxCode(WaitingForTxCode<C::Profile>),
+    RequiresTxCode(TxCodeRequired<C::Profile>),
 
     /// Credential Token is ready.
     Ready(CredentialToken<C::Profile>),
 }
 
-pub struct WaitingForTxCode<P: Profile = StandardProfile> {
-    issuer_metadata: ProfileCredentialIssuerMetadata<P>,
-    credential_offer: CredentialOfferParameters,
+pub struct TxCodeRequired<P: Profile = StandardProfile> {
+    credential_offer: ResolvedCredentialOffer<P>,
     oauth2_client: OAuth2PreAuthClient<P>,
     pre_authorized_code: String,
     tx_code_definition: TxCodeDefinition,
 }
 
-impl<P: Profile> WaitingForTxCode<P> {
+impl<P: Profile> TxCodeRequired<P> {
     pub fn tx_code_definition(&self) -> &TxCodeDefinition {
         &self.tx_code_definition
     }
@@ -585,7 +711,6 @@ impl<P: Profile> WaitingForTxCode<P> {
             .map_err(|_| ClientError::Authorization)?;
 
         Ok(CredentialToken {
-            issuer_metadata: self.issuer_metadata,
             credential_offer: self.credential_offer,
             requested_scopes: Vec::new(),
             response,
@@ -605,7 +730,6 @@ impl<P: Profile> WaitingForTxCode<P> {
             .map_err(|_| ClientError::Authorization)?;
 
         Ok(CredentialToken {
-            issuer_metadata: self.issuer_metadata,
             credential_offer: self.credential_offer,
             requested_scopes: Vec::new(),
             response,
@@ -624,8 +748,7 @@ impl<P: Profile> WaitingForTxCode<P> {
 /// [`WaitingForAuthorizationCode::proceed`].
 pub struct AuthorizationCodeRequired<C: Oid4vciClient = SimpleOid4vciClient> {
     client: C,
-    credential_offer: CredentialOfferParameters,
-    issuer_metadata: ProfileCredentialIssuerMetadata<C::Profile>,
+    credential_offer: ResolvedCredentialOffer<C::Profile>,
     issuer_state: Option<String>,
     authorization_server_metadata: AuthorizationServerMetadata,
 }
@@ -638,6 +761,11 @@ impl<C: Oid4vciClient> AuthorizationCodeRequired<C> {
     ) -> Result<WaitingForAuthorizationCode<C>, ClientError> {
         let (pkce_code_challenge, pkce_code_verifier) = PkceCodeChallenge::new_random_sha256();
 
+        let mut configuration = self.client.configure_authorization_request(
+            &self.credential_offer,
+            &self.authorization_server_metadata,
+        )?;
+
         let oauth2_client: OAuth2AuthCodeClient<C::Profile> =
             oauth2::Client::new(self.client.client_id().clone())
                 .set_redirect_uri(redirect_url)
@@ -648,12 +776,8 @@ impl<C: Oid4vciClient> AuthorizationCodeRequired<C> {
                 )
                 .set_token_uri(self.authorization_server_metadata.token_endpoint);
 
-        let mut configuration = self
-            .client
-            .configure_authorization_request(&self.issuer_metadata, &self.credential_offer)?;
-
         set_locations(
-            &self.issuer_metadata,
+            &self.credential_offer.issuer_metadata,
             &mut configuration.authorization_details,
         );
 
@@ -683,7 +807,6 @@ impl<C: Oid4vciClient> AuthorizationCodeRequired<C> {
         Ok(WaitingForAuthorizationCode {
             client: self.client,
             oauth2_client,
-            issuer_metadata: self.issuer_metadata,
             credential_offer: self.credential_offer,
             requested_scopes: configuration.scopes,
             pkce_code_verifier,
@@ -699,6 +822,11 @@ impl<C: Oid4vciClient> AuthorizationCodeRequired<C> {
     ) -> Result<WaitingForAuthorizationCode<C>, ClientError> {
         let (pkce_code_challenge, pkce_code_verifier) = PkceCodeChallenge::new_random_sha256();
 
+        let mut configuration = self.client.configure_authorization_request(
+            &self.credential_offer,
+            &self.authorization_server_metadata,
+        )?;
+
         let oauth2_client: OAuth2AuthCodeClient<C::Profile> =
             oauth2::Client::new(self.client.client_id().clone())
                 .set_redirect_uri(redirect_url)
@@ -709,12 +837,8 @@ impl<C: Oid4vciClient> AuthorizationCodeRequired<C> {
                 )
                 .set_token_uri(self.authorization_server_metadata.token_endpoint);
 
-        let mut configuration = self
-            .client
-            .configure_authorization_request(&self.issuer_metadata, &self.credential_offer)?;
-
         set_locations(
-            &self.issuer_metadata,
+            &self.credential_offer.issuer_metadata,
             &mut configuration.authorization_details,
         );
 
@@ -741,7 +865,6 @@ impl<C: Oid4vciClient> AuthorizationCodeRequired<C> {
         Ok(WaitingForAuthorizationCode {
             client: self.client,
             oauth2_client,
-            issuer_metadata: self.issuer_metadata,
             credential_offer: self.credential_offer,
             requested_scopes: configuration.scopes,
             pkce_code_verifier,
@@ -755,10 +878,9 @@ impl<C: Oid4vciClient> AuthorizationCodeRequired<C> {
 ///
 /// Holds the necessary information to proceed with the Credential Request when
 /// the Authorization Code is received.
-pub struct WaitingForAuthorizationCode<C: Oid4vciClient> {
+pub struct WaitingForAuthorizationCode<C: Oid4vciClient = SimpleOid4vciClient> {
     client: C,
-    issuer_metadata: ProfileCredentialIssuerMetadata<C::Profile>,
-    credential_offer: CredentialOfferParameters,
+    credential_offer: ResolvedCredentialOffer<C::Profile>,
     oauth2_client: OAuth2AuthCodeClient<C::Profile>,
     requested_scopes: Vec<Scope>,
     pkce_code_verifier: PkceCodeVerifier,
@@ -785,9 +907,12 @@ impl<C: Oid4vciClient> WaitingForAuthorizationCode<C> {
     {
         let mut authorization_details = self
             .client
-            .configure_token_request(&self.issuer_metadata, &self.credential_offer)?;
+            .configure_token_request(&self.credential_offer)?;
 
-        set_locations(&self.issuer_metadata, &mut authorization_details);
+        set_locations(
+            &self.credential_offer.issuer_metadata,
+            &mut authorization_details,
+        );
 
         let response = self
             .oauth2_client
@@ -799,7 +924,6 @@ impl<C: Oid4vciClient> WaitingForAuthorizationCode<C> {
             .map_err(|_| ClientError::Authorization)?;
 
         Ok(CredentialToken {
-            issuer_metadata: self.issuer_metadata,
             credential_offer: self.credential_offer,
             requested_scopes: self.requested_scopes,
             response,
@@ -816,9 +940,12 @@ impl<C: Oid4vciClient> WaitingForAuthorizationCode<C> {
     {
         let mut authorization_details = self
             .client
-            .configure_token_request(&self.issuer_metadata, &self.credential_offer)?;
+            .configure_token_request(&self.credential_offer)?;
 
-        set_locations(&self.issuer_metadata, &mut authorization_details);
+        set_locations(
+            &self.credential_offer.issuer_metadata,
+            &mut authorization_details,
+        );
 
         let response = self
             .oauth2_client
@@ -829,7 +956,6 @@ impl<C: Oid4vciClient> WaitingForAuthorizationCode<C> {
             .map_err(|_| ClientError::Authorization)?;
 
         Ok(CredentialToken {
-            issuer_metadata: self.issuer_metadata,
             credential_offer: self.credential_offer,
             requested_scopes: self.requested_scopes,
             response,

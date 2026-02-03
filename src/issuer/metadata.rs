@@ -7,7 +7,7 @@ use langtag::LangTagBuf;
 use oauth2::Scope;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
-use ssi_jwk::JWK;
+use ssi_jwk::JwkSet;
 
 use crate::{
     encryption::jwe, profile::StandardCredentialFormatMetadata, util::discoverable::Discoverable,
@@ -152,7 +152,7 @@ pub struct CredentialRequestEncryptionMetadata {
     /// (key ID) parameter that uniquely identifies the key.
     ///
     /// See: <https://www.rfc-editor.org/info/rfc7591>
-    pub jwks: Vec<JWK>,
+    pub jwks: JwkSet,
 
     /// List of the JWE encryption algorithms (`enc` values) supported by the
     /// Credential Endpoint to decode the Credential Request from a JWT.
@@ -273,7 +273,7 @@ impl DisplayLogoMetadata {
 /// fields, all serializable as JSON.
 ///
 /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-issuer-metadata-p>
-pub trait CredentialFormatMetadata: Clone + Serialize + DeserializeOwned {
+pub trait CredentialFormatMetadata: Debug + Clone + Serialize + DeserializeOwned {
     /// Credential format identifier.
     type Format;
 

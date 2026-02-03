@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    path::PathBuf,
     process::ExitCode,
     sync::{Arc, OnceLock},
 };
@@ -21,14 +22,14 @@ use oid4vci::{
     },
     client::{
         AuthorizationCodeRequired, CredentialToken, CredentialTokenState, Oid4vciClient,
-        SimpleOid4vciClient, WaitingForTxCode,
+        SimpleOid4vciClient, TxCodeRequired,
     },
     proof::{jwt::create_jwt_proof, Proofs},
     response::CredentialResponse,
     CredentialOffer,
 };
 use ssi::{dids::DIDJWK, JWK};
-use tokio::{select, sync::oneshot};
+use tokio::{fs, select, sync::oneshot};
 
 /// OID4VCI client command line interface.
 #[derive(Parser)]
@@ -48,6 +49,22 @@ struct Params {
     /// expecting an immediate redirect.
     #[arg(short = 'a', long)]
     auto_auth: bool,
+
+    /// Path to a file containing the client's JWK.
+    ///
+    /// If unset, a random JWK will be generated.
+    #[arg(short = 'k', long)]
+    jwk: Option<PathBuf>,
+
+    /// Port (for authorization).
+    #[arg(short, long, default_value = "1234")]
+    port: u32,
+
+    /// Base URL of the client (for authorization).
+    ///
+    /// Defaults to `http://127.0.0.1:{PORT}/`
+    #[arg(short, long)]
+    url: Option<UriBuf>,
 }
 
 #[tokio::main]
@@ -68,20 +85,28 @@ async fn run(params: Params) -> Result<(), anyhow::Error> {
     let credential_offer = CredentialOffer::from_uri(&params.offer_url)?;
     let http_client = reqwest::Client::new();
 
-    let mut jwk = JWK::generate_p256();
+    let mut jwk = match &params.jwk {
+        Some(path) => fs::read_to_string(path).await?.parse()?,
+        None => JWK::generate_p256(),
+    };
+
     let did_url = DIDJWK::generate_url(&jwk);
     let did = did_url.did();
     jwk.key_id = Some(did_url.as_str().to_owned());
 
+    eprintln!("client id: {did}");
+
     let client = SimpleOid4vciClient::new(ClientId::new(did.as_str().to_owned()));
 
-    let state = client
-        .process_offer_async(&http_client, credential_offer)
+    let offer = client
+        .resolve_offer_async(&http_client, credential_offer)
         .await?;
+
+    let state = client.accept_offer_async(&http_client, offer).await?;
 
     let credential_token = match state {
         CredentialTokenState::RequiresAuthorizationCode(state) => {
-            require_authentication(&http_client, state, params.auto_auth).await?
+            require_authentication(&params, &http_client, state, params.auto_auth).await?
         }
         CredentialTokenState::RequiresTxCode(state) => {
             require_tx_code(&http_client, state, params.tx_code.as_deref()).await?
@@ -103,10 +128,10 @@ async fn run(params: Params) -> Result<(), anyhow::Error> {
     .await
     .unwrap();
 
-    let proofs = Proofs::Jwt(vec![proof.into_string()]);
+    let proofs = Proofs::Jwt(vec![proof]);
 
     let response = client
-        .query_credential_async(&http_client, &credential_token, credential_id, Some(proofs))
+        .exchange_credential_async(&http_client, &credential_token, credential_id, Some(proofs))
         .await?;
 
     match response {
@@ -129,14 +154,19 @@ async fn run(params: Params) -> Result<(), anyhow::Error> {
 /// send a `GET` query to the redirect URL, expecting to be redirected
 /// immediately.
 async fn require_authentication<C: Oid4vciClient>(
+    params: &Params,
     http_client: &reqwest::Client,
     authentication: AuthorizationCodeRequired<C>,
     auto_auth: bool,
 ) -> Result<CredentialToken<C::Profile>, anyhow::Error> {
-    let port = 1234;
-    let authority = format!("127.0.0.1:{port}");
+    let authority = format!("127.0.0.1:{}", params.port);
+
+    let redirect_url = match &params.url {
+        Some(url) => RedirectUrl::new(url.as_str().to_owned()).unwrap(),
+        None => RedirectUrl::new(format!("http://{authority}")).unwrap(),
+    };
+
     let listener = tokio::net::TcpListener::bind(&authority).await?;
-    let redirect_url = RedirectUrl::new(format!("http://{authority}")).unwrap();
     let authentication = authentication
         .proceed_async(http_client, redirect_url)
         .await?;
@@ -259,7 +289,7 @@ fn html_err(message: Option<&str>) -> String {
 // enter a code.
 async fn require_tx_code(
     http_client: &reqwest::Client,
-    state: WaitingForTxCode,
+    state: TxCodeRequired,
     tx_code: Option<&str>,
 ) -> Result<CredentialToken, anyhow::Error> {
     eprintln!("Credential Offer requires an Transaction Code.");

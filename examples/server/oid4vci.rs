@@ -12,10 +12,10 @@ use oid4vci::{
         ProfileCredentialIssuerMetadata, ProfileCredentialRequest, ProfileCredentialResponse,
     },
     proof::{jwt::JwtProofVerifier, Proofs},
-    request::CredentialIdentifierOrConfigurationId,
+    request::CredentialOrConfigurationId,
     response::{CredentialResponse, ImmediateCredentialResponse},
     server::{Oid4vciServer, ServerError},
-    CredentialOffer, StandardProfile,
+    CredentialOffer, Oid4vciCredential, StandardProfile,
 };
 use rand::distr::{Alphanumeric, SampleString};
 use ssi::{
@@ -50,11 +50,11 @@ impl Oid4vciServer for Server {
             .ok_or(ServerError::Unauthorized)?;
 
         let (config, value) = match request.credential {
-            CredentialIdentifierOrConfigurationId::Identifier(id) => self
+            CredentialOrConfigurationId::Credential(id) => self
                 .config
                 .get_credential(&id)
                 .ok_or(ServerError::Unauthorized)?,
-            CredentialIdentifierOrConfigurationId::ConfigurationId(id) => {
+            CredentialOrConfigurationId::Configuration(id) => {
                 let config = self
                     .config
                     .credential_configurations
@@ -92,7 +92,7 @@ impl Oid4vciServer for Server {
                 let mut credentials = Vec::with_capacity(keys.len());
 
                 for jwk in keys {
-                    credentials.push(
+                    credentials.push(Oid4vciCredential::new(
                         config
                             .sign(
                                 issuer.as_str(),
@@ -102,13 +102,13 @@ impl Oid4vciServer for Server {
                                 Some(&jwk),
                             )
                             .await,
-                    );
+                    ));
                 }
 
                 credentials
             }
             None => {
-                vec![
+                vec![Oid4vciCredential::new(
                     config
                         .sign(
                             issuer.as_str(),
@@ -118,7 +118,7 @@ impl Oid4vciServer for Server {
                             None,
                         )
                         .await,
-                ]
+                )]
             }
         };
 

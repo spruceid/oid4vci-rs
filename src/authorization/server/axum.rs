@@ -295,7 +295,6 @@ enum MaybePushedAuthorizationRequestParams<P> {
 
 /// Authorization Request endpoint, with support for Pushed Authorization
 /// Requests.
-
 async fn par_authorize<S>(
     State(server): State<Arc<S>>,
     Query(request): Query<MaybePushedAuthorizationRequestParams<S::AuthParams>>,

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use ssi_jws::JwsBuf;
 // use ssi::claims::{Invalid, ProofValidationError};
 
 pub mod jwt;
@@ -12,7 +13,7 @@ pub type ProofSigningAlgValuesSupported = Vec<ssi_jwk::Algorithm>;
 pub enum Proofs {
     /// JWT proofs.
     #[serde(rename = "jwt")]
-    Jwt(Vec<String>),
+    Jwt(Vec<JwsBuf>),
 
     /// Data Integrity proofs.
     #[serde(rename = "di_vp")]

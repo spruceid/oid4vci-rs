@@ -119,10 +119,12 @@
 //! [`AnyProfile`]: crate::profile::any::AnyProfile
 //! [`StandardProfile`]: crate::profile::standard::StandardProfile
 //! [Appendix A]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-format-profiles>
+pub use iref;
 pub use oauth2;
 
 pub mod authorization;
 pub mod client;
+mod credential;
 pub mod encryption;
 pub mod issuer;
 pub mod nonce;
@@ -137,5 +139,6 @@ pub mod server;
 pub mod types;
 pub mod util;
 
+pub use credential::Oid4vciCredential;
 pub use offer::CredentialOffer;
 pub use profile::{AnyProfile, Profile, StandardProfile};

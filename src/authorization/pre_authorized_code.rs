@@ -170,12 +170,12 @@ where
     }
 
     /// Asynchronously sends the request to the authorization server and returns a Future.
-    pub async fn request_async<'c, C>(
+    pub async fn request_async<'c, H>(
         self,
-        http_client: &'c C,
-    ) -> Result<TR, RequestTokenError<<C as AsyncHttpClient<'c>>::Error, TE>>
+        http_client: &'c H,
+    ) -> Result<TR, RequestTokenError<<H as AsyncHttpClient<'c>>::Error, TE>>
     where
-        C: AsyncHttpClient<'c>,
+        H: ?Sized + AsyncHttpClient<'c>,
     {
         endpoint_response(http_client.call(self.prepare_request()?).await?)
     }

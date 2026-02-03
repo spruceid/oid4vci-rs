@@ -14,8 +14,6 @@ pub struct PreAuthorizedCodeGrant {
 
     pub tx_code: Option<TxCodeDefinition>,
 
-    pub interval: Option<usize>,
-
     pub authorization_server: Option<UriBuf>,
 }
 
@@ -24,7 +22,6 @@ impl PreAuthorizedCodeGrant {
         Self {
             pre_authorized_code,
             tx_code: None,
-            interval: None,
             authorization_server: None,
         }
     }

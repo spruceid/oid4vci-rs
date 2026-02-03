@@ -27,7 +27,7 @@ use crate::{
 pub struct CredentialRequest<F: CredentialRequestParams = AnyCredentialRequestParams> {
     /// Requested credential.
     #[serde(flatten)]
-    pub credential: CredentialIdentifierOrConfigurationId,
+    pub credential: CredentialOrConfigurationId,
 
     /// Proofs of possession.
     pub proofs: Option<Proofs>,
@@ -43,7 +43,7 @@ impl<F: CredentialRequestParams> CredentialRequest<F> {
     /// Creates a new Credential Request.
     ///
     /// This will use the default format-specific parameters.
-    pub fn new(credential: CredentialIdentifierOrConfigurationId) -> Self
+    pub fn new(credential: CredentialOrConfigurationId) -> Self
     where
         F: Default,
     {
@@ -52,7 +52,7 @@ impl<F: CredentialRequestParams> CredentialRequest<F> {
 
     /// Creates a new Credential Request with the given format-specific
     /// parameters.
-    pub fn new_with(credential: CredentialIdentifierOrConfigurationId, params: F) -> Self {
+    pub fn new_with(credential: CredentialOrConfigurationId, params: F) -> Self {
         Self {
             credential,
             proofs: None,
@@ -86,7 +86,7 @@ impl<F: CredentialRequestParams> CredentialRequest<F> {
     ) -> Result<CredentialResponse<T>, HttpError>
     where
         Self: 'c,
-        C: AsyncHttpClient<'c>,
+        C: ?Sized + AsyncHttpClient<'c>,
         T: DeserializeOwned,
     {
         let http_response = http_client
@@ -144,14 +144,15 @@ impl<F: CredentialRequestParams> CredentialRequest<F> {
     }
 }
 
+/// Credential or configuration identifier.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub enum CredentialIdentifierOrConfigurationId {
+pub enum CredentialOrConfigurationId {
     /// Identifies a Credential Dataset that is requested for issuance.
     ///
     /// To be used when the Token Response included a Credential Authorization
     /// Details Object.
     #[serde(rename = "credential_identifier")]
-    Identifier(String),
+    Credential(String),
 
     /// Identifies a Credential Configuration, defined in the
     /// Credential Issuer Metadata, that is requested for issuance.
@@ -164,7 +165,46 @@ pub enum CredentialIdentifierOrConfigurationId {
     /// [`CredentialIssuerMetadata::credential_configurations_supported`]: crate::issuer::CredentialIssuerMetadata::credential_configurations_supported
     /// [`CredentialConfiguration::scope`]: crate::issuer::metadata::CredentialConfiguration::scope
     #[serde(rename = "credential_configuration_id")]
-    ConfigurationId(String),
+    Configuration(String),
+}
+
+impl CredentialOrConfigurationId {
+    pub fn as_ref(&self) -> CredentialOrConfigurationIdRef<'_> {
+        match self {
+            Self::Credential(id) => CredentialOrConfigurationIdRef::Credential(id),
+            Self::Configuration(id) => CredentialOrConfigurationIdRef::Configuration(id),
+        }
+    }
+}
+
+/// Credential or configuration identifier reference.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum CredentialOrConfigurationIdRef<'a> {
+    /// Identifies a Credential Dataset that is requested for issuance.
+    ///
+    /// To be used when the Token Response included a Credential Authorization
+    /// Details Object.
+    #[serde(rename = "credential_identifier")]
+    Credential(&'a str),
+
+    /// Identifies a Credential Configuration, defined in the
+    /// Credential Issuer Metadata, that is requested for issuance.
+    ///
+    /// It must be a key of
+    /// [`CredentialIssuerMetadata::credential_configurations_supported`].
+    /// The associated [`CredentialConfiguration::scope`] value must match one
+    /// of the scopes included in the Authorization Request.
+    ///
+    /// [`CredentialIssuerMetadata::credential_configurations_supported`]: crate::issuer::CredentialIssuerMetadata::credential_configurations_supported
+    /// [`CredentialConfiguration::scope`]: crate::issuer::metadata::CredentialConfiguration::scope
+    #[serde(rename = "credential_configuration_id")]
+    Configuration(&'a str),
+}
+
+impl<'a> From<&'a CredentialOrConfigurationId> for CredentialOrConfigurationIdRef<'a> {
+    fn from(value: &'a CredentialOrConfigurationId) -> Self {
+        value.as_ref()
+    }
 }
 
 /// Credential format request parameters.
