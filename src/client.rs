@@ -118,7 +118,7 @@ where
     pub fn pushed_authorization_request<S>(
         &self,
         state_fn: S,
-    ) -> Result<PushedAuthorizationRequest, Error>
+    ) -> Result<PushedAuthorizationRequest<'_>, Error>
     where
         S: FnOnce() -> CsrfToken,
     {
@@ -138,7 +138,7 @@ where
         ))
     }
 
-    pub fn authorize_url<S>(&self, state_fn: S) -> Result<AuthorizationRequest, Error>
+    pub fn authorize_url<S>(&self, state_fn: S) -> Result<AuthorizationRequest<'_>, Error>
     where
         S: FnOnce() -> CsrfToken,
     {
