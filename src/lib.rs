@@ -1,143 +1,144 @@
-#[macro_use]
-mod macros;
+//! This library provides a Rust implementation of [OID4VCI 1.0].
+//!
+//! [OID4VCI 1.0]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html>
+//!
+//! # Client Usage
+//!
+//! You can create a basic client implementation using the
+//! [`SimpleOid4vciClient`] type as follows:
+//!
+//! ```ignore
+//! use oid4vci::client::{SimpleOid4vciClient, Oid4vciClient, CredentialTokenState};
+//!
+//! // Setup client.
+//! let client = SimpleOid4vciClient::new(client_id);
+//!
+//! // Start processing the credential offer.
+//! let state = client
+//!   .process_offer(&http_client, credential_offer)
+//!   .await?;
+//!
+//! // Depending on the grant type, more authorization steps may be necessary.
+//! let credential_token = match state {
+//!   CredentialTokenState::RequiresAuthorization(state) => {
+//!     let full_redirect_url = state.proceed(&http_client, redirect_url);
+//!     let auth_code = do_authorization(full_redirect_url);
+//!     state.proceed(auth_code)?
+//!   }
+//!   CredentialTokenState::RequiresTxCode(state) => {
+//!     let tx_code = ask_for_tx_code(state.tx_code_definition());
+//!     state.proceed(tx_code)?;
+//!   }
+//!   CredentialTokenState::Ready(token) => token,
+//! };
+//!
+//! // Select what credential to issue.
+//! let credential_id = credential_token.default_credential_id()?;
+//!
+//! // Create a proof of possession.
+//! let nonce = credential_token.get_nonce(&http_client)?;
+//! let proof = create_proof(nonce);
+//!
+//! // Issue credential.
+//! let response = client
+//!     .query_credential(&http_client, &credential_token, credential_id, Some(proof))?;
+//! ```
+//!
+//! The client's behavior can be tweaked by replacing the
+//! [`SimpleOid4vciClient`] type with a custom [`Oid4vciClient`] implementation.
+//!
+//! [`SimpleOid4vciClient`]: crate::client::SimpleOid4vciClient
+//! [`Oid4vciClient`]: crate::client::Oid4vciClient
+//!
+//! # Server Usage
+//!
+//! Servers can be created by implementing the [`Oid4vciServer`] trait.
+//! An example implementation can be found in the `example` folder.
+//!
+//! [`Oid4vciServer`]: crate::server::Oid4vciServer
+//!
+//! # Protocol Overview
+//!
+//! Here is a simplified overview of the OID4VCI protocol, referencing the
+//! various types and methods implementing it.
+//!
+//! ## Offer
+//!
+//! 1. *Out-of-band credential offer*: Issuer sends a [`CredentialOffer`] to the
+//!    Wallet. This can be done through various methods like a QR-code, deep
+//!    link, etc.
+//! 2. *Issuer metadata resolution*: Wallet fetches the
+//!    [`CredentialIssuerMetadata`]. This object is [`Discoverable`] behind the
+//!    `/.well-known/openid-credential-issuer` endpoint.
+//!
+//! All the code related to Credential Offer is located in the
+//! [`offer`] module.
+//!
+//! [`CredentialOffer`]: crate::offer::CredentialOffer
+//! [`CredentialIssuerMetadata`]: crate::issuer::metadata::CredentialIssuerMetadata
+//! [`Discoverable`]: crate::util::discoverable::Discoverable
+//! [`offer`]: crate::offer
+//!
+//! ## Authorization
+//!
+//! 3. *Authorization server resolution*: Wallet fetches the
+//!    [`AuthorizationServerMetadata`]. This object is [`Discoverable`] behind
+//!    the `/.well-known/oauth-authorization-server` endpoint.
+//! 4. Wallet sends an [`AuthorizationRequest`] to the Authorization Server,
+//!    specifying what types of Credential(s) it is ready to be issued.
+//! 5. Authorization Server returns an [`AuthorizationCode`].
+//! 6. Wallet sends a Token Request.
+//! 7. Authorization Server returns a Token Response, with an Access Token.
+//!
+//! All the code related to Authorization is located in the [`authorization`]
+//! module.
+//!
+//! [`AuthorizationServerMetadata`]: crate::authorization::server::metadata::AuthorizationServerMetadata
+//! [`AuthorizationRequest`]: oauth2::AuthorizationRequest
+//! [`AuthorizationCode`]: oauth2::AuthorizationCode
+//! [`authorization`]: crate::authorization
+//!
+//! ## Issuance
+//!
+//! 8. Wallet sends a [`CredentialRequest`] to the Issuer, with the Access Token.
+//! 9. Issuer returns a [`CredentialResponse`], with the Credential(s).
+//!
+//! [`CredentialRequest`]: crate::request::CredentialRequest
+//! [`CredentialResponse`]: crate::response::CredentialResponse
+//!
+//! # Profiles
+//!
+//! The supported credential formats are defined by the [`Profile`] trait
+//! implementation. This library provides two built-in profiles:
+//! - [`AnyProfile`]: Format-agnostic profile. Accepts everything, but won't
+//!   interpret anything.
+//! - [`StandardProfile`]: Implements the profile defined by the OID4VCI
+//!   specification's [Appendix A].
+//!
+//! [`Profile`]: crate::profile::Profile
+//! [`AnyProfile`]: crate::profile::any::AnyProfile
+//! [`StandardProfile`]: crate::profile::standard::StandardProfile
+//! [Appendix A]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-format-profiles>
+pub use iref;
+pub use oauth2;
 
 pub mod authorization;
 pub mod client;
-pub mod credential;
-pub mod credential_offer;
-pub mod credential_response_encryption;
-mod deny_field;
-mod http_utils;
-pub mod metadata;
+mod credential;
+pub mod encryption;
+pub mod issuer;
+pub mod nonce;
 pub mod notification;
-pub mod pre_authorized_code;
-pub mod profiles;
-pub mod proof_of_possession;
-pub mod pushed_authorization;
-pub mod token;
+pub mod offer;
+pub mod profile;
+pub mod proof;
+pub mod request;
+pub mod response;
+#[cfg(feature = "axum")]
+pub mod server;
 pub mod types;
+pub mod util;
 
-pub use oauth2;
-
-#[cfg(test)]
-mod test {
-    use crate::credential_offer::CredentialOffer;
-    use crate::metadata::authorization_server::GrantType;
-    use crate::metadata::credential_issuer::CredentialConfiguration;
-    use crate::metadata::{AuthorizationServerMetadata, MetadataDiscovery};
-    use crate::profiles::core::profiles::{
-        jwt_vc_json_ld, ldp_vc, CoreProfilesCredentialConfiguration, CoreProfilesCredentialRequest,
-        CredentialRequestWithFormat,
-    };
-    use crate::profiles::core::{client::Client, metadata::CredentialIssuerMetadata};
-    use crate::types::CredentialOfferRequest;
-    use oauth2::{ClientId, RedirectUrl, TokenResponse};
-    use url::Url;
-
-    #[tokio::test]
-    #[ignore]
-    async fn manual() {
-        let http_client = oauth2::reqwest::Client::new();
-
-        // Get a credential offer from vc-playground.org.
-        let credential_offer_request: Url = "".parse().unwrap();
-
-        let credential_offer = CredentialOffer::from_request(
-            CredentialOfferRequest::from_url_checked(credential_offer_request).unwrap(),
-        )
-        .unwrap()
-        .resolve_async(&http_client)
-        .await
-        .unwrap();
-
-        let credential_issuer_metadata =
-            CredentialIssuerMetadata::discover_async(credential_offer.issuer(), &http_client)
-                .await
-                .unwrap();
-
-        let targeted_credentials: Vec<
-            CredentialConfiguration<CoreProfilesCredentialConfiguration>,
-        > = credential_issuer_metadata
-            .credential_configurations_supported()
-            .iter()
-            .filter(|configuration| {
-                credential_offer
-                    .credential_configuration_ids()
-                    .contains(configuration.id())
-            })
-            .cloned()
-            .collect();
-
-        assert_eq!(targeted_credentials.len(), 1);
-
-        let grant = credential_offer.pre_authorized_code_grant().unwrap();
-        let authorization_server = grant.authorization_server();
-
-        let authorization_server_metadata =
-            AuthorizationServerMetadata::discover_from_credential_issuer_metadata_async(
-                &http_client,
-                &credential_issuer_metadata,
-                Some(&GrantType::PreAuthorizedCode),
-                authorization_server,
-            )
-            .await
-            .unwrap();
-
-        let client = Client::from_issuer_metadata(
-            ClientId::new("test".to_owned()),
-            RedirectUrl::new("test://".to_owned()).unwrap(),
-            credential_issuer_metadata,
-            authorization_server_metadata,
-        );
-
-        let token_response = client
-            .exchange_pre_authorized_code(
-                credential_offer
-                    .pre_authorized_code_grant()
-                    .unwrap()
-                    .pre_authorized_code()
-                    .clone(),
-            )
-            .set_anonymous_client()
-            .request_async(&http_client)
-            .await
-            .unwrap();
-
-        let credential_configuration = &targeted_credentials[0];
-        let request_inner = match credential_configuration.profile_specific_fields() {
-            CoreProfilesCredentialConfiguration::LdpVc(config) => {
-                let credential_definition =
-                    ldp_vc::authorization_detail::CredentialDefinition::default()
-                        .set_context(config.credential_definition().context().clone())
-                        .set_type(config.credential_definition().r#type().clone());
-                CredentialRequestWithFormat::LdpVc(ldp_vc::CredentialRequestWithFormat::new(
-                    credential_definition,
-                ))
-            }
-            CoreProfilesCredentialConfiguration::JwtVcJsonLd(config) => {
-                let credential_definition =
-                    ldp_vc::authorization_detail::CredentialDefinition::default()
-                        .set_context(config.credential_definition().context().clone())
-                        .set_type(config.credential_definition().r#type().clone());
-                CredentialRequestWithFormat::JwtVcJsonLd(
-                    jwt_vc_json_ld::CredentialRequestWithFormat::new(credential_definition),
-                )
-            }
-            x => unimplemented!("{x:?}"),
-        };
-
-        let credential_response = client
-            .request_credential(
-                token_response.access_token().clone(),
-                CoreProfilesCredentialRequest::WithFormat {
-                    inner: request_inner,
-                    _credential_identifier: (),
-                },
-            )
-            .request_async(&http_client)
-            .await
-            .unwrap();
-
-        println!("{credential_response:?}")
-    }
-}
+pub use credential::Oid4vciCredential;
+pub use offer::CredentialOffer;
+pub use profile::{AnyProfile, Profile, StandardProfile};
