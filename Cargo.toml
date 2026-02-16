@@ -28,7 +28,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_with = "3.3.0"
 serde_path_to_error = "0.1.14"
-open-auth2 = { git = "https://github.com/spruceid/open-auth2-rs", rev = "ea06393" }
+open-auth2 = { git = "https://github.com/spruceid/open-auth2-rs", rev = "81a62aa" }
 base64 = "0.21.4"
 rand = "0.9.2"
 time = { version = "0.3.29", features = ["serde"] }

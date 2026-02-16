@@ -153,8 +153,6 @@ where
         client: &E,
         response: http::Response<Vec<u8>>,
     ) -> Result<http::Response<Self::ResponsePayload>, OAuth2ClientError> {
-        log::info!("response: {response:?}");
-
         match response.status() {
             http::StatusCode::UNAUTHORIZED => Ok(response.map(|_| {
                 DpopResponse::RequireDpop(DpopErrorResponse {
