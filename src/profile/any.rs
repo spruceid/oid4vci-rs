@@ -1,6 +1,7 @@
 use crate::{
     authorization::authorization_details::AnyCredentialAuthorizationParams,
-    issuer::metadata::AnyCredentialFormatConfiguration, request::AnyCredentialRequestParams,
+    endpoints::credential::AnyCredentialRequestParams,
+    issuer::metadata::AnyCredentialFormatConfiguration,
 };
 
 use super::Profile;

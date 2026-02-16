@@ -1,0 +1,54 @@
+{
+  "description": "OID4VP 1.0 Final verifier conformance - SD-JWT VC, x509_san_dns, request_uri_signed, direct_post",
+  "client": {
+    "jwks": {
+      "keys": [
+        {
+          "kty": "EC",
+          "use": "sig",
+          "crv": "P-256",
+          "x": "wlggUYv587z9HbXm9PJ-XSo_OYJTE6T3O09j_zaCvLk",
+          "y": "hmRRRZOA3aLBufXBh5oYeolmT-MBINrulhrQ6oFi2i4",
+          "alg": "ES256"
+        }
+      ]
+    },
+    "client_id": "did:jwk:eyJjcnYiOiJQLTI1NiIsImt0eSI6IkVDIiwieCI6InFHcURYUWpaekNzUXlBb0tvS0lYUk9vTTdaU2Y3a3JqYTRLWm10eWZUVTAiLCJ5IjoiWkJzckpRMTcyaFBWY0ZCZ1BQdXJpdm9GNFBnSF9zQUpZZDBBUHR2cUtmNCJ9"
+  },
+  "credential": {
+    "signing_jwk": {
+      "kty": "EC",
+      "crv": "P-256",
+      "use": "sig",
+      "alg": "ES256",
+      "x": "3z51-V-H_EfvGJaJlCVLoVQ_sCvOYmrh4fSMAdRLpt0",
+      "y": "3hT2MWr4RGJR-pC0OO2T95-hInH2JAdtMzWYcm97cQs",
+      "d": "jhQ8cQDNDtcfPkeVDbzX3n1t2zLpJOERvf-e3ZBRFGs",
+      "x5c": [
+        "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJxRENDQVU2Z0F3SUJBZ0lSQU1kMnR1UVhOak5YZ3M4ck5Vc1EyMmd3Q2dZSUtvWkl6ajBFQXdJd0VqRVEKTUE0R0ExVUVBeE1IVkdWemRDQkRRVEFlRncweU5qQXlNRGt4TXpNeU16ZGFGdzB5TmpBeU1UQXhNek15TXpkYQpNQkV4RHpBTkJnTlZCQU1UQmxOcFoyNWxjakJaTUJNR0J5cUdTTTQ5QWdFR0NDcUdTTTQ5QXdFSEEwSUFCTjgrCmRmbGZoL3hIN3hpV2laUWxTNkZVUDdBcnptSnE0ZUgwakFIVVM2YmQzaFQyTVdyNFJHSlIrcEMwT08yVDk1K2gKSW5IMkpBZHRNeldZY205N2NRdWpnWVV3Z1lJd0RnWURWUjBQQVFIL0JBUURBZ2VBTUIwR0ExVWRKUVFXTUJRRwpDQ3NHQVFVRkJ3TUJCZ2dyQmdFRkJRY0RBakFkQmdOVkhRNEVGZ1FVckN0TnhESzFSSFphU01IWGt6R0kzL1J6CkZTMHdId1lEVlIwakJCZ3dGb0FVZTdCSzVmQThOS0RRRDFrTmY0b2lHWXNRQkFVd0VRWURWUjBSQkFvd0NJSUcKVTJsbmJtVnlNQW9HQ0NxR1NNNDlCQU1DQTBnQU1FVUNJSFl1MjhJb0tuNHNpc3c4NW1xaVhoUksyWTRZNm5RWgpmZ3MxYklHQ1lrVElBaUVBMTdWMUZSU1I5WlM1KzdZTExreXFDN0ZROUtQUmUyWGNTcXRsUkVCUkJWcz0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo="
+      ]
+    }
+  },
+  "federation": {
+    "trust_anchor": "https://demo.certification.openid.net/test/a/<INSERT TEST ALIAS>/trust-anchor"
+  },
+  "server": {
+    "jwks": {
+      "keys": [
+        {
+          "kty": "EC",
+          "crv": "P-256",
+          "alg": "ES256",
+          "x": "nmeihNL0k989KECU1jIoQHBHwSZOliDiPEI9_9bP2q4",
+          "y": "xAz-b-64-zjerNEK6UJ4AjOQGOE0RTsKpmxHpjs_jSg",
+          "d": "X9RPf-sjw0Lx3G9iX9kovDhQO-fIvwFzmPLUz_C-xbg"
+        }
+      ]
+    }
+  },
+  "vci": {
+    "credential_offer_endpoint": "openid-credential-offer://",
+    "client_attestation_issuer": "did:jwk:eyJhbGciOiJFUzI1NiIsImNydiI6IlAtMjU2Iiwia3R5IjoiRUMiLCJ1c2UiOiJzaWciLCJ4IjoiRzJRNzhCd2pCSURLTnh3aGt1b2xOazRLSm9Vc3JkZWI0dUF1bzlOZlJXWSIsInkiOiJsMUJzRWc3U1NoalExN1BTb1VueEtaUkhNRU5WRklYdDVHNFN3NjQ4VEc0In0",
+    "client_attestation_trust_anchor": "-----BEGIN CERTIFICATE-----\nMIIBaDCCAQ6gAwIBAgIRAO5K91cdQGB+JmGGVhiN6ocwCgYIKoZIzj0EAwIwEjEQ\nMA4GA1UEAxMHVGVzdCBDQTAeFw0yNjAyMDkxMzE5NDdaFw0zNjAyMDcxMzE5NDda\nMBIxEDAOBgNVBAMTB1Rlc3QgQ0EwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAASJ\nBfJxfLxzWY63MRXmgEzIvO1u2U2z6238aCxmXFOTmMyOyygCTQQH5qkY6ZLP+9Di\nPdXGdvMlaQDa3O0bMMqRo0UwQzAOBgNVHQ8BAf8EBAMCAQYwEgYDVR0TAQH/BAgw\nBgEB/wIBATAdBgNVHQ4EFgQUe7BK5fA8NKDQD1kNf4oiGYsQBAUwCgYIKoZIzj0E\nAwIDSAAwRQIhAO+wWgy7nJp/+n3v1vFaUsFGYmE1EzYlB8irZlWfCpbJAiAiCUYF\nrOWT+tg1aMJqq1OKqVpRfwyHy5zLqI0OIrVXTQ==\n-----END CERTIFICATE-----\n"
+  }
+}

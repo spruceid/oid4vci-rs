@@ -3,8 +3,9 @@ use std::{borrow::Cow, sync::Arc};
 use axum::extract::{Path, State};
 use dashmap::DashMap;
 use iref::UriBuf;
-use oauth2::AccessToken;
 use oid4vci::{
+    credential::CredentialOrConfigurationId,
+    endpoints::credential::{CredentialResponse, ImmediateCredentialResponse},
     offer::{
         CredentialOfferGrants, CredentialOfferParameters, PreAuthorizedCodeGrant, TxCodeDefinition,
     },
@@ -12,11 +13,10 @@ use oid4vci::{
         ProfileCredentialIssuerMetadata, ProfileCredentialRequest, ProfileCredentialResponse,
     },
     proof::{jwt::JwtProofVerifier, Proofs},
-    request::CredentialOrConfigurationId,
-    response::{CredentialResponse, ImmediateCredentialResponse},
     server::{Oid4vciServer, ServerError},
     CredentialOffer, Oid4vciCredential, StandardProfile,
 };
+use open_auth2::AccessTokenBuf;
 use rand::distr::{Alphanumeric, SampleString};
 use ssi::{
     dids::{AnyDidMethod, VerificationMethodDIDResolver},
@@ -41,7 +41,7 @@ impl Oid4vciServer for Server {
 
     async fn credential(
         &self,
-        access_token: AccessToken,
+        access_token: AccessTokenBuf,
         request: ProfileCredentialRequest<Self::Profile>,
     ) -> Result<ProfileCredentialResponse<Self::Profile>, ServerError> {
         let m = self
@@ -82,7 +82,7 @@ impl Oid4vciServer for Server {
                         let verifier = JwtProofVerifier::new(&issuer, &jwk_resolver);
 
                         verifier
-                            .verify_list(m.client_id.as_ref(), jwts)
+                            .verify_list(m.client_id.as_deref(), jwts)
                             .await
                             .map_err(|_| ServerError::Unauthorized)?
                     }
@@ -97,7 +97,7 @@ impl Oid4vciServer for Server {
                             .sign(
                                 issuer.as_str(),
                                 &self.jwk,
-                                m.client_id.as_ref(),
+                                m.client_id.as_deref(),
                                 value,
                                 Some(&jwk),
                             )
@@ -113,7 +113,7 @@ impl Oid4vciServer for Server {
                         .sign(
                             issuer.as_str(),
                             &self.jwk,
-                            m.client_id.as_ref(),
+                            m.client_id.as_deref(),
                             value,
                             None,
                         )

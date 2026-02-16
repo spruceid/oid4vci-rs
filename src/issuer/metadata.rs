@@ -1,17 +1,14 @@
 use std::fmt::Debug;
 
-use anyhow::bail;
 use indexmap::IndexMap;
 use iref::{uri_ref, Uri, UriBuf, UriRef};
 use langtag::LangTagBuf;
-use oauth2::Scope;
+use open_auth2::{client::OAuth2ClientError, util::Discoverable, ScopeBuf};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
-use ssi_jwk::JwkSet;
+use ssi::jwk::JwkSet;
 
-use crate::{
-    encryption::jwe, profile::StandardCredentialFormatMetadata, util::discoverable::Discoverable,
-};
+use crate::{encryption::jwe, profile::StandardCredentialFormatMetadata};
 
 /// Credential Issuer Metadata.
 ///
@@ -111,15 +108,15 @@ where
 impl<P: CredentialFormatMetadata> Discoverable for CredentialIssuerMetadata<P> {
     const WELL_KNOWN_URI_REF: &UriRef = uri_ref!(".well-known/openid-credential-issuer");
 
-    fn validate(&self, issuer: &Uri) -> anyhow::Result<()> {
-        if self.credential_issuer != issuer {
-            bail!(
+    fn validate(&self, issuer: &Uri) -> Result<(), OAuth2ClientError> {
+        if self.credential_issuer == issuer {
+            Ok(())
+        } else {
+            Err(OAuth2ClientError::response(format!(
                 "unexpected issuer URI `{}` (expected `{}`)",
-                self.credential_issuer,
-                issuer
-            )
+                self.credential_issuer, issuer
+            )))
         }
-        Ok(())
     }
 }
 
@@ -320,7 +317,7 @@ pub struct CredentialConfiguration<F: CredentialFormatMetadata = StandardCredent
     ///
     /// The value can be the same across multiple
     /// [`CredentialConfiguration`]s.
-    pub scope: Option<Scope>,
+    pub scope: Option<ScopeBuf>,
 
     #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
     pub credential_signing_alg_values_supported: Vec<F::SigningAlgorithm>,
@@ -366,7 +363,7 @@ pub struct KeyProofTypesSupported {
     /// Algorithms that the Issuer supports for this proof type.
     ///
     /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#proof-types>
-    pub proof_signing_alg_values_supported: Vec<ssi_jwk::Algorithm>,
+    pub proof_signing_alg_values_supported: Vec<ssi::jwk::Algorithm>,
 
     /// Requirements for key attestations.
     ///
@@ -542,8 +539,7 @@ mod axum {
         http::{header::CONTENT_TYPE, StatusCode},
         response::{IntoResponse, Response},
     };
-
-    use crate::util::http::MIME_TYPE_JSON;
+    use open_auth2::transport::APPLICATION_JSON;
 
     use super::*;
 
@@ -563,7 +559,7 @@ mod axum {
         fn into_response(self) -> ::axum::response::Response {
             Response::builder()
                 .status(StatusCode::OK)
-                .header(CONTENT_TYPE, MIME_TYPE_JSON)
+                .header(CONTENT_TYPE, &APPLICATION_JSON)
                 .body(Body::from(
                     serde_json::to_vec(self)
                         // UNWRAP SAFETY: Issuer Metadata is always serializable as JSON.

@@ -12,15 +12,17 @@ use axum_extra::{
     headers::{authorization::Bearer, Authorization},
     TypedHeader,
 };
-use oauth2::AccessToken;
+use open_auth2::{server::ErrorResponse, AccessTokenBuf};
 
 use crate::{
-    nonce::NonceResponse,
-    notification::{NotificationErrorResponse, NotificationErrorType, NotificationRequest},
+    endpoints::{
+        credential::DeferredCredentialRequest,
+        nonce::NonceResponse,
+        notification::{NotificationError, NotificationRequest},
+    },
     profile::{
         ProfileCredentialIssuerMetadata, ProfileCredentialRequest, ProfileCredentialResponse,
     },
-    request::DeferredCredentialRequest,
     Profile,
 };
 
@@ -59,7 +61,7 @@ pub trait Oid4vciServer: Sized + Send + Sync + 'static {
     /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-endpoint>
     fn credential(
         &self,
-        access_token: AccessToken,
+        access_token: AccessTokenBuf,
         request: ProfileCredentialRequest<Self::Profile>,
     ) -> impl Send + Future<Output = Result<ProfileCredentialResponse<Self::Profile>, ServerError>>;
 
@@ -68,7 +70,7 @@ pub trait Oid4vciServer: Sized + Send + Sync + 'static {
     /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-deferred-credential-endpoin>
     fn deferred_credential(
         &self,
-        _access_token: AccessToken,
+        _access_token: AccessTokenBuf,
         _transaction_id: String,
     ) -> impl Send + Future<Output = Result<ProfileCredentialResponse<Self::Profile>, ServerError>>
     {
@@ -80,7 +82,7 @@ pub trait Oid4vciServer: Sized + Send + Sync + 'static {
     /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-deferred-credential-endpoin>
     fn notification(
         &self,
-        _access_token: AccessToken,
+        _access_token: AccessTokenBuf,
         _notification: NotificationRequest,
     ) -> impl Send + Future<Output = Result<(), ServerError>> {
         async move { Ok(()) }
@@ -135,7 +137,7 @@ async fn credential<S>(
 where
     S: Oid4vciServer,
 {
-    let access_token = AccessToken::new(bearer.token().to_owned());
+    let access_token = AccessTokenBuf::new(bearer.token().to_owned()).unwrap();
     server.credential(access_token, credential_request).await
 }
 
@@ -148,7 +150,7 @@ async fn deferred_credential<S>(
 where
     S: Oid4vciServer,
 {
-    let access_token = AccessToken::new(bearer.token().to_owned());
+    let access_token = AccessTokenBuf::new(bearer.token().to_owned()).unwrap();
     server
         .deferred_credential(access_token, credential_request.transaction_id)
         .await
@@ -163,7 +165,7 @@ async fn notification<S>(
 where
     S: Oid4vciServer,
 {
-    let access_token = AccessToken::new(bearer.token().to_owned());
+    let access_token = AccessTokenBuf::new(bearer.token().to_owned()).unwrap();
     server
         .notification(access_token, notification)
         .await
@@ -184,8 +186,8 @@ pub enum ServerError {
     #[error("invalid notification id")]
     InvalidNotificationId,
 
-    #[error(transparent)]
-    Other(#[from] anyhow::Error),
+    #[error("{0}")]
+    Other(String),
 }
 
 impl IntoResponse for ServerError {
@@ -198,8 +200,8 @@ impl IntoResponse for ServerError {
             Self::InvalidNotificationId => Response::builder()
                 .status(StatusCode::BAD_REQUEST)
                 .body(Body::from(
-                    serde_json::to_vec(&NotificationErrorResponse::new(
-                        NotificationErrorType::InvalidNotificationId,
+                    serde_json::to_vec(&ErrorResponse::new(
+                        NotificationError::InvalidNotificationId,
                         None,
                         None,
                     ))

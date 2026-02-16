@@ -1,26 +1,13 @@
-use serde::{Deserialize, Serialize};
-
 pub mod authorization_details;
-pub mod pre_authorized_code;
-pub mod pushed_authorization;
-pub mod request;
-pub mod response;
+pub mod issuer_state;
+pub mod oauth2;
 pub mod server;
-pub mod token;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Stateful<T> {
-    pub state: Option<String>,
-
-    #[serde(flatten)]
-    pub value: T,
-}
 
 #[cfg(test)]
 mod tests {
     use serde_json::json;
 
-    use super::authorization_details::{
+    use crate::authorization::authorization_details::{
         AnyCredentialAuthorizationParams, CredentialAuthorizationDetailsRequest,
     };
 

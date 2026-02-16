@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use ssi_jwk::JWK;
+use ssi::jwk::JWK;
 
 pub mod jwe;
 

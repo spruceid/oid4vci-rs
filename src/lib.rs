@@ -52,7 +52,8 @@
 //!
 //! # Server Usage
 //!
-//! Servers can be created by implementing the [`Oid4vciServer`] trait.
+//! Servers can be created by implementing the [`Oid4vciServer`] trait,
+//! available with the `axum` feature enabled.
 //! An example implementation can be found in the `example` folder.
 //!
 //! [`Oid4vciServer`]: crate::server::Oid4vciServer
@@ -76,7 +77,7 @@
 //!
 //! [`CredentialOffer`]: crate::offer::CredentialOffer
 //! [`CredentialIssuerMetadata`]: crate::issuer::metadata::CredentialIssuerMetadata
-//! [`Discoverable`]: crate::util::discoverable::Discoverable
+//! [`Discoverable`]: open_auth2::util::Discoverable
 //! [`offer`]: crate::offer
 //!
 //! ## Authorization
@@ -84,18 +85,17 @@
 //! 3. *Authorization server resolution*: Wallet fetches the
 //!    [`AuthorizationServerMetadata`]. This object is [`Discoverable`] behind
 //!    the `/.well-known/oauth-authorization-server` endpoint.
-//! 4. Wallet sends an [`AuthorizationRequest`] to the Authorization Server,
+//! 4. Wallet sends an Authorization Request to the Authorization Server,
 //!    specifying what types of Credential(s) it is ready to be issued.
-//! 5. Authorization Server returns an [`AuthorizationCode`].
+//! 5. Authorization Server returns an Authorization [`Code`].
 //! 6. Wallet sends a Token Request.
 //! 7. Authorization Server returns a Token Response, with an Access Token.
 //!
 //! All the code related to Authorization is located in the [`authorization`]
 //! module.
 //!
-//! [`AuthorizationServerMetadata`]: crate::authorization::server::metadata::AuthorizationServerMetadata
-//! [`AuthorizationRequest`]: oauth2::AuthorizationRequest
-//! [`AuthorizationCode`]: oauth2::AuthorizationCode
+//! [`AuthorizationServerMetadata`]: open_auth2::server::metadata::AuthorizationServerMetadata
+//! [`Code`]: open_auth2::Code
 //! [`authorization`]: crate::authorization
 //!
 //! ## Issuance
@@ -103,8 +103,8 @@
 //! 8. Wallet sends a [`CredentialRequest`] to the Issuer, with the Access Token.
 //! 9. Issuer returns a [`CredentialResponse`], with the Credential(s).
 //!
-//! [`CredentialRequest`]: crate::request::CredentialRequest
-//! [`CredentialResponse`]: crate::response::CredentialResponse
+//! [`CredentialRequest`]: crate::endpoints::credential::CredentialRequest
+//! [`CredentialResponse`]: crate::endpoints::credential::CredentialResponse
 //!
 //! # Profiles
 //!
@@ -116,29 +116,29 @@
 //!   specification's [Appendix A].
 //!
 //! [`Profile`]: crate::profile::Profile
-//! [`AnyProfile`]: crate::profile::any::AnyProfile
-//! [`StandardProfile`]: crate::profile::standard::StandardProfile
+//! [`AnyProfile`]: crate::profile::AnyProfile
+//! [`StandardProfile`]: crate::profile::StandardProfile
 //! [Appendix A]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-format-profiles>
 pub use iref;
-pub use oauth2;
+pub use open_auth2;
 
 pub mod authorization;
 pub mod client;
-mod credential;
+pub mod credential;
 pub mod encryption;
+pub mod endpoints;
 pub mod issuer;
-pub mod nonce;
-pub mod notification;
 pub mod offer;
 pub mod profile;
 pub mod proof;
-pub mod request;
 pub mod response;
 #[cfg(feature = "axum")]
 pub mod server;
-pub mod types;
 pub mod util;
 
+pub use client::Oid4vciClient;
 pub use credential::Oid4vciCredential;
 pub use offer::CredentialOffer;
 pub use profile::{AnyProfile, Profile, StandardProfile};
+#[cfg(feature = "axum")]
+pub use server::Oid4vciServer;
