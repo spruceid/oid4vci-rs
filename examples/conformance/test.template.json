@@ -1,5 +1,5 @@
 {
-  "description": "OID4VP 1.0 Final verifier conformance - SD-JWT VC, x509_san_dns, request_uri_signed, direct_post",
+  "description": "OID4VP 1.0 Final wallet conformance",
   "client": {
     "jwks": {
       "keys": [

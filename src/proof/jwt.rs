@@ -7,7 +7,6 @@ use serde_with::skip_serializing_none;
 use ssi::{
     claims::{
         chrono::Utc,
-        cose::ValidateCoseHeader,
         jws::{JwsSigner, ValidateJwsHeader},
         jwt::{ClaimSet, ExpirationTime, IssuedAt, NotBefore},
         ClaimsValidity, DateTimeProvider, InvalidClaims, Jws, JwsBuf, JwsPayload,
@@ -199,35 +198,6 @@ impl DateTimeProvider for VerificationParams<'_> {
 }
 
 impl ValidateJwsHeader<VerificationParams<'_>> for JwtProofBody {}
-
-impl ValidateCoseHeader<VerificationParams<'_>> for JwtProofBody {
-    fn validate_cose_headers(
-        &self,
-        _params: &VerificationParams<'_>,
-        _protected: &ssi::claims::cose::ProtectedHeader,
-        _unprotected: &ssi::claims::cose::Header,
-    ) -> ClaimsValidity {
-        // TODO validate key controller.
-        // `ssi` doesn't provide the necessary tools right now.
-
-        // if let Some(jwk) = &params.controller_jwk {
-        //     if jwk != &self.controller.jwk {
-        //         return Err(VerificationError::InvalidJWK);
-        //     }
-        // }
-
-        // if let Some(did) = &params.controller_did {
-        //     if self.controller.vm.is_none() {
-        //         return Err(VerificationError::InvalidDID {
-        //             expected: did.to_string(),
-        //             actual: format!("{:?}", self.controller.vm),
-        //         });
-        //     }
-        // }
-
-        Ok(())
-    }
-}
 
 impl<S> ValidateClaims<VerificationParams<'_>, S> for JwtProofBody {
     fn validate_claims(&self, params: &VerificationParams<'_>, _proof: &S) -> ClaimsValidity {

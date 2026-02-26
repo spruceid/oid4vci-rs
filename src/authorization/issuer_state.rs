@@ -5,7 +5,9 @@ use open_auth2::{
     transport::HttpClient,
 };
 use serde::Serialize;
+use serde_with::skip_serializing_none;
 
+#[skip_serializing_none]
 #[derive(Serialize)]
 pub struct WithIssuerState<'a, T> {
     pub issuer_state: Option<&'a str>,

@@ -40,7 +40,7 @@ pub enum ClientError {
     MissingTokenEndpoint,
 
     #[error("authorization failed")]
-    Authorization,
+    Authorization(String),
 
     /// The wallet is lost and doesn't know what credential to pick.
     #[error("ambiguous credential offer")]
@@ -48,4 +48,10 @@ pub enum ClientError {
 
     #[error("{0}")]
     Other(String),
+}
+
+impl ClientError {
+    pub fn authorization(e: impl ToString) -> Self {
+        Self::Authorization(e.to_string())
+    }
 }

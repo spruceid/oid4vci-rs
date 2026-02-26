@@ -232,7 +232,7 @@ pub trait Oid4vciClient:
                             .with_dpop(None, None)
                             .send(http_client)
                             .await
-                            .map_err(|_| ClientError::Authorization)?;
+                            .map_err(ClientError::authorization)?;
 
                         Ok(CredentialTokenState::Ready(CredentialToken {
                             credential_offer,

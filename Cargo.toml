@@ -5,10 +5,10 @@ authors = ["Spruce Systems, Inc."]
 edition = "2021"
 license = "Apache-2.0 OR MIT"
 description = "OpenID for Verifiable Credentials Issuance"
-repository = "https://github.com/spruceid/open-auth2-rs"
+repository = "https://github.com/spruceid/oid4vci-rs"
 
 [features]
-# Support for `reqwest` in the `oauth2` library.
+# Support for `reqwest` in the `open-oauth2` library.
 reqwest = ["open-auth2/reqwest"]
 
 # MSO mDoc encoding/decoding with the `isomdl` library.

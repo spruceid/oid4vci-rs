@@ -74,6 +74,3 @@ pub type ProfileCredentialAuthorizationDetailsResponse<P> =
 pub type ProfileCredentialRequest<P> = CredentialRequest<<P as Profile>::RequestParams>;
 
 pub type ProfileCredentialResponse<P> = CredentialResponse<<P as Profile>::Credential>;
-
-// pub type ProfileAuthorizationRequestParams<P> =
-//     AuthorizationRequestParams<<P as Profile>::AuthorizationParams>;

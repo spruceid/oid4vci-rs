@@ -136,12 +136,12 @@ pub enum NotificationEventType {
     #[serde(rename = "credential_accepted")]
     CredentialAccepted,
 
-    /// Credential issuance was unsuccessful because of a user action.
+    /// Credential issuance was unsuccessful for any reason other than a user
+    /// action.
     #[serde(rename = "credential_failure")]
     CredentialFailure,
 
-    /// Credential issuance was unsuccessful for any reason other than a user
-    /// action.
+    /// Credential issuance was unsuccessful because of a user action.
     #[serde(rename = "credential_deleted")]
     CredentialDeleted,
 }

@@ -234,18 +234,7 @@ impl DateTimeProvider for ClientAttestationPopVerificationParams<'_> {
     }
 }
 
-impl ValidateJwsHeader<ClientAttestationPopVerificationParams<'_>> for ClientAttestation {}
-
-impl ValidateCoseHeader<ClientAttestationPopVerificationParams<'_>> for ClientAttestationPop {
-    fn validate_cose_headers(
-        &self,
-        _params: &ClientAttestationPopVerificationParams<'_>,
-        _protected: &ssi::claims::cose::ProtectedHeader,
-        _unprotected: &ssi::claims::cose::Header,
-    ) -> ClaimsValidity {
-        Ok(())
-    }
-}
+impl ValidateJwsHeader<ClientAttestationPopVerificationParams<'_>> for ClientAttestationPop {}
 
 impl<S> ValidateClaims<ClientAttestationPopVerificationParams<'_>, S> for ClientAttestationPop {
     fn validate_claims(
@@ -278,40 +267,6 @@ impl<S> ValidateClaims<ClientAttestationPopVerificationParams<'_>, S> for Client
         Ok(())
     }
 }
-
-// #[derive(Debug, Clone)]
-// pub struct ClientAttestationConfig<S> {
-//     pub client_attestation: JwsBuf,
-//     pub pop_signer: S,
-// }
-
-// impl<S> ClientAttestationConfig<S> {
-//     pub fn new(client_attestation: JwsBuf, pop_signer: S) -> Self {
-//         Self {
-//             client_attestation,
-//             pop_signer,
-//         }
-//     }
-
-//     pub async fn generate_pop(
-//         &self,
-//         iss: ClientId,
-//         aud: String,
-//         challenge: Option<String>,
-//     ) -> Result<JwsBuf, SignatureError>
-//     where
-//         S: JwsSigner,
-//     {
-//         ClientAttestationPop::new(
-//             iss,
-//             aud,
-//             Alphanumeric.sample_string(&mut rng(), 30),
-//             challenge,
-//         )
-//         .sign(&self.pop_signer)
-//         .await
-//     }
-// }
 
 #[derive(Debug, Clone)]
 pub struct ClientAttestationAndPop {

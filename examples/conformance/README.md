@@ -1,5 +1,14 @@
 # Conformance Tests
 
+## Prerequisites
+
+You'll need the following:
+- `step-cli` (called `step` on macOS).
+- `jq`
+- `sponge`
+
+## Running the tests
+
 1. Go to the OpenID Foundation conformance suite website:
 
   <https://demo.certification.openid.net/>

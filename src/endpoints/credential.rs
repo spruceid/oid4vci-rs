@@ -342,16 +342,16 @@ mod tests {
     #[test]
     fn example_credential_response_object() {
         let _: ImmediateCredentialResponse = serde_json::from_value(json!({
-            "format": "jwt_vc_json",
-            "credential": "LUpixVCWJk0eOt4CXQe1NXK....WZwmhmn9OQp6YxX0a2L",
+            "credentials": [{"credential": "LUpixVCWJk0eOt4CXQe1NXK....WZwmhmn9OQp6YxX0a2L"}]
         }))
         .unwrap();
     }
 
     #[test]
     fn example_credential_deferred_response_object() {
-        let _: ImmediateCredentialResponse = serde_json::from_value(json!({
+        let _: DeferredCredentialResponse = serde_json::from_value(json!({
             "transaction_id": "8xLOxBtZp8",
+            "interval": 12
         }))
         .unwrap();
     }

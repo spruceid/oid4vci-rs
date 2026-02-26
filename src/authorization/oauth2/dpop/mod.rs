@@ -46,7 +46,7 @@ pub const DPOP_JWT_TYP: &str = "dpop+jwt";
 
 /// DPoP Proof.
 ///
-/// See: <https://www.ietf.org/archive/id/draft-ietf-oauth-attestation-based-client-auth-07.html#name-client-attestation-jwt>
+/// See: <https://www.rfc-editor.org/rfc/rfc9449#section-4.2>
 #[skip_serializing_none]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DpopProof {

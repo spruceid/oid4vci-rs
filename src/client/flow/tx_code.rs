@@ -43,13 +43,7 @@ impl<C: Oid4vciClient> TxCodeRequired<C> {
         http_client: &impl HttpClient,
         tx_code: String,
     ) -> Result<CredentialToken<C::Profile>, ClientError> {
-        // let dpop_http_client = http_client.with_dpop(&self.client, None, None);
-
-        // let attested_http_client = dpop_http_client
-        //     .attested(&self.client, &self.authorization_server_metadata)
-        //     .await?;
-
-        let authorization_endpoint = TokenEndpoint::new(
+        let token_endpoint = TokenEndpoint::new(
             &self.client,
             self.authorization_server_metadata
                 .token_endpoint
@@ -57,13 +51,13 @@ impl<C: Oid4vciClient> TxCodeRequired<C> {
                 .ok_or(ClientError::MissingTokenEndpoint)?,
         );
 
-        let response = authorization_endpoint
+        let response = token_endpoint
             .exchange_pre_authorized_code(self.pre_authorized_code, Some(tx_code))
             .with_client_attestation(&self.authorization_server_metadata)
             .with_dpop(None, None)
             .send(http_client)
             .await
-            .map_err(|_| ClientError::Authorization)?;
+            .map_err(ClientError::authorization)?;
 
         Ok(CredentialToken {
             credential_offer: self.credential_offer,

@@ -131,7 +131,6 @@ pub mod issuer;
 pub mod offer;
 pub mod profile;
 pub mod proof;
-pub mod response;
 #[cfg(feature = "axum")]
 pub mod server;
 pub mod util;
