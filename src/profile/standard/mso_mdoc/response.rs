@@ -8,7 +8,7 @@ use isomdl::definitions::IssuerSigned;
 ///
 /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#appendix-A.2.4>
 ///
-/// [`CredentialResponse`]: crate::response::CredentialResponse
+/// [`CredentialResponse`]: crate::endpoints::credential::CredentialResponse
 pub fn encode_mso_mdoc(input: &IssuerSigned) -> serde_json::Value {
     let cbor_bytes = isomdl::cbor::to_vec(input)
         // UNWRAP SAFETY: `IssuerSigned` can be encoded as CBOR.
@@ -23,7 +23,7 @@ pub fn encode_mso_mdoc(input: &IssuerSigned) -> serde_json::Value {
 ///
 /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#appendix-A.2.4>
 ///
-/// [`CredentialResponse`]: crate::response::CredentialResponse
+/// [`CredentialResponse`]: crate::endpoints::credential::CredentialResponse
 pub fn decode_mso_mdoc(input: &serde_json::Value) -> Result<IssuerSigned, InvalidMsoMdoc> {
     let cbor_bytes = URL_SAFE
         .decode(input.as_str().ok_or(InvalidMsoMdoc::NotAString)?)

@@ -2,7 +2,7 @@
 mod tests {
     use serde_json::json;
 
-    use crate::response::ImmediateCredentialResponse;
+    use crate::endpoints::credential::ImmediateCredentialResponse;
 
     #[test]
     fn jwt_roundtrip() {

@@ -2,11 +2,10 @@ use std::collections::HashMap;
 
 use indexmap::IndexMap;
 use iref::UriBuf;
-use oauth2::{AuthUrl, ClientId, Scope, TokenUrl};
 use oid4vci::{
     authorization::{
         authorization_details::CredentialAuthorizationDetailsResponse,
-        server::AuthorizationServerMetadata,
+        server::Oid4vciAuthorizationServerMetadata,
     },
     issuer::{
         metadata::{CredentialConfiguration, CredentialDisplay, CredentialIssuerDisplay},
@@ -14,6 +13,7 @@ use oid4vci::{
     },
     profile::{dc_sd_jwt::DcSdJwtFormatMetadata, StandardCredentialFormatMetadata},
 };
+use open_auth2::{ClientId, ScopeBuf};
 use serde::Deserialize;
 use ssi::{
     claims::{
@@ -58,7 +58,7 @@ pub struct Config {
     pub tx_code: Option<String>,
 
     /// Authorization Server metadata.
-    pub authorization_server_metadata: Option<AuthorizationServerMetadata>,
+    pub authorization_server_metadata: Option<Oid4vciAuthorizationServerMetadata>,
 
     /// Credential configurations.
     pub credential_configurations: HashMap<String, CredentialConfigurationConfig>,
@@ -89,13 +89,13 @@ impl Config {
     }
 
     /// Authorization Endpoint URL.
-    fn authorize_endpoint(&self) -> AuthUrl {
-        AuthUrl::new(format!("{}/authorize", self.credential_issuer())).unwrap()
+    fn authorize_endpoint(&self) -> UriBuf {
+        UriBuf::new(format!("{}/authorize", self.credential_issuer()).into_bytes()).unwrap()
     }
 
     /// Token Endpoint URL.
-    fn token_endpoint(&self) -> TokenUrl {
-        TokenUrl::new(format!("{}/token", self.credential_issuer())).unwrap()
+    fn token_endpoint(&self) -> UriBuf {
+        UriBuf::new(format!("{}/token", self.credential_issuer()).into_bytes()).unwrap()
     }
 
     /// Pushed Authorization Request Endpoint URL.
@@ -104,13 +104,14 @@ impl Config {
     }
 
     /// Default authorization server metadata.
-    pub fn default_authorization_server_metadata(&self) -> AuthorizationServerMetadata {
-        let mut metadata =
-            AuthorizationServerMetadata::new(self.credential_issuer(), self.token_endpoint())
-                .with_authorization_endpoint(self.authorize_endpoint());
+    pub fn default_authorization_server_metadata(&self) -> Oid4vciAuthorizationServerMetadata {
+        let mut metadata: Oid4vciAuthorizationServerMetadata =
+            Oid4vciAuthorizationServerMetadata::new(self.credential_issuer())
+                .with_authorization_endpoint(self.authorize_endpoint())
+                .with_token_endpoint(self.token_endpoint());
 
         if self.par {
-            metadata.pushed_authorization_request_endpoint = Some(self.par_endpoint());
+            metadata.extra.pushed_authorization_request_endpoint = Some(self.par_endpoint());
         }
 
         metadata
@@ -204,7 +205,7 @@ impl Config {
 #[derive(Deserialize)]
 pub struct CredentialConfigurationConfig {
     /// Scope.
-    pub scope: Option<Scope>,
+    pub scope: Option<ScopeBuf>,
 
     /// Display info.
     #[serde(default)]

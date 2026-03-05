@@ -1,10 +1,9 @@
 use serde::{Deserialize, Serialize};
-use ssi_jws::JwsBuf;
-// use ssi::claims::{Invalid, ProofValidationError};
+use ssi::claims::jws::JwsBuf;
 
 pub mod jwt;
 
-pub type ProofSigningAlgValuesSupported = Vec<ssi_jwk::Algorithm>;
+pub type ProofSigningAlgValuesSupported = Vec<ssi::jwk::Algorithm>;
 
 /// Proofs.
 ///
@@ -46,7 +45,6 @@ impl<'de> Deserialize<'de> for Attestation {
     }
 }
 
-#[cfg(feature = "ssi")]
 #[derive(thiserror::Error, Debug)]
 pub enum VerificationError {
     /// Verification failed.

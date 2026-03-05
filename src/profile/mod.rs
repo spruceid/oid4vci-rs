@@ -1,21 +1,18 @@
+use serde::{de::DeserializeOwned, Serialize};
+
 use crate::{
-    authorization::{
-        authorization_details::{
-            CredentialAuthorizationDetailsRequest, CredentialAuthorizationDetailsResponse,
-            CredentialAuthorizationParams,
-        },
-        request::AuthorizationRequestParams,
+    authorization::authorization_details::{
+        CredentialAuthorizationDetailsRequest, CredentialAuthorizationDetailsResponse,
+        CredentialAuthorizationParams,
     },
+    endpoints::credential::{CredentialRequest, CredentialRequestParams, CredentialResponse},
     issuer::{metadata::CredentialFormatMetadata, CredentialIssuerMetadata},
-    request::{CredentialRequest, CredentialRequestParams},
-    response::CredentialResponse,
 };
 
 mod any;
 mod standard;
 
 pub use any::*;
-use serde::{de::DeserializeOwned, Serialize};
 pub use standard::*;
 
 /// Credential profile.
@@ -45,24 +42,23 @@ pub trait Profile: 'static {
 
     /// Credential format authorization details parameters.
     ///
-    /// Format-specific parameters for each
-    /// [`CredentialAuthorizationDetailsObject`].
+    /// Format-specific parameters for each [`AuthorizationDetailsObject`].
     ///
-    /// [`CredentialAuthorizationDetailsObject`]: crate::authorization::CredentialAuthorizationDetailsObject
+    /// [`AuthorizationDetailsObject`]: open_auth2::ext::rar::AuthorizationDetailsObject
     type AuthorizationParams: CredentialAuthorizationParams;
 
     /// Credential format request parameters.
     ///
     /// Format-specific parameters for each [`CredentialRequest`].
     ///
-    /// [`CredentialRequest`]: crate::request::CredentialRequest
+    /// [`CredentialRequest`]: crate::endpoints::credential::CredentialRequest
     type RequestParams: CredentialRequestParams;
 
     /// Credential payload type.
     ///
     /// Data type returned in a [`CredentialResponse`].
     ///
-    /// [`CredentialResponse`]: crate::response::CredentialResponse
+    /// [`CredentialResponse`]: crate::endpoints::credential::CredentialResponse
     type Credential: 'static + Send + Sync + Serialize + DeserializeOwned;
 }
 
@@ -78,6 +74,3 @@ pub type ProfileCredentialAuthorizationDetailsResponse<P> =
 pub type ProfileCredentialRequest<P> = CredentialRequest<<P as Profile>::RequestParams>;
 
 pub type ProfileCredentialResponse<P> = CredentialResponse<<P as Profile>::Credential>;
-
-pub type ProfileAuthorizationRequestParams<P> =
-    AuthorizationRequestParams<<P as Profile>::AuthorizationParams>;

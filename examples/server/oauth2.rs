@@ -1,3 +1,4 @@
+use core::fmt;
 use std::{borrow::Cow, time::Duration};
 
 use axum::{
@@ -7,20 +8,23 @@ use axum::{
 };
 use dashmap::DashMap;
 use iref::UriBuf;
-use oauth2::{
-    url::Url, AccessToken, AuthorizationCode, ClientId, RedirectUrl, StandardTokenResponse,
+use oid4vci::{
+    authorization::server::{Oid4VciAuthorizationServerParams, Oid4vciAuthorizationServerMetadata},
+    client::Oid4vciTokenParams,
 };
-use oid4vci::authorization::{
-    pushed_authorization::PushedAuthorizationResponse,
-    request::CredentialAuthorizationRequestParams,
-    server::{
-        AuthorizationServerMetadata, OAuth2ParServer, OAuth2Server, OAuth2ServerError,
-        ServerAuthorizationRequest,
+use open_auth2::{
+    endpoints::{
+        pushed_authorization::{PushedAuthorizationRequest, PushedAuthorizationResponse},
+        token::TokenResponse,
     },
-    token::{
-        AuthorizationCodeTokenRequest, CredentialTokenParams, PreAuthorizedCodeTokenRequest,
-        RefreshTokenRequest,
+    grant::{
+        authorization_code::{
+            AuthorizationCodeAuthorizationRequest, AuthorizationCodeTokenRequest,
+        },
+        pre_authorized_code::PreAuthorizedCodeTokenRequest,
     },
+    server::{OAuth2ParServer, OAuth2Server, OAuth2ServerError},
+    AccessToken, AccessTokenBuf, ClientIdBuf, CodeBuf, Stateful,
 };
 use rand::{
     distr::{Alphanumeric, SampleString},
@@ -37,9 +41,9 @@ pub struct OAuth2State {
 
     par: DashMap<UriBuf, PushedAuthorization>,
 
-    authorization_code: DashMap<AuthorizationCode, AuthorizationCodeMetadata>,
+    authorization_code: DashMap<CodeBuf, AuthorizationCodeMetadata>,
 
-    access_tokens: DashMap<AccessToken, AccessTokenMetadata>,
+    access_tokens: DashMap<AccessTokenBuf, AccessTokenMetadata>,
 }
 
 impl OAuth2State {
@@ -52,33 +56,31 @@ impl OAuth2State {
     pub fn access_token_metadata(
         &self,
         access_token: &AccessToken,
-    ) -> Option<dashmap::mapref::one::Ref<'_, AccessToken, AccessTokenMetadata>> {
+    ) -> Option<dashmap::mapref::one::Ref<'_, AccessTokenBuf, AccessTokenMetadata>> {
         self.access_tokens.get(access_token)
     }
 }
 
-impl OAuth2Server for Server {
-    type AuthParams = CredentialAuthorizationRequestParams;
-    type TokenRequest = TokenRequest;
-    type TokenType = TokenType;
-    type TokenParams = CredentialTokenParams;
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum AuthorizationRequest {
+    Pushed(PushedAuthorizationRequest),
+    Direct(AuthorizationCodeAuthorizationRequest),
+}
 
-    async fn metadata(&self) -> Result<Cow<'_, AuthorizationServerMetadata>, OAuth2ServerError> {
-        Ok(match &self.config.authorization_server_metadata {
-            Some(metadata) => Cow::Borrowed(metadata),
-            None => Cow::Owned(self.config.default_authorization_server_metadata()),
-        })
-    }
-
-    async fn authorize(
+impl Server {
+    async fn authorize_direct(
         &self,
-        request: ServerAuthorizationRequest<Self::AuthParams>,
-    ) -> impl IntoResponse {
-        match request.redirect_url(None).cloned() {
+        Stateful {
+            state,
+            value: request,
+        }: Stateful<AuthorizationCodeAuthorizationRequest>,
+    ) -> Result<Redirect, Error> {
+        match request.redirect_url(None).map(ToOwned::to_owned) {
             Some(redirect_uri) => {
-                let client_id = request.client_id().clone();
-                let code = AuthorizationCode::new(Alphanumeric.sample_string(&mut rng(), 30));
-                let full_redirect_uri = request.grant(code.clone(), None).unwrap();
+                let client_id = request.client_id.clone();
+                let code = CodeBuf::new(Alphanumeric.sample_string(&mut rng(), 30)).unwrap();
+                let full_redirect_uri = request.grant(state, code.clone(), None).unwrap();
 
                 let m = AuthorizationCodeMetadata {
                     client_id,
@@ -92,11 +94,63 @@ impl OAuth2Server for Server {
             None => Err(Error::MissingRedirectUrl),
         }
     }
+}
+
+impl OAuth2Server for Server {
+    type Metadata = Oid4VciAuthorizationServerParams;
+    type AuthorizationRequest = AuthorizationRequest;
+    type TokenRequest = TokenRequest;
+    type TokenResponse = TokenResponse<TokenType, Oid4vciTokenParams>;
+
+    async fn metadata(
+        &self,
+    ) -> Result<Cow<'_, Oid4vciAuthorizationServerMetadata>, OAuth2ServerError> {
+        Ok(match &self.config.authorization_server_metadata {
+            Some(metadata) => Cow::Borrowed(metadata),
+            None => Cow::Owned(self.config.default_authorization_server_metadata()),
+        })
+    }
+
+    async fn authorize(
+        &self,
+        Stateful {
+            state,
+            value: request,
+        }: Stateful<AuthorizationRequest>,
+    ) -> impl IntoResponse {
+        match request {
+            AuthorizationRequest::Direct(request) => {
+                self.authorize_direct(Stateful {
+                    state,
+                    value: request,
+                })
+                .await
+            }
+            AuthorizationRequest::Pushed(request) => {
+                match self.oauth2.par.remove(&request.request_uri) {
+                    Some((_, pa)) => {
+                        if pa.expires_at < UtcDateTime::now() {
+                            return Err(Error::Expired);
+                        }
+
+                        if *pa.request.client_id != request.client_id {
+                            return Err(Error::Unauthorized);
+                        }
+
+                        self.authorize_direct(pa.request).await
+                    }
+                    None => Err(Error::UnknownRequestUrl),
+                }
+            }
+        }
+    }
 
     async fn token(
         &self,
         token_request: Self::TokenRequest,
-    ) -> Result<StandardTokenResponse<Self::TokenParams, Self::TokenType>, OAuth2ServerError> {
+    ) -> Result<Self::TokenResponse, OAuth2ServerError> {
+        log::debug!("token request: {token_request:#?}");
+
         let m = match token_request {
             TokenRequest::PreAuthorizedCode(request) => {
                 let m = self
@@ -131,30 +185,33 @@ impl OAuth2Server for Server {
                 }
 
                 AccessTokenMetadata {
-                    client_id: Some(request.client_id),
+                    client_id: request.client_id,
                 }
             }
-            _ => return Err(OAuth2ServerError::InvalidGrant),
         };
 
-        let access_token = AccessToken::new(Alphanumeric.sample_string(&mut rng(), 30));
-        self.oauth2.access_tokens.insert(access_token.clone(), m);
+        let access_token = AccessTokenBuf::new(Alphanumeric.sample_string(&mut rng(), 30)).unwrap();
+        self.oauth2.access_tokens.insert(access_token.to_owned(), m);
 
-        Ok(StandardTokenResponse::new(
+        Ok(TokenResponse::new(
             access_token,
             TokenType::Bearer,
-            CredentialTokenParams {
-                authorization_details: self.config.authorization_details(),
+            Oid4vciTokenParams {
+                authorization_details: self.config.authorization_details().into(),
             },
         ))
     }
 }
 
 impl OAuth2ParServer for Server {
+    type PushedAuthorizationRequest = AuthorizationCodeAuthorizationRequest;
+
     async fn par(
         &self,
-        request: ServerAuthorizationRequest<Self::AuthParams>,
+        request: Stateful<Self::PushedAuthorizationRequest>,
     ) -> Result<PushedAuthorizationResponse, OAuth2ServerError> {
+        log::info!("push request: {request:#?}");
+
         let request_uri = UriBuf::new(
             format!(
                 "urn:ietf:params:oauth:request_uri:{}",
@@ -179,23 +236,6 @@ impl OAuth2ParServer for Server {
             expires_in,
         })
     }
-
-    async fn par_authorize(&self, client_id: ClientId, request_uri: UriBuf) -> impl IntoResponse {
-        match self.oauth2.par.remove(&request_uri) {
-            Some((_, pa)) => {
-                if pa.expires_at < UtcDateTime::now() {
-                    return Err(Error::Expired);
-                }
-
-                if *pa.request.client_id() != client_id {
-                    return Err(Error::Unauthorized);
-                }
-
-                Ok(self.authorize(pa.request).await.into_response())
-            }
-            None => Err(Error::UnknownRequestUrl),
-        }
-    }
 }
 
 pub struct PreAuthorizedCodeMetadata {
@@ -203,23 +243,24 @@ pub struct PreAuthorizedCodeMetadata {
 }
 
 pub struct AuthorizationCodeMetadata {
-    client_id: ClientId,
-    redirect_uri: RedirectUrl,
+    client_id: ClientIdBuf,
+    redirect_uri: UriBuf,
 }
 
 pub struct PushedAuthorization {
-    request: ServerAuthorizationRequest<CredentialAuthorizationRequestParams>,
+    request: Stateful<AuthorizationCodeAuthorizationRequest>,
     expires_at: UtcDateTime,
 }
 
 impl AuthorizationCodeMetadata {
     fn check_request(&self, request: &AuthorizationCodeTokenRequest) -> bool {
-        request.client_id == self.client_id && request.redirect_uri == self.redirect_uri
+        request.client_id.as_ref() == Some(&self.client_id)
+            && request.redirect_uri.as_ref() == Some(&self.redirect_uri)
     }
 }
 
 pub struct AccessTokenMetadata {
-    pub client_id: Option<ClientId>,
+    pub client_id: Option<ClientIdBuf>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -227,7 +268,6 @@ pub struct AccessTokenMetadata {
 pub enum TokenRequest {
     AuthorizationCode(AuthorizationCodeTokenRequest),
     PreAuthorizedCode(PreAuthorizedCodeTokenRequest),
-    RefreshToken(RefreshTokenRequest),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
@@ -235,9 +275,21 @@ pub enum TokenType {
     Bearer,
 }
 
-impl oauth2::TokenType for TokenType {}
+impl TokenType {
+    fn as_str(&self) -> &'static str {
+        "Bearer"
+    }
+}
 
-struct Redirect(Url);
+impl fmt::Display for TokenType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.as_str().fmt(f)
+    }
+}
+
+impl open_auth2::endpoints::token::TokenType for TokenType {}
+
+struct Redirect(UriBuf);
 
 impl IntoResponse for Redirect {
     fn into_response(self) -> Response {

@@ -9,15 +9,14 @@ use iref::{
     uri::{Query, QueryBuf, SchemeBuf},
     Uri, UriBuf,
 };
-use oauth2::{
-    http::{self, header::ACCEPT, HeaderValue, Method, StatusCode},
-    AsyncHttpClient, SyncHttpClient,
+use open_auth2::{
+    client::OAuth2ClientError,
+    http,
+    transport::{expect_content_type, HttpClient, APPLICATION_JSON},
 };
 use pct_str::{PctString, URIReserved};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
-
-use crate::util::http::{check_content_type, HttpError, MIME_TYPE_JSON};
 
 mod grant;
 
@@ -26,15 +25,15 @@ pub use grant::*;
 /// Credential Offer-related errors.
 #[derive(Debug, thiserror::Error)]
 pub enum CredentialOfferError {
+    #[error(transparent)]
+    OAuth2(#[from] OAuth2ClientError),
+
     #[error("credential offer is not an URI")]
     InvalidUri,
 
     /// Credential Offer could not be decoded.
     #[error("could not decode credential offer: {0}")]
     Decoding(String),
-
-    #[error(transparent)]
-    Http(#[from] HttpError),
 }
 
 /// Credential Offer.
@@ -122,47 +121,20 @@ impl CredentialOffer {
         result
     }
 
-    /// Resolves this credential offer into its parameters.
-    ///
-    /// This will either return the `credential_offer` value, or dereference the
-    /// `credential_offer_uri` URL.
-    pub fn resolve<C>(
-        self,
-        http_client: &C,
-    ) -> Result<CredentialOfferParameters, CredentialOfferError>
-    where
-        C: ?Sized + SyncHttpClient,
-    {
-        match self {
-            CredentialOffer::Value(params) => Ok(params),
-            CredentialOffer::Reference(uri) => {
-                let request = Self::build_request(&uri);
-                let response = http_client.call(request).map_err(HttpError::query(&uri))?;
-                Self::handle_response(&uri, response).map_err(Into::into)
-            }
-        }
-    }
-
     /// Resolves this credential offer into its parameters, asynchronously.
     ///
     /// This will either return the `credential_offer` value, or dereference the
     /// `credential_offer_uri` URL.
-    pub async fn resolve_async<H>(
+    pub async fn resolve(
         self,
-        http_client: &H,
-    ) -> Result<CredentialOfferParameters, CredentialOfferError>
-    where
-        H: ?Sized + for<'c> AsyncHttpClient<'c>,
-    {
+        http_client: &impl HttpClient,
+    ) -> Result<CredentialOfferParameters, CredentialOfferError> {
         match self {
             CredentialOffer::Value(params) => Ok(params),
             CredentialOffer::Reference(uri) => {
                 let request = Self::build_request(&uri);
-                let response = http_client
-                    .call(request)
-                    .await
-                    .map_err(HttpError::query(&uri))?;
-                Self::handle_response(&uri, response).map_err(Into::into)
+                let response = http_client.send(request).await?;
+                Self::handle_response(response).map_err(Into::into)
             }
         }
     }
@@ -170,24 +142,23 @@ impl CredentialOffer {
     fn build_request(url: &Uri) -> http::Request<Vec<u8>> {
         http::Request::builder()
             .uri(url.as_str())
-            .method(Method::GET)
-            .header(ACCEPT, HeaderValue::from_static(MIME_TYPE_JSON))
+            .method(http::Method::GET)
+            .header(http::header::ACCEPT, APPLICATION_JSON)
             .body(Vec::new())
             // SAFETY: Request is always valid.
             .unwrap()
     }
 
     fn handle_response(
-        uri: &Uri,
         response: http::Response<Vec<u8>>,
-    ) -> Result<CredentialOfferParameters, HttpError> {
+    ) -> Result<CredentialOfferParameters, OAuth2ClientError> {
         let status = response.status();
-        if status != StatusCode::OK {
-            return Err(HttpError::ServerError(uri.to_owned(), status));
+        if status != http::StatusCode::OK {
+            return Err(OAuth2ClientError::ServerError(status));
         }
 
-        check_content_type(uri, response.headers(), MIME_TYPE_JSON)?;
-        serde_json::from_slice(response.body()).map_err(HttpError::json(uri))
+        expect_content_type(response.headers(), &APPLICATION_JSON)?;
+        serde_json::from_slice(response.body()).map_err(OAuth2ClientError::response)
     }
 }
 
@@ -225,6 +196,8 @@ pub struct CredentialOfferParameters {
     /// [`CredentialIssuerMetadata::credential_configurations_supported`].
     ///
     /// This array must not be empty.
+    ///
+    /// [`CredentialIssuerMetadata::credential_configurations_supported`]: crate::issuer::CredentialIssuerMetadata::credential_configurations_supported
     pub credential_configuration_ids: Vec<String>, // TODO enforce non-emptiness.
 
     /// Grant Types the Credential Issuer's Authorization Server is prepared to
@@ -255,14 +228,15 @@ mod axum {
         http::header::CONTENT_TYPE,
         response::{IntoResponse, Response},
     };
+    use open_auth2::transport::APPLICATION_JSON;
 
     use super::*;
 
     impl IntoResponse for CredentialOfferParameters {
         fn into_response(self) -> Response {
             Response::builder()
-                .status(StatusCode::OK)
-                .header(CONTENT_TYPE, MIME_TYPE_JSON)
+                .status(http::StatusCode::OK)
+                .header(CONTENT_TYPE, APPLICATION_JSON)
                 .body(Body::from(serde_json::to_vec(&self).unwrap()))
                 .unwrap()
         }

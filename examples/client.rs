@@ -3,6 +3,7 @@ use std::{
     path::PathBuf,
     process::ExitCode,
     sync::{Arc, OnceLock},
+    time::Duration,
 };
 
 use anyhow::{bail, Context};
@@ -14,28 +15,37 @@ use hyper::{
 };
 use hyper_util::rt::TokioIo;
 use iref::UriBuf;
-use oauth2::{reqwest, url::Url, ClientId, RedirectUrl};
 use oid4vci::{
-    authorization::{
-        response::{AuthorizationResponse, AuthorizationResponseResult},
-        Stateful,
-    },
+    authorization::oauth2::client_attestation::ClientAttestation,
     client::{
         AuthorizationCodeRequired, CredentialToken, CredentialTokenState, Oid4vciClient,
         SimpleOid4vciClient, TxCodeRequired,
     },
+    endpoints::credential::CredentialResponse,
     proof::{jwt::create_jwt_proof, Proofs},
-    response::CredentialResponse,
     CredentialOffer,
 };
-use ssi::{dids::DIDJWK, JWK};
+use open_auth2::{
+    grant::authorization_code::AuthorizationCodeAuthorizationResponse,
+    reqwest,
+    server::{ErrorResponse, ServerResult},
+    ClientIdBuf, Stateful,
+};
+use ssi::{
+    claims::{
+        jws::{JwsSigner, JwsSignerInfo},
+        JwsPayload, SignatureError,
+    },
+    dids::DIDJWK,
+    JWK,
+};
 use tokio::{fs, select, sync::oneshot};
 
 /// OID4VCI client command line interface.
 #[derive(Parser)]
 struct Params {
     /// Credential offer URL.
-    offer_url: UriBuf,
+    offer_url: Option<UriBuf>,
 
     /// Sets the expected Transaction Code for Pre-Authorized grants.
     ///
@@ -55,6 +65,12 @@ struct Params {
     /// If unset, a random JWK will be generated.
     #[arg(short = 'k', long)]
     jwk: Option<PathBuf>,
+
+    /// Path to a file containing the client attester's JWK.
+    ///
+    /// If unset, client attestation is disabled.
+    #[arg(short = 't', long)]
+    attester_jwk: Option<PathBuf>,
 
     /// Port (for authorization).
     #[arg(short, long, default_value = "1234")]
@@ -82,7 +98,6 @@ async fn main() -> ExitCode {
 }
 
 async fn run(params: Params) -> Result<(), anyhow::Error> {
-    let credential_offer = CredentialOffer::from_uri(&params.offer_url)?;
     let http_client = reqwest::Client::new();
 
     let mut jwk = match &params.jwk {
@@ -90,19 +105,66 @@ async fn run(params: Params) -> Result<(), anyhow::Error> {
         None => JWK::generate_p256(),
     };
 
+    jwk.key_id = None;
     let did_url = DIDJWK::generate_url(&jwk);
     let did = did_url.did();
     jwk.key_id = Some(did_url.as_str().to_owned());
+    jwk.public_key_use = Some("sig".to_owned());
+    let client_id = ClientIdBuf::new(did.as_str().to_owned()).unwrap();
 
-    eprintln!("client id: {did}");
+    eprintln!("client id: {}", client_id.as_str());
 
-    let client = SimpleOid4vciClient::new(ClientId::new(did.as_str().to_owned()));
+    let client_attestation = match &params.attester_jwk {
+        Some(path) => {
+            let mut attester_jwk: JWK = fs::read_to_string(path).await?.parse()?;
 
-    let offer = client
-        .resolve_offer_async(&http_client, credential_offer)
-        .await?;
+            let mut did_jwk = attester_jwk.clone();
+            did_jwk.key_id = None;
+            did_jwk.x509_certificate_chain = None; // Just so the DID isn't too long.
+            let attester_kid = DIDJWK::generate_url(&did_jwk);
+            attester_jwk.key_id = Some(attester_kid.clone().into_string());
+            let attester_id = attester_kid.did().as_str();
 
-    let state = client.accept_offer_async(&http_client, offer).await?;
+            eprintln!("attester id: {attester_id}");
+
+            Some(
+                ClientAttestation::new(
+                    attester_id.to_owned(),
+                    client_id.clone(),
+                    Duration::from_hours(24),
+                    jwk.to_public(),
+                )
+                .sign(&attester_jwk)
+                .await?,
+            )
+        }
+        None => None,
+    };
+
+    let client = SimpleOid4vciClient::new(client_id)
+        .with_signer(jwk.clone())
+        .with_public_jwk(jwk.to_public())
+        .with_client_attestation_opt(client_attestation);
+
+    let offer_url = match &params.offer_url {
+        Some(offer_url) => Cow::Borrowed(offer_url.as_uri()),
+        None => {
+            let mut offer_url = String::new();
+            println!("Enter the credential offer URL:");
+            std::io::stdin().read_line(&mut offer_url).unwrap();
+            Cow::Owned(
+                UriBuf::new(offer_url.trim().to_owned().into_bytes())
+                    .ok()
+                    .context("invalid offer URL")?,
+            )
+        }
+    };
+
+    let credential_offer = CredentialOffer::from_uri(&offer_url)?;
+
+    let offer = client.resolve_offer(&http_client, credential_offer).await?;
+
+    let state = client.accept_offer(&http_client, offer).await?;
 
     let credential_token = match state {
         CredentialTokenState::RequiresAuthorizationCode(state) => {
@@ -116,14 +178,14 @@ async fn run(params: Params) -> Result<(), anyhow::Error> {
 
     let credential_id = credential_token.default_credential_id()?;
 
-    let nonce = credential_token.get_nonce_async(&http_client).await?;
+    let nonce = client.get_nonce(&credential_token, &http_client).await?;
 
     let proof = create_jwt_proof(
         Some(did.as_str().to_owned()),
         credential_token.credential_issuer().to_owned(),
         None,
         nonce,
-        &jwk,
+        EmbedPublicJwk(&jwk),
     )
     .await
     .unwrap();
@@ -131,7 +193,7 @@ async fn run(params: Params) -> Result<(), anyhow::Error> {
     let proofs = Proofs::Jwt(vec![proof]);
 
     let response = client
-        .exchange_credential_async(&http_client, &credential_token, credential_id, Some(proofs))
+        .exchange_credential(&http_client, &credential_token, credential_id, Some(proofs))
         .await?;
 
     match response {
@@ -162,19 +224,17 @@ async fn require_authentication<C: Oid4vciClient>(
     let authority = format!("127.0.0.1:{}", params.port);
 
     let redirect_url = match &params.url {
-        Some(url) => RedirectUrl::new(url.as_str().to_owned()).unwrap(),
-        None => RedirectUrl::new(format!("http://{authority}")).unwrap(),
+        Some(url) => UriBuf::new(url.as_str().to_owned().into_bytes()).unwrap(),
+        None => UriBuf::new(format!("http://{authority}").into_bytes()).unwrap(),
     };
 
     let listener = tokio::net::TcpListener::bind(&authority).await?;
-    let authentication = authentication
-        .proceed_async(http_client, redirect_url)
-        .await?;
+    let authentication = authentication.proceed(http_client, redirect_url).await?;
 
     // Choose between auto auth, or manual auth.
     let (abort_sender, abort) = oneshot::channel();
     if auto_auth {
-        let redirect_url = authentication.redirect_url().clone();
+        let redirect_url = authentication.redirect_url().to_owned();
         tokio::spawn(async move {
             if let Err(e) = auto_authenticate(redirect_url).await {
                 let _ = abort_sender.send(e);
@@ -196,25 +256,24 @@ async fn require_authentication<C: Oid4vciClient>(
         io,
         service_fn(|request: Request<hyper::body::Incoming>| {
             let authorization_code = authorization_code.clone();
-            let client_state = authentication.state().secret().clone();
+            let client_state = authentication.state().to_owned();
             async move {
-                let response =
-                    match serde_urlencoded::from_str(request.uri().query().unwrap_or_default()) {
-                        Ok(Stateful {
-                            state: Some(state),
-                            value: AuthorizationResponseResult::Ok(AuthorizationResponse { code }),
-                        }) if state == client_state => {
-                            let _ = authorization_code.set(code);
-                            html_ok()
-                        }
-                        Ok(Stateful {
-                            value: AuthorizationResponseResult::Err(response),
-                            state: Some(state),
-                        }) if state == client_state => {
-                            html_err(response.error_description().map(String::as_str))
-                        }
-                        _ => html_err(None),
-                    };
+                let response = match serde_urlencoded::from_str(
+                    request.uri().query().unwrap_or_default(),
+                ) {
+                    Ok(Stateful {
+                        state: Some(state),
+                        value: ServerResult::Ok(AuthorizationCodeAuthorizationResponse { code }),
+                    }) if state == client_state => {
+                        let _ = authorization_code.set(code);
+                        html_ok()
+                    }
+                    Ok(Stateful {
+                        value: ServerResult::Err(response),
+                        state: Some(state),
+                    }) if state == client_state => html_err(Some(response)),
+                    _ => html_err(None),
+                };
 
                 Result::<_, anyhow::Error>::Ok(Response::new(Full::new(Bytes::from(response))))
             }
@@ -240,16 +299,16 @@ async fn require_authentication<C: Oid4vciClient>(
     eprintln!("Authenticated!");
 
     authentication
-        .proceed_async(http_client, authorization_code)
+        .proceed(http_client, authorization_code)
         .await
         .map_err(Into::into)
 }
 
-async fn auto_authenticate(url: Url) -> Result<(), anyhow::Error> {
+async fn auto_authenticate(url: UriBuf) -> Result<(), anyhow::Error> {
     let client = reqwest::Client::new();
 
-    eprintln!("Sending authentication query...");
-    let response = client.get(url).send().await?;
+    eprintln!("Sending authentication query at `{url}`...");
+    let response = client.get(url.as_str()).send().await?;
 
     if response.status() != StatusCode::FOUND {
         bail!("expected redirection")
@@ -276,10 +335,13 @@ fn html_ok() -> String {
         .to_owned()
 }
 
-fn html_err(message: Option<&str>) -> String {
+fn html_err(response: Option<ErrorResponse>) -> String {
+    let description = response
+        .as_ref()
+        .and_then(|r| r.error_description.as_deref());
     format!(
         "<html><body><h1>Error</h1><p>{}</p></body></html>",
-        message.unwrap_or("Unknown error")
+        description.unwrap_or("Unknown error")
     )
 }
 
@@ -287,11 +349,11 @@ fn html_err(message: Option<&str>) -> String {
 //
 // If the `tx_code` is set to `None`, the user will be prompted to manually
 // enter a code.
-async fn require_tx_code(
+async fn require_tx_code<C: Oid4vciClient>(
     http_client: &reqwest::Client,
-    state: TxCodeRequired,
+    state: TxCodeRequired<C>,
     tx_code: Option<&str>,
-) -> Result<CredentialToken, anyhow::Error> {
+) -> Result<CredentialToken<C::Profile>, anyhow::Error> {
     eprintln!("Credential Offer requires an Transaction Code.");
 
     if let Some(description) = &state.tx_code_definition().description {
@@ -301,7 +363,7 @@ async fn require_tx_code(
     let tx_code = match tx_code {
         Some(tx_code) => {
             eprintln!("Using code: {tx_code}");
-            Cow::Borrowed(tx_code)
+            tx_code.to_owned()
         }
         None => {
             eprintln!();
@@ -309,12 +371,27 @@ async fn require_tx_code(
 
             let mut input = String::new();
             std::io::stdin().read_line(&mut input).unwrap();
-            Cow::Owned(input.trim().to_owned())
+            input.trim().to_owned()
         }
     };
 
     state
-        .proceed_async(http_client, &tx_code)
+        .proceed(http_client, tx_code)
         .await
         .map_err(Into::into)
+}
+
+pub struct EmbedPublicJwk<'a>(&'a JWK);
+
+impl<'a> JwsSigner for EmbedPublicJwk<'a> {
+    async fn fetch_info(&self) -> Result<JwsSignerInfo, SignatureError> {
+        let mut info = self.0.fetch_info().await?;
+        info.kid = None; // `kid` and `jwk` are mutually exclusive per spec.
+        info.jwk = Some(self.0.to_public());
+        Ok(info)
+    }
+
+    async fn sign_bytes(&self, signing_bytes: &[u8]) -> Result<Vec<u8>, SignatureError> {
+        self.0.sign_bytes(signing_bytes).await
+    }
 }

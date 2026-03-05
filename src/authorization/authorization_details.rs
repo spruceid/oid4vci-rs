@@ -5,66 +5,10 @@ use std::fmt::Debug;
 
 use indexmap::IndexMap;
 use iref::UriBuf;
-use oauth2::{CodeTokenRequest, ErrorResponse, TokenResponse};
+use open_auth2::ext::rar::AuthorizationDetailsObject;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::{
-    authorization::pre_authorized_code::PreAuthorizedCodeTokenRequest,
-    issuer::metadata::ClaimDescription,
-};
-
-pub trait AuthorizationDetailsObject: Serialize + DeserializeOwned {
-    /// Identifier of the authorization detail type.
-    fn r#type(&self) -> &str;
-}
-
-/// Authorization details object.
-///
-/// Implementors *must* ensure authorization details objects are always
-/// serializable as JSON, otherwise users of this trait may panic.
-pub trait TokenRequestAuthorizationDetails: Sized {
-    /// Specifies the authorization details that the client wants the
-    /// Authorization Server to assign to this access token.
-    fn set_authorization_details<T: AuthorizationDetailsObject>(self, objects: &[T]) -> Self;
-}
-
-impl<'a, TE, TR> TokenRequestAuthorizationDetails for PreAuthorizedCodeTokenRequest<'a, TE, TR>
-where
-    TE: ErrorResponse + 'static,
-    TR: TokenResponse,
-{
-    fn set_authorization_details<T: AuthorizationDetailsObject>(self, objects: &[T]) -> Self {
-        if objects.is_empty() {
-            self
-        } else {
-            self.add_extra_param(
-                "authorization_details",
-                serde_json::to_string(objects)
-                    // UNWRAP SAFETY: All authorization details object can be serialized as JSON.
-                    .unwrap(),
-            )
-        }
-    }
-}
-
-impl<'a, TE, TR> TokenRequestAuthorizationDetails for CodeTokenRequest<'a, TE, TR>
-where
-    TE: ErrorResponse + 'static,
-    TR: TokenResponse,
-{
-    fn set_authorization_details<T: AuthorizationDetailsObject>(self, objects: &[T]) -> Self {
-        if objects.is_empty() {
-            self
-        } else {
-            self.add_extra_param(
-                "authorization_details",
-                serde_json::to_string(objects)
-                    // UNWRAP SAFETY: All authorization details object can be serialized as JSON.
-                    .unwrap(),
-            )
-        }
-    }
-}
+use crate::issuer::metadata::ClaimDescription;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
@@ -124,10 +68,19 @@ pub struct CredentialAuthorizationDetailsResponse<
     pub params: C,
 }
 
+impl<C> AuthorizationDetailsObject for CredentialAuthorizationDetailsResponse<C>
+where
+    C: CredentialAuthorizationParams,
+{
+    fn r#type(&self) -> &str {
+        OPENID_CREDENTIAL
+    }
+}
+
 /// Credential format authorization details parameters.
 ///
 /// Specifies format-specific parameters in a
-/// [`CredentialAuthorizationDetailsObject`].
+/// [`AuthorizationDetailsObject`].
 ///
 /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-using-authorization-details>
 pub trait CredentialAuthorizationParams:

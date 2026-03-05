@@ -1,8 +1,9 @@
 use std::{path::PathBuf, process::ExitCode, sync::Arc};
 
-use ::oid4vci::{authorization::server::OAuth2ParRouter, server::Oid4vciRouter};
+use ::oid4vci::server::Oid4vciRouter;
 use axum::routing::get;
 use clap::Parser;
+use open_auth2::server::{OAuth2ParRouter, OAuth2Router};
 use ssi::JWK;
 use tokio::fs;
 
@@ -83,7 +84,8 @@ async fn run(params: Params) -> Result<(), anyhow::Error> {
     // Setup routes.
     let router = axum::Router::new()
         .route("/health", get(health))
-        .oauth2_par_routes()
+        .oauth2_routes()
+        .oauth2_par_route()
         .oid4vci_routes()
         .route("/offer/new", get(oid4vci::new_credential_offer))
         .route(

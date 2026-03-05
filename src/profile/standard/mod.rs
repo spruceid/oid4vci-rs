@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     authorization::authorization_details::AnyCredentialAuthorizationParams,
+    endpoints::credential::AnyCredentialRequestParams,
     issuer::metadata::{AnyCredentialFormatConfiguration, CredentialFormatMetadata},
-    request::AnyCredentialRequestParams,
 };
 
 use super::Profile;
