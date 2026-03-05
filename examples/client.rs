@@ -386,6 +386,7 @@ pub struct EmbedPublicJwk<'a>(&'a JWK);
 impl<'a> JwsSigner for EmbedPublicJwk<'a> {
     async fn fetch_info(&self) -> Result<JwsSignerInfo, SignatureError> {
         let mut info = self.0.fetch_info().await?;
+        info.kid = None; // `kid` and `jwk` are mutually exclusive per spec.
         info.jwk = Some(self.0.to_public());
         Ok(info)
     }

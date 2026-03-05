@@ -1,5 +1,5 @@
 {
-  "description": "OID4VP 1.0 Final wallet conformance",
+  "description": "OID4VCI 1.0 Final wallet conformance",
   "client": {
     "jwks": {
       "keys": [
