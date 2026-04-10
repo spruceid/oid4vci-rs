@@ -14,16 +14,30 @@ jobs:
   main:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@v2
-      with:
-        cache-on-failure: "true"
-    - name: Build
-      run: cargo build
-    - name: Test
-      run: cargo test
-    - name: Fmt
-      run: cargo fmt -- --check
-    - name: Clippy
-      run: cargo clippy --no-deps
+      - uses: actions/checkout@v4
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: "true"
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-machete
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+
+      - name: Build
+        run: cargo build
+      - name: Test
+        run: cargo test
+      - name: Fmt
+        run: cargo fmt -- --check
+      - name: Clippy
+        run: cargo clippy --no-deps
+
+      - name: Unused dependencies
+        run: cargo machete
+
+      - name: Check dependencies licences are compatible
+        run: cargo deny check licenses
