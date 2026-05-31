@@ -520,6 +520,16 @@ impl OAuth2Server for Server {
                     }
                 };
 
+                // FAPI2 §5.3.2.2: access tokens MUST be sender-constrained. This
+                // issuer uses DPoP (RFC 9449) as its holder-of-key mechanism, so
+                // an authorization_code token request MUST present a DPoP proof —
+                // without one the AS cannot bind the token and rejects the request
+                // rather than issue a bearer token.
+                if proof_jkt.is_none() {
+                    log::warn!("token: missing DPoP proof; FAPI2 requires a holder-of-key (DPoP) proof");
+                    return Err(OAuth2ServerError::InvalidRequest);
+                }
+
                 // RFC 9449 §10.1: if the request was pre-bound at PAR via
                 // `dpop_jkt`, the token proof's key MUST match it.
                 if let Some(par_jkt) = &m.dpop_jkt {
