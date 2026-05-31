@@ -52,7 +52,7 @@ log = "0.4.29"
 
 [dev-dependencies]
 assert-json-diff = "2.0.2"
-tokio = { version = "1.25.0", features = ["macros", "rt-multi-thread", "fs"] }
+tokio = { version = "1.25.0", features = ["macros", "rt-multi-thread", "fs", "io-std", "io-util"] }
 oid4vci = { path = ".", features = ["reqwest", "axum"] }
 clap = { version = "4.5.54", features = ["derive"] }
 env_logger = "0.11.8"
@@ -62,3 +62,15 @@ hyper-util = "0.1.19"
 http-body-util = "0.1.3"
 dashmap = "6.1.0"
 anyhow = "1.0.86"
+
+[[example]]
+name = "wallet-oid4vci-conformance"
+path = "examples/wallet-conformance/wallet-oid4vci-conformance/main.rs"
+
+[[example]]
+name = "wallet-fapi2-conformance"
+path = "examples/wallet-conformance/wallet-fapi2-conformance/main.rs"
+
+# TEMPORARY: Remove and bump the git `rev` once the PR lands.
+[patch."https://github.com/spruceid/open-auth2-rs"]
+open-auth2 = { path = "../open-auth2-rs" }

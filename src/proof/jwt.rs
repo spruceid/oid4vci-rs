@@ -7,7 +7,7 @@ use serde_with::skip_serializing_none;
 use ssi::{
     claims::{
         chrono::Utc,
-        jws::{JwsSigner, ValidateJwsHeader},
+        jws::{JwsSigner, JwsSignerInfo, ValidateJwsHeader},
         jwt::{ClaimSet, ExpirationTime, IssuedAt, NotBefore},
         ClaimsValidity, DateTimeProvider, InvalidClaims, Jws, JwsBuf, JwsPayload,
         ProofValidationError, ResolverProvider, SignatureError, ValidateClaims,
@@ -155,6 +155,30 @@ pub async fn create_jwt_proof(
     };
 
     body.sign(signer).await
+}
+
+/// A [`JwsSigner`] that signs a key proof and embeds the signing key's public
+/// JWK in the protected header, clearing any `kid`.
+///
+/// A `jwt` key proof carries the holder's public key in the JOSE header, where
+/// `jwk` and `kid` are mutually exclusive (OpenID4VCI Appendix F.1). Wrap the
+/// holder's signing [`JWK`] with this so [`create_jwt_proof`] emits a `jwk`
+/// header rather than a `kid`. It is the key-proof counterpart of the DPoP
+/// module's [`DpopSigner`](crate::authorization::oauth2::dpop::DpopSigner).
+pub struct JwkProofSigner<'a>(pub &'a JWK);
+
+impl JwsSigner for JwkProofSigner<'_> {
+    async fn fetch_info(&self) -> Result<JwsSignerInfo, SignatureError> {
+        let mut info = self.0.fetch_info().await?;
+        // `jwk` and `kid` are mutually exclusive (OpenID4VCI Appendix F.1).
+        info.kid = None;
+        info.jwk = Some(self.0.to_public());
+        Ok(info)
+    }
+
+    async fn sign_bytes(&self, signing_bytes: &[u8]) -> Result<Vec<u8>, SignatureError> {
+        self.0.sign_bytes(signing_bytes).await
+    }
 }
 
 /// JWT body for a `jwt` proof.

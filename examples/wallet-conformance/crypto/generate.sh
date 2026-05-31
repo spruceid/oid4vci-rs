@@ -31,7 +31,9 @@ printf $attester_did > attester/did
 $STEP crypto key format attester/jwk.json -f --pem --out attester/key.pem --insecure --no-password
 
 # Create Client Attester X.509 Certificate.
-$STEP certificate create "Wallet" attester/cert.pem --key attester/key.pem --ca ca/cert.pem --ca-key ca/key.pem --profile leaf -f
+# `--not-after 8760h` (1 year) overrides step's 24h leaf default so the x5c leaf
+# doesn't expire between conformance sessions (ATCA draft-07 §5.2.1).
+$STEP certificate create "Wallet" attester/cert.pem --key attester/key.pem --ca ca/cert.pem --ca-key ca/key.pem --profile leaf --not-after 8760h -f
 
 # Add the X.509 Certificate to the Client Attester JWK.
 jq --arg id "${attester_did}#0" --arg cert "$(cat attester/cert.pem | $STEP base64 -r)" '.kid = $id | .x5c = [$cert]' attester/jwk.json | sponge attester/jwk.json
@@ -44,7 +46,7 @@ $STEP crypto jwk create issuer/jwk.pub.json issuer/jwk.json --insecure --no-pass
 $STEP crypto key format issuer/jwk.json --pem --out issuer/key.pem --insecure --no-password --f
 
 # Create Issuer X.509 Certificate.
-$STEP certificate create "Issuer" issuer/cert.pem --key issuer/key.pem --ca ca/cert.pem --ca-key ca/key.pem --profile leaf -f
+$STEP certificate create "Issuer" issuer/cert.pem --key issuer/key.pem --ca ca/cert.pem --ca-key ca/key.pem --profile leaf --not-after 8760h -f
 
 # Add the X.509 Certificate to the Issuer JWK.
 jq --arg cert "$(cat issuer/cert.pem | $STEP base64 -r)" '.x5c = [$cert]' issuer/jwk.json | sponge issuer/jwk.json

@@ -147,6 +147,7 @@ impl OAuth2Server for Server {
 
     async fn token(
         &self,
+        _headers: open_auth2::http::HeaderMap,
         token_request: Self::TokenRequest,
     ) -> Result<Self::TokenResponse, OAuth2ServerError> {
         log::debug!("token request: {token_request:#?}");
