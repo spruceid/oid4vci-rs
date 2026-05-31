@@ -232,6 +232,14 @@ struct PkceParams {
     code_challenge_method: Option<String>,
 }
 
+/// `response_type` parameter, read on its own because `serde_urlencoded` does
+/// not enforce the internally-tagged `response_type=code` discriminator on
+/// [`AuthorizationCodeAuthorizationRequest`].
+#[derive(Deserialize, Default)]
+struct ResponseTypeParam {
+    response_type: Option<String>,
+}
+
 /// Pushed Authorization Request endpoint.
 ///
 /// Wraps the OAuth2 PAR handling with the request-level checks the AS must
@@ -259,6 +267,17 @@ pub async fn par(State(server): State<Arc<Server>>, headers: HeaderMap, body: St
         .is_some()
     {
         log::warn!("PAR: request must not contain a `request_uri` parameter");
+        return OAuth2ServerError::InvalidRequest.into_response();
+    }
+
+    // FAPI2 §5.3.2.2: only `response_type=code` is permitted. Anything else
+    // (e.g. `code id_token`, which would return an `id_token` through the
+    // browser) MUST be rejected (RFC 6749 §4.1.2.1 `unsupported_response_type`).
+    let response_type = serde_urlencoded::from_str::<ResponseTypeParam>(&body)
+        .ok()
+        .and_then(|p| p.response_type);
+    if response_type.as_deref() != Some("code") {
+        log::warn!("PAR: unsupported response_type {response_type:?}");
         return OAuth2ServerError::InvalidRequest.into_response();
     }
 
