@@ -3,16 +3,13 @@ use std::{borrow::Cow, future::Future, sync::Arc};
 use axum::{
     body::Body,
     extract::State,
-    http::StatusCode,
+    http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json,
 };
-use axum_extra::{
-    headers::{authorization::Bearer, Authorization},
-    TypedHeader,
-};
 use open_auth2::{server::ErrorResponse, AccessTokenBuf};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     endpoints::{
@@ -61,15 +58,20 @@ pub trait Oid4vciServer: Sized + Send + Sync + 'static {
     /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-endpoint>
     fn credential(
         &self,
+        headers: HeaderMap,
         access_token: AccessTokenBuf,
         request: ProfileCredentialRequest<Self::Profile>,
     ) -> impl Send + Future<Output = Result<ProfileCredentialResponse<Self::Profile>, ServerError>>;
 
     /// Deferred Credential Endpoint.
     ///
+    /// `headers` carries the request headers so the endpoint can process
+    /// header-bound material such as the `DPoP` proof (RFC 9449 §7.1).
+    ///
     /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-deferred-credential-endpoin>
     fn deferred_credential(
         &self,
+        _headers: HeaderMap,
         _access_token: AccessTokenBuf,
         _transaction_id: String,
     ) -> impl Send + Future<Output = Result<ProfileCredentialResponse<Self::Profile>, ServerError>>
@@ -77,11 +79,15 @@ pub trait Oid4vciServer: Sized + Send + Sync + 'static {
         async move { Err(ServerError::InvalidNotificationId) }
     }
 
-    /// Deferred Credential Endpoint.
+    /// Notification Endpoint.
     ///
-    /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-deferred-credential-endpoin>
+    /// `headers` carries the request headers so the endpoint can process
+    /// header-bound material such as the `DPoP` proof (RFC 9449 §7.1).
+    ///
+    /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-endpoint>
     fn notification(
         &self,
+        _headers: HeaderMap,
         _access_token: AccessTokenBuf,
         _notification: NotificationRequest,
     ) -> impl Send + Future<Output = Result<(), ServerError>> {
@@ -128,46 +134,73 @@ where
         .map(|c_nonce| NonceResponse { c_nonce })
 }
 
+/// Extracts the access token from the `Authorization` header, accepting both the
+/// `Bearer` (RFC 6750) and `DPoP` (RFC 9449) authentication schemes. The scheme
+/// match is case-insensitive (RFC 9110 §11.1).
+fn extract_access_token(headers: &HeaderMap) -> Option<AccessTokenBuf> {
+    let (scheme, token) = headers
+        .get(header::AUTHORIZATION)?
+        .to_str()
+        .ok()?
+        .split_once(' ')?;
+
+    if !scheme.eq_ignore_ascii_case("bearer") && !scheme.eq_ignore_ascii_case("dpop") {
+        return None;
+    }
+
+    AccessTokenBuf::new(token.trim().to_owned()).ok()
+}
+
 /// Credential Endpoint.
 async fn credential<S>(
     State(server): State<Arc<S>>,
-    TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
+    headers: HeaderMap,
     Json(credential_request): Json<ProfileCredentialRequest<S::Profile>>,
-) -> impl IntoResponse
+) -> Response
 where
     S: Oid4vciServer,
 {
-    let access_token = AccessTokenBuf::new(bearer.token().to_owned()).unwrap();
-    server.credential(access_token, credential_request).await
+    let Some(access_token) = extract_access_token(&headers) else {
+        return ServerError::Unauthorized.into_response();
+    };
+    server
+        .credential(headers, access_token, credential_request)
+        .await
+        .into_response()
 }
 
 /// Deferred Credential Endpoint.
 async fn deferred_credential<S>(
     State(server): State<Arc<S>>,
-    TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
+    headers: HeaderMap,
     Json(credential_request): Json<DeferredCredentialRequest>,
-) -> impl IntoResponse
+) -> Response
 where
     S: Oid4vciServer,
 {
-    let access_token = AccessTokenBuf::new(bearer.token().to_owned()).unwrap();
+    let Some(access_token) = extract_access_token(&headers) else {
+        return ServerError::Unauthorized.into_response();
+    };
     server
-        .deferred_credential(access_token, credential_request.transaction_id)
+        .deferred_credential(headers, access_token, credential_request.transaction_id)
         .await
+        .into_response()
 }
 
 /// Notification Endpoint.
 async fn notification<S>(
     State(server): State<Arc<S>>,
-    TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
+    headers: HeaderMap,
     Json(notification): Json<NotificationRequest>,
-) -> impl IntoResponse
+) -> Response
 where
     S: Oid4vciServer,
 {
-    let access_token = AccessTokenBuf::new(bearer.token().to_owned()).unwrap();
+    let Some(access_token) = extract_access_token(&headers) else {
+        return ServerError::Unauthorized.into_response();
+    };
     server
-        .notification(access_token, notification)
+        .notification(headers, access_token, notification)
         .await
         .map(|()| {
             Response::builder()
@@ -176,12 +209,54 @@ where
                 // UNWRAP SAFETY: An empty HTTP response is always valid.
                 .unwrap()
         })
+        .into_response()
+}
+
+/// Credential Error Response codes.
+///
+/// The `error` codes a Credential Issuer returns for an invalid Credential
+/// Request, as defined in OpenID4VCI §8.3.1.2.
+///
+/// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request-errors>
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CredentialErrorCode {
+    /// The Credential Request is missing a required parameter, includes an
+    /// unsupported parameter or parameter value, repeats the same parameter, or
+    /// is otherwise malformed.
+    InvalidCredentialRequest,
+
+    /// Requested Credential Configuration is unknown.
+    UnknownCredentialConfiguration,
+
+    /// Requested Credential identifier is unknown.
+    UnknownCredentialIdentifier,
+
+    /// The `proofs` parameter is invalid: it is missing, one of the key proofs
+    /// is invalid, or at least one does not contain a `c_nonce` value.
+    InvalidProof,
+
+    /// The `proofs` parameter uses an invalid nonce: at least one of the key
+    /// proofs contains an invalid `c_nonce` value.
+    InvalidNonce,
+
+    /// The encryption parameters in the Credential Request are invalid or
+    /// missing.
+    InvalidEncryptionParameters,
+
+    /// The Credential Request has not been accepted by the Credential Issuer.
+    CredentialRequestDenied,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum ServerError {
     #[error("unauthorized")]
     Unauthorized,
+
+    /// A Credential Request error (OpenID4VCI §8.3.1.2). Rendered as an HTTP 400
+    /// response with a JSON `{ "error", "error_description"? }` body.
+    #[error("credential request error: {0:?}")]
+    CredentialRequest(CredentialErrorCode, Option<String>),
 
     #[error("invalid notification id")]
     InvalidNotificationId,
@@ -196,6 +271,19 @@ impl IntoResponse for ServerError {
             Self::Unauthorized => Response::builder()
                 .status(StatusCode::UNAUTHORIZED)
                 .body(Body::default())
+                .unwrap(),
+            // OpenID4VCI §8.3.1.2: HTTP 400, `application/json`, with the error
+            // code (and optional description) in the body. Never cached.
+            Self::CredentialRequest(error, error_description) => Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::CACHE_CONTROL, "no-store")
+                .body(Body::from(
+                    serde_json::to_vec(&ErrorResponse::new(error, error_description, None))
+                        // UNWRAP SAFETY: A Credential Error Response is always
+                        //                serializable as JSON.
+                        .unwrap(),
+                ))
                 .unwrap(),
             Self::InvalidNotificationId => Response::builder()
                 .status(StatusCode::BAD_REQUEST)

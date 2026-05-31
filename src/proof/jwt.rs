@@ -46,18 +46,37 @@ impl<'a, R: ?Sized> JwtProofVerifier<'a, R> {
     }
 }
 
+/// A successfully verified `jwt` key proof.
+#[derive(Debug, Clone)]
+pub struct VerifiedProof {
+    /// The key the Credential is to be cryptographically bound to.
+    pub key: JWK,
+
+    /// The `c_nonce` carried by the proof, if any.
+    ///
+    /// Verifying that this value is a fresh, server-issued nonce (i.e. checking
+    /// it against the values handed out by the Nonce Endpoint, and that it has
+    /// not expired or been replayed) is the Credential Issuer's responsibility:
+    /// it owns the nonce lifecycle, so the policy lives in the application, not
+    /// in this stateless verifier. See OpenID4VCI §8.2 (the proof MUST carry a
+    /// `c_nonce`) and §8.3.1.2 (`invalid_proof` / `invalid_nonce`).
+    pub nonce: Option<String>,
+}
+
 impl<R> JwtProofVerifier<'_, R>
 where
     R: ?Sized + JWKResolver,
 {
     /// Verify a list of JWT proofs.
     ///
-    /// Returns the list of keys the credential is to be bound to.
+    /// Returns, for each proof, the key the Credential is to be bound to and the
+    /// `c_nonce` it carried (for the caller to validate against the nonces it
+    /// issued).
     pub async fn verify_list(
         &self,
         client_id: Option<&ClientId>,
         jwts: &[JwsBuf],
-    ) -> Result<Vec<JWK>, VerificationError> {
+    ) -> Result<Vec<VerifiedProof>, VerificationError> {
         let mut result = Vec::with_capacity(jwts.len());
 
         for jwt in jwts {
@@ -69,12 +88,13 @@ where
 
     /// Verify a JWT proof.
     ///
-    /// Returns the key the credential is to be bound to.
+    /// Returns the key the Credential is to be bound to and the `c_nonce` the
+    /// proof carried (for the caller to validate against the nonces it issued).
     pub async fn verify(
         &self,
         client_id: Option<&ClientId>,
         jwt: &Jws,
-    ) -> Result<JWK, VerificationError> {
+    ) -> Result<VerifiedProof, VerificationError> {
         let decoded = jwt
             .decode()
             .map_err(|_| ProofValidationError::InvalidProof)?
@@ -107,7 +127,12 @@ where
 
         decoded.verify(params).await??;
 
-        Ok(jwk.into_owned())
+        let nonce = decoded.signing_bytes.payload.nonce.clone();
+
+        Ok(VerifiedProof {
+            key: jwk.into_owned(),
+            nonce,
+        })
     }
 }
 
