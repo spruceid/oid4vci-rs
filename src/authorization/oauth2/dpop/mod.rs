@@ -205,19 +205,16 @@ impl<K, S> ValidateClaims<DpopProofVerificationParams<'_, K>, S> for DpopProof {
     ) -> ClaimsValidity {
         let now = params.date_time();
 
-        // RFC 9449 §4.3: the `iat` must be within an acceptable window. The
-        // window is asymmetric: a proof may be up to `max_age` old, and — to
-        // tolerate clock skew between the client and this server (required by
-        // FAPI2) — up to `DPOP_IAT_LEEWAY` in the future. ssi's
-        // `IssuedAt::verify` rejects any future `iat` with zero leeway, so the
-        // window is enforced manually here instead.
+        // RFC 9449 §4.3: the `iat` must not be in the future, tolerating up to
+        // `DPOP_IAT_LEEWAY` of clock skew between the client and this server
+        // (required by FAPI2) — hence verifying against `now + DPOP_IAT_LEEWAY`.
+        self.iat.verify(now + DPOP_IAT_LEEWAY)?;
+
+        // When a max age is configured, a proof older than it is also rejected.
         if let Some(max_age) = params.max_age {
             let age = now.timestamp() as f64 - self.iat.0.as_seconds();
             if age > max_age.as_secs_f64() {
                 return Err(InvalidClaims::other("`iat` claim is too old"));
-            }
-            if age < -DPOP_IAT_LEEWAY.as_secs_f64() {
-                return Err(InvalidClaims::other("`iat` claim is too far in the future"));
             }
         }
 
