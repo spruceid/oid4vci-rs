@@ -175,9 +175,113 @@ pub type AnyCredentialRequestParams = IndexMap<String, serde_json::Value>;
 
 impl CredentialRequestParams for AnyCredentialRequestParams {}
 
+/// Deferred Credential Endpoint.
+///
+/// Used to obtain a Credential whose issuance was deferred, by polling with the
+/// `transaction_id` returned in a [`DeferredCredentialResponse`].
+///
+/// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-deferred-credential-endpoin>
+pub struct DeferredCredentialEndpoint<'a, C> {
+    pub client: &'a C,
+    pub uri: &'a Uri,
+}
+
+impl<'a, C> DeferredCredentialEndpoint<'a, C> {
+    pub fn new(client: &'a C, uri: &'a Uri) -> Self {
+        Self { client, uri }
+    }
+
+    pub fn exchange_deferred_credential(
+        self,
+        transaction_id: String,
+    ) -> RequestBuilder<Self, DeferredCredentialRequest> {
+        RequestBuilder::new(self, DeferredCredentialRequest { transaction_id })
+    }
+}
+
+impl<'a, C> Endpoint for DeferredCredentialEndpoint<'a, C>
+where
+    C: OAuth2Client,
+{
+    type Client = C;
+
+    fn client(&self) -> &Self::Client {
+        self.client
+    }
+
+    fn uri(&self) -> &Uri {
+        self.uri
+    }
+}
+
+impl<'a, C> Clone for DeferredCredentialEndpoint<'a, C> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, C> Copy for DeferredCredentialEndpoint<'a, C> {}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct DeferredCredentialRequest {
     pub transaction_id: String,
+}
+
+impl<'a, C> HttpRequest<DeferredCredentialEndpoint<'a, C>> for DeferredCredentialRequest
+where
+    C: Oid4vciClient,
+{
+    type ContentType = Json;
+    type RequestBody<'b>
+        = &'b Self
+    where
+        Self: 'b;
+    type Response = CredentialResponse<<C::Profile as Profile>::Credential>;
+    type ResponsePayload = CredentialResponse<<C::Profile as Profile>::Credential>;
+
+    async fn build_request(
+        &self,
+        endpoint: &DeferredCredentialEndpoint<'a, C>,
+        _http_client: &impl HttpClient,
+    ) -> Result<http::Request<Self::RequestBody<'_>>, OAuth2ClientError> {
+        Ok(http::Request::builder()
+            .method(http::Method::POST)
+            .uri(endpoint.uri.as_str())
+            .header(http::header::ACCEPT, &APPLICATION_JSON)
+            .body(self)
+            .unwrap())
+    }
+
+    fn decode_response(
+        &self,
+        _endpoint: &DeferredCredentialEndpoint<'a, C>,
+        response: http::Response<Vec<u8>>,
+    ) -> Result<http::Response<Self::ResponsePayload>, OAuth2ClientError> {
+        match response.status() {
+            http::StatusCode::OK => {
+                expect_content_type(response.headers(), &APPLICATION_JSON)?;
+                let body =
+                    serde_json::from_slice(response.body()).map_err(OAuth2ClientError::response)?;
+                Ok(response.map(|_| CredentialResponse::Immediate(body)))
+            }
+            http::StatusCode::ACCEPTED => {
+                expect_content_type(response.headers(), &APPLICATION_JSON)?;
+                let body =
+                    serde_json::from_slice(response.body()).map_err(OAuth2ClientError::response)?;
+                Ok(response.map(|_| CredentialResponse::Deferred(body)))
+            }
+            status => Err(OAuth2ClientError::ServerError(status)),
+        }
+    }
+
+    async fn process_response(
+        &self,
+        _endpoint: &DeferredCredentialEndpoint<'a, C>,
+        _http_client: &impl HttpClient,
+        response: http::Response<Self::ResponsePayload>,
+    ) -> Result<Self::Response, OAuth2ClientError> {
+        Ok(response.into_body())
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]

@@ -13,7 +13,7 @@
           "kid": "ac",
           "use": "enc",
           "crv": "P-256",
-          "alg": "ES256",
+          "alg": "ECDH-ES",
           "x": "YO4epjifD-KWeq1sL2tNmm36BhXnkJ0He-WqMYrp9Fk",
           "y": "Hekpm0zfK7C-YccH5iBjcIXgf6YdUvNUac_0At55Okk"
         }

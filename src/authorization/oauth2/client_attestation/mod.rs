@@ -295,6 +295,92 @@ impl<'a> From<&'a ClientAttestationAndPop> for ClientAttestationAndPopRef<'a> {
     }
 }
 
+/// Error returned when verifying Attestation-Based Client Authentication.
+///
+/// See: <https://www.ietf.org/archive/id/draft-ietf-oauth-attestation-based-client-auth-07.html#section-9>
+#[derive(Debug, thiserror::Error)]
+pub enum ClientAttestationError {
+    /// The Client Attestation JWT is malformed, has an invalid signature, or
+    /// carries invalid claims.
+    #[error("invalid client attestation JWT: {0}")]
+    Attestation(String),
+
+    /// The Client Attestation PoP JWT is malformed, has an invalid signature,
+    /// or carries invalid claims.
+    #[error("invalid client attestation PoP JWT: {0}")]
+    Pop(String),
+}
+
+impl ClientAttestationAndPopRef<'_> {
+    /// Verifies Attestation-Based Client Authentication (draft-ietf-oauth-
+    /// attestation-based-client-auth-07 §9, Verification and Processing).
+    ///
+    /// Checks that the Client Attestation JWT is signed by the trusted Client
+    /// Attester (`attester_key`) and that the Client Attestation PoP JWT is
+    /// signed by the key the attestation binds to (its `cnf`), validating the
+    /// claims of both. On success returns the verified [`ClientAttestation`].
+    ///
+    /// - `attester_key`: the trusted Client Attester's public key.
+    /// - `expected_iss`: if set, the attestation `iss` must equal it.
+    /// - `client_id`: the authenticating client; must equal the attestation
+    ///   `sub` and the PoP `iss`.
+    /// - `expected_aud`: this Authorization Server's issuer identifier (the PoP
+    ///   `aud`).
+    /// - `challenge`: the server-provided challenge the PoP must echo, if any.
+    pub async fn verify(
+        &self,
+        attester_key: &JWK,
+        expected_iss: Option<&str>,
+        client_id: &ClientId,
+        expected_aud: &str,
+        challenge: Option<&str>,
+    ) -> Result<ClientAttestation, ClientAttestationError> {
+        let attestation = self
+            .client_attestation
+            .decode()
+            .map_err(|e| ClientAttestationError::Attestation(e.to_string()))?
+            .try_map(|bytes| serde_json::from_slice::<ClientAttestation>(&bytes))
+            .map_err(|e| ClientAttestationError::Attestation(e.to_string()))?;
+
+        let params = ClientAttestationVerificationParams {
+            key_resolver: attester_key.clone(),
+            expected_iss,
+            client_id,
+        };
+
+        match attestation.verify(params).await {
+            Ok(Ok(())) => {}
+            Ok(Err(invalid)) => {
+                return Err(ClientAttestationError::Attestation(invalid.to_string()))
+            }
+            Err(e) => return Err(ClientAttestationError::Attestation(e.to_string())),
+        }
+
+        let attestation = attestation.signing_bytes.payload;
+
+        let pop = self
+            .client_attestation_pop
+            .decode()
+            .map_err(|e| ClientAttestationError::Pop(e.to_string()))?
+            .try_map(|bytes| serde_json::from_slice::<ClientAttestationPop>(&bytes))
+            .map_err(|e| ClientAttestationError::Pop(e.to_string()))?;
+
+        let pop_params = ClientAttestationPopVerificationParams {
+            client_attestation: &attestation,
+            expected_aud,
+            challenge,
+        };
+
+        match pop.verify(pop_params).await {
+            Ok(Ok(())) => {}
+            Ok(Err(invalid)) => return Err(ClientAttestationError::Pop(invalid.to_string())),
+            Err(e) => return Err(ClientAttestationError::Pop(e.to_string())),
+        }
+
+        Ok(attestation)
+    }
+}
+
 /// `OAuth-Client-Attestation` HTTP header.
 ///
 /// See: <https://www.ietf.org/archive/id/draft-ietf-oauth-attestation-based-client-auth-07.html#name-client-attestation-http-hea>

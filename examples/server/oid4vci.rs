@@ -41,29 +41,35 @@ impl Oid4vciServer for Server {
 
     async fn credential(
         &self,
+        _headers: open_auth2::http::HeaderMap,
         access_token: AccessTokenBuf,
         request: ProfileCredentialRequest<Self::Profile>,
     ) -> Result<ProfileCredentialResponse<Self::Profile>, ServerError> {
         let m = self
             .oauth2
             .access_token_metadata(&access_token)
-            .ok_or(ServerError::Unauthorized)?;
+            .ok_or(ServerError::Unauthorized("unknown access token".into()))?;
 
         let (config, value) = match request.credential {
-            CredentialOrConfigurationId::Credential(id) => self
-                .config
-                .get_credential(&id)
-                .ok_or(ServerError::Unauthorized)?,
+            CredentialOrConfigurationId::Credential(id) => {
+                self.config
+                    .get_credential(&id)
+                    .ok_or(ServerError::Unauthorized(
+                        "unknown credential identifier".into(),
+                    ))?
+            }
             CredentialOrConfigurationId::Configuration(id) => {
-                let config = self
-                    .config
-                    .credential_configurations
-                    .get(&id)
-                    .ok_or(ServerError::Unauthorized)?;
+                let config = self.config.credential_configurations.get(&id).ok_or(
+                    ServerError::Unauthorized("unknown credential configuration".into()),
+                )?;
                 let mut credentials = config.credentials.iter();
-                let (_, value) = credentials.next().ok_or(ServerError::Unauthorized)?;
+                let (_, value) = credentials.next().ok_or(ServerError::Unauthorized(
+                    "credential configuration has no credentials".into(),
+                ))?;
                 if credentials.next().is_some() {
-                    return Err(ServerError::Unauthorized);
+                    return Err(ServerError::Unauthorized(
+                        "credential configuration has more than one credential".into(),
+                    ));
                 }
 
                 (config, value)
@@ -74,7 +80,7 @@ impl Oid4vciServer for Server {
 
         let credentials = match &request.proofs {
             Some(proofs) => {
-                let keys = match proofs {
+                let verified_proofs = match proofs {
                     Proofs::Jwt(jwts) => {
                         let jwk_resolver = VerificationMethodDIDResolver::<_, AnyMethod>::new(
                             AnyDidMethod::default(),
@@ -84,14 +90,14 @@ impl Oid4vciServer for Server {
                         verifier
                             .verify_list(m.client_id.as_deref(), jwts)
                             .await
-                            .map_err(|_| ServerError::Unauthorized)?
+                            .map_err(|_| ServerError::Unauthorized("invalid key proof".into()))?
                     }
                     _ => todo!(),
                 };
 
-                let mut credentials = Vec::with_capacity(keys.len());
+                let mut credentials = Vec::with_capacity(verified_proofs.len());
 
-                for jwk in keys {
+                for proof in verified_proofs {
                     credentials.push(Oid4vciCredential::new(
                         config
                             .sign(
@@ -99,7 +105,7 @@ impl Oid4vciServer for Server {
                                 &self.jwk,
                                 m.client_id.as_deref(),
                                 value,
-                                Some(&jwk),
+                                Some(&proof.key),
                             )
                             .await,
                     ));

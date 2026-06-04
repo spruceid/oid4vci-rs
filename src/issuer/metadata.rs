@@ -6,7 +6,6 @@ use langtag::LangTagBuf;
 use open_auth2::{client::OAuth2ClientError, util::Discoverable, ScopeBuf};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
-use ssi::jwk::JwkSet;
 
 use crate::{encryption::jwe, profile::StandardCredentialFormatMetadata};
 
@@ -138,6 +137,16 @@ impl<P: CredentialFormatMetadata> CredentialIssuerMetadata<P> {
     }
 }
 
+/// A set of JWKs as advertised in Credential Issuer encryption metadata.
+///
+/// The keys are kept as raw JSON rather than [`ssi::jwk::JWK`] because
+/// encryption keys carry JWE key-management `alg` values (e.g. `ECDH-ES`) that
+/// the signature-oriented [`ssi::jwk::JWK`] type cannot represent.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct EncryptionJwkSet {
+    pub keys: Vec<serde_json::Value>,
+}
+
 /// Information about whether the Credential Issuer supports encryption of the
 /// Credential Request on top of TLS.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -149,7 +158,7 @@ pub struct CredentialRequestEncryptionMetadata {
     /// (key ID) parameter that uniquely identifies the key.
     ///
     /// See: <https://www.rfc-editor.org/info/rfc7591>
-    pub jwks: JwkSet,
+    pub jwks: EncryptionJwkSet,
 
     /// List of the JWE encryption algorithms (`enc` values) supported by the
     /// Credential Endpoint to decode the Credential Request from a JWT.
@@ -358,6 +367,7 @@ impl<F: CredentialFormatMetadata> CredentialConfiguration<F> {
     }
 }
 
+#[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct KeyProofTypesSupported {
     /// Algorithms that the Issuer supports for this proof type.
@@ -378,6 +388,7 @@ pub struct KeyProofTypesSupported {
 /// Requirements for key attestations.
 ///
 /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#keyattestation-apr>
+#[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct KeyAttestationRequirements {
     /// Accepted values for a key attestation `key_storage` parameter.

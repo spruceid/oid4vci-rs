@@ -3,6 +3,7 @@ use std::borrow::Borrow;
 use iref::UriBuf;
 use open_auth2::server::AuthorizationServerMetadata;
 use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 
 use crate::authorization::oauth2::{
     client_attestation::ClientAttestationServerParams, dpop::DpopServerParams,
@@ -11,6 +12,7 @@ use crate::authorization::oauth2::{
 pub type Oid4vciAuthorizationServerMetadata =
     AuthorizationServerMetadata<Oid4VciAuthorizationServerParams>;
 
+#[skip_serializing_none]
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct Oid4VciAuthorizationServerParams {
     #[serde(default, rename = "pre-authorized_grant_anonymous_access_supported")]

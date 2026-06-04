@@ -26,7 +26,7 @@ use crate::{
         server::Oid4vciAuthorizationServerMetadata,
     },
     credential::CredentialOrConfigurationId,
-    endpoints::{CredentialEndpoint, NonceEndpoint},
+    endpoints::{CredentialEndpoint, DeferredCredentialEndpoint, NonceEndpoint},
     issuer::{metadata::CredentialFormatMetadata, CredentialIssuerMetadata},
     offer::{AuthorizationCodeGrant, CredentialOfferParameters, PreAuthorizedCodeGrant},
     profile::{ProfileCredentialAuthorizationDetailsRequest, ProfileCredentialResponse},
@@ -275,6 +275,41 @@ pub trait Oid4vciClient:
     {
         self.exchange_credential_with(http_client, token, credential, proofs, Default::default())
             .await
+    }
+
+    /// Polls the Deferred Credential Endpoint with a `transaction_id`.
+    ///
+    /// Used when a previous Credential Request (or Deferred Credential Request)
+    /// returned a [`CredentialResponse::Deferred`]. The caller is responsible
+    /// for waiting the `interval` returned in the deferred response before
+    /// calling this method.
+    ///
+    /// [`CredentialResponse::Deferred`]: crate::endpoints::credential::CredentialResponse::Deferred
+    #[allow(async_fn_in_trait)]
+    async fn exchange_deferred_credential(
+        &self,
+        http_client: &impl HttpClient,
+        token: &CredentialToken<Self::Profile>,
+        transaction_id: String,
+    ) -> Result<ProfileCredentialResponse<Self::Profile>, ClientError> {
+        let deferred_endpoint = DeferredCredentialEndpoint::new(
+            self,
+            token
+                .credential_offer
+                .issuer_metadata
+                .deferred_credential_endpoint
+                .as_deref()
+                .ok_or(ClientError::MissingDeferredCredentialEndpoint)?,
+        );
+
+        let credential = deferred_endpoint
+            .exchange_deferred_credential(transaction_id)
+            .with_access_token(&token.response.token_type, &token.response.access_token)
+            .with_dpop(Some(&token.response.access_token), None)
+            .send(http_client)
+            .await?;
+
+        Ok(credential)
     }
 
     #[allow(async_fn_in_trait)]

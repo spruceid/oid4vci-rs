@@ -42,6 +42,9 @@ pub enum ClientError {
     #[error("authorization failed")]
     Authorization(String),
 
+    #[error("missing deferred credential endpoint")]
+    MissingDeferredCredentialEndpoint,
+
     /// The wallet is lost and doesn't know what credential to pick.
     #[error("ambiguous credential offer")]
     AmbiguousCredentialOffer,

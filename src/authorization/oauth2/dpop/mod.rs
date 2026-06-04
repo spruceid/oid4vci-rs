@@ -1,7 +1,7 @@
 //! RFC 9449 OAuth 2.0 Demonstrating Proof of Possession (DPoP)
 //!
 //! See: <https://www.rfc-editor.org/rfc/rfc9449>
-use std::borrow::Cow;
+use std::{borrow::Cow, time::Duration};
 
 use iref::{Uri, UriBuf};
 use open_auth2::http::{self, HeaderName, HeaderValue};
@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use ssi::{
     claims::{
-        jws::{JwsSigner, JwsSignerInfo, ValidateJwsHeader},
+        jws::{Jws, JwsSigner, JwsSignerInfo, ValidateJwsHeader},
         jwt::{ClaimSet, IssuedAt},
         ClaimsValidity, DateTimeProvider, InvalidClaims, JwsBuf, JwsPayload, ResolverProvider,
         SignatureError, ValidateClaims,
@@ -43,6 +43,14 @@ pub const DPOP_NONCE: HeaderName = HeaderName::from_static("dpop-nonce");
 
 /// DPoP Proof JWT `typ` claim value.
 pub const DPOP_JWT_TYP: &str = "dpop+jwt";
+
+/// Clock-skew leeway applied to a DPoP proof's `iat` when accepting a proof
+/// minted slightly in the future.
+///
+/// RFC 9449 §4.3 leaves the acceptable `iat` window to the server; FAPI2
+/// requires tolerating reasonable skew between the client's and server's
+/// clocks, so a proof up to this far in the future is still accepted.
+pub const DPOP_IAT_LEEWAY: Duration = Duration::from_secs(60);
 
 /// DPoP Proof.
 ///
@@ -158,6 +166,7 @@ struct DpopProofVerificationParams<'a, K> {
     key_resolver: K,
     htm: &'a str,
     htu: &'a Uri,
+    max_age: Option<Duration>,
 }
 
 impl<K> ResolverProvider for DpopProofVerificationParams<'_, K> {
@@ -195,18 +204,128 @@ impl<K, S> ValidateClaims<DpopProofVerificationParams<'_, K>, S> for DpopProof {
         _proof: &S,
     ) -> ClaimsValidity {
         let now = params.date_time();
-        self.iat.verify(now)?;
+
+        // RFC 9449 §4.3: the `iat` must not be in the future, tolerating up to
+        // `DPOP_IAT_LEEWAY` of clock skew between the client and this server
+        // (required by FAPI2) — hence verifying against `now + DPOP_IAT_LEEWAY`.
+        self.iat.verify(now + DPOP_IAT_LEEWAY)?;
+
+        // When a max age is configured, a proof older than it is also rejected.
+        if let Some(max_age) = params.max_age {
+            let age = now.timestamp() as f64 - self.iat.0.as_seconds();
+            if age > max_age.as_secs_f64() {
+                return Err(InvalidClaims::other("`iat` claim is too old"));
+            }
+        }
 
         if params.htm != self.htm {
             return Err(InvalidClaims::other("invalid `htm` claim value"));
         }
 
-        if *params.htu != self.htu {
+        // RFC 9449 §4.3: the `htu` is matched ignoring query and fragment, and
+        // per RFC 3986 §6.2.2/§6.2.3 (scheme/host case-insensitive, default port
+        // for the scheme normalized).
+        if !htu_matches(params.htu, &self.htu) {
             return Err(InvalidClaims::other("invalid `htu` claim value"));
         }
 
         Ok(())
     }
+}
+
+/// Compares two `htu` values for DPoP proof validation.
+///
+/// Query and fragment are ignored (RFC 9449 §4.3), and the comparison applies
+/// RFC 3986 syntax-based normalization: the scheme and host are compared
+/// case-insensitively (§6.2.2.1) and a port equal to the scheme's default is
+/// treated as absent (§6.2.3).
+fn htu_matches(a: &Uri, b: &Uri) -> bool {
+    fn normalized(u: &Uri) -> (String, Option<String>, Option<&str>, String) {
+        let scheme = u.scheme().as_str().to_ascii_lowercase();
+        let authority = u.authority();
+        let host = authority.map(|a| a.host().as_str().to_ascii_lowercase());
+        let default_port = match scheme.as_str() {
+            "https" => Some("443"),
+            "http" => Some("80"),
+            _ => None,
+        };
+        let port = authority
+            .and_then(|a| a.port())
+            .map(|p| p.as_str())
+            .filter(|p| Some(*p) != default_port);
+        (scheme, host, port, u.path().as_str().to_owned())
+    }
+
+    normalized(a) == normalized(b)
+}
+
+/// A verified DPoP proof.
+#[derive(Debug)]
+pub struct VerifiedDpopProof {
+    /// The verified proof claims.
+    pub proof: DpopProof,
+
+    /// The public key that signed the proof. DPoP proofs are self-signed, so
+    /// this key's JWK SHA-256 thumbprint (RFC 7638) is the `jkt` an access token
+    /// is bound to (RFC 9449 §6.1).
+    pub jwk: JWK,
+}
+
+/// Error returned when verifying a DPoP proof.
+#[derive(Debug, thiserror::Error)]
+#[error("invalid DPoP proof: {0}")]
+pub struct DpopVerificationError(String);
+
+/// Verifies a DPoP proof JWT (RFC 9449 §4.3).
+///
+/// Checks that the proof is a `dpop+jwt` typed JWT, signed (with an asymmetric
+/// algorithm) by the key in its `jwk` header, whose `htm`/`htu` match the
+/// request and whose `iat` is no older than `max_age`.
+///
+/// The remaining resource-server checks (RFC 9449 §7.1) are left to the caller,
+/// which has the necessary context: that the proof key's thumbprint matches the
+/// access token's `jkt`, and that the `ath` claim equals the access token hash.
+pub async fn verify_dpop_proof(
+    proof: &Jws,
+    htm: &str,
+    htu: &Uri,
+    max_age: Duration,
+) -> Result<VerifiedDpopProof, DpopVerificationError> {
+    let decoded = proof
+        .decode()
+        .map_err(|_| DpopVerificationError("undecodable proof".to_owned()))?
+        .try_map(|bytes| serde_json::from_slice::<DpopProof>(&bytes))
+        .map_err(|_| DpopVerificationError("malformed proof claims".to_owned()))?;
+
+    if decoded.header().type_.as_deref() != Some(DPOP_JWT_TYP) {
+        return Err(DpopVerificationError(
+            "missing or invalid `typ` header".to_owned(),
+        ));
+    }
+
+    let jwk = decoded
+        .header()
+        .jwk
+        .clone()
+        .ok_or_else(|| DpopVerificationError("missing `jwk` header".to_owned()))?;
+
+    let params = DpopProofVerificationParams {
+        key_resolver: jwk.clone(),
+        htm,
+        htu,
+        max_age: Some(max_age),
+    };
+
+    match decoded.verify(params).await {
+        Ok(Ok(())) => {}
+        Ok(Err(invalid)) => return Err(DpopVerificationError(invalid.to_string())),
+        Err(e) => return Err(DpopVerificationError(e.to_string())),
+    }
+
+    Ok(VerifiedDpopProof {
+        proof: decoded.signing_bytes.payload,
+        jwk,
+    })
 }
 
 #[derive(StrNewType)]

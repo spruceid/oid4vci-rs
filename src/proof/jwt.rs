@@ -7,7 +7,7 @@ use serde_with::skip_serializing_none;
 use ssi::{
     claims::{
         chrono::Utc,
-        jws::{JwsSigner, ValidateJwsHeader},
+        jws::{JwsSigner, JwsSignerInfo, ValidateJwsHeader},
         jwt::{ClaimSet, ExpirationTime, IssuedAt, NotBefore},
         ClaimsValidity, DateTimeProvider, InvalidClaims, Jws, JwsBuf, JwsPayload,
         ProofValidationError, ResolverProvider, SignatureError, ValidateClaims,
@@ -46,18 +46,37 @@ impl<'a, R: ?Sized> JwtProofVerifier<'a, R> {
     }
 }
 
+/// A successfully verified `jwt` key proof.
+#[derive(Debug, Clone)]
+pub struct VerifiedProof {
+    /// The key the Credential is to be cryptographically bound to.
+    pub key: JWK,
+
+    /// The `c_nonce` carried by the proof, if any.
+    ///
+    /// Verifying that this value is a fresh, server-issued nonce (i.e. checking
+    /// it against the values handed out by the Nonce Endpoint, and that it has
+    /// not expired or been replayed) is the Credential Issuer's responsibility:
+    /// it owns the nonce lifecycle, so the policy lives in the application, not
+    /// in this stateless verifier. See OpenID4VCI §8.2 (the proof MUST carry a
+    /// `c_nonce`) and §8.3.1.2 (`invalid_proof` / `invalid_nonce`).
+    pub nonce: Option<String>,
+}
+
 impl<R> JwtProofVerifier<'_, R>
 where
     R: ?Sized + JWKResolver,
 {
     /// Verify a list of JWT proofs.
     ///
-    /// Returns the list of keys the credential is to be bound to.
+    /// Returns, for each proof, the key the Credential is to be bound to and the
+    /// `c_nonce` it carried (for the caller to validate against the nonces it
+    /// issued).
     pub async fn verify_list(
         &self,
         client_id: Option<&ClientId>,
         jwts: &[JwsBuf],
-    ) -> Result<Vec<JWK>, VerificationError> {
+    ) -> Result<Vec<VerifiedProof>, VerificationError> {
         let mut result = Vec::with_capacity(jwts.len());
 
         for jwt in jwts {
@@ -69,12 +88,13 @@ where
 
     /// Verify a JWT proof.
     ///
-    /// Returns the key the credential is to be bound to.
+    /// Returns the key the Credential is to be bound to and the `c_nonce` the
+    /// proof carried (for the caller to validate against the nonces it issued).
     pub async fn verify(
         &self,
         client_id: Option<&ClientId>,
         jwt: &Jws,
-    ) -> Result<JWK, VerificationError> {
+    ) -> Result<VerifiedProof, VerificationError> {
         let decoded = jwt
             .decode()
             .map_err(|_| ProofValidationError::InvalidProof)?
@@ -107,7 +127,12 @@ where
 
         decoded.verify(params).await??;
 
-        Ok(jwk.into_owned())
+        let nonce = decoded.signing_bytes.payload.nonce.clone();
+
+        Ok(VerifiedProof {
+            key: jwk.into_owned(),
+            nonce,
+        })
     }
 }
 
@@ -130,6 +155,30 @@ pub async fn create_jwt_proof(
     };
 
     body.sign(signer).await
+}
+
+/// A [`JwsSigner`] that signs a key proof and embeds the signing key's public
+/// JWK in the protected header, clearing any `kid`.
+///
+/// A `jwt` key proof carries the holder's public key in the JOSE header, where
+/// `jwk` and `kid` are mutually exclusive (OpenID4VCI Appendix F.1). Wrap the
+/// holder's signing [`JWK`] with this so [`create_jwt_proof`] emits a `jwk`
+/// header rather than a `kid`. It is the key-proof counterpart of the DPoP
+/// module's [`DpopSigner`](crate::authorization::oauth2::dpop::DpopSigner).
+pub struct JwkProofSigner<'a>(pub &'a JWK);
+
+impl JwsSigner for JwkProofSigner<'_> {
+    async fn fetch_info(&self) -> Result<JwsSignerInfo, SignatureError> {
+        let mut info = self.0.fetch_info().await?;
+        // `jwk` and `kid` are mutually exclusive (OpenID4VCI Appendix F.1).
+        info.kid = None;
+        info.jwk = Some(self.0.to_public());
+        Ok(info)
+    }
+
+    async fn sign_bytes(&self, signing_bytes: &[u8]) -> Result<Vec<u8>, SignatureError> {
+        self.0.sign_bytes(signing_bytes).await
+    }
 }
 
 /// JWT body for a `jwt` proof.

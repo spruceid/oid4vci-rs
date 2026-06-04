@@ -8,13 +8,36 @@ use open_auth2::{
     transport::{expect_content_type, HttpClient, APPLICATION_JSON},
 };
 use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
+use ssi::jwk::Algorithm;
 
+#[skip_serializing_none]
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ClientAttestationServerParams {
     /// Challenge endpoint.
     ///
     /// See: <https://www.ietf.org/archive/id/draft-ietf-oauth-attestation-based-client-auth-07.html#name-challenge-retrieval>
     pub challenge_endpoint: Option<UriBuf>,
+
+    /// JWS signing algorithms supported by the authorization server for the
+    /// signature on the Client Attestation JWT.
+    ///
+    /// Required (non-empty) when the token endpoint advertises the
+    /// `attest_jwt_client_auth` authentication method.
+    ///
+    /// See: <https://www.ietf.org/archive/id/draft-ietf-oauth-attestation-based-client-auth-07.html#section-10.1>
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub client_attestation_signing_alg_values_supported: Vec<Algorithm>,
+
+    /// JWS signing algorithms supported by the authorization server for the
+    /// signature on the Client Attestation PoP JWT.
+    ///
+    /// Required (non-empty) when the token endpoint advertises the
+    /// `attest_jwt_client_auth` authentication method.
+    ///
+    /// See: <https://www.ietf.org/archive/id/draft-ietf-oauth-attestation-based-client-auth-07.html#section-10.1>
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub client_attestation_pop_signing_alg_values_supported: Vec<Algorithm>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
