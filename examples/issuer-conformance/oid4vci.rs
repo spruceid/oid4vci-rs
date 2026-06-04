@@ -188,7 +188,7 @@ impl Oid4vciServer for Server {
             .access_token_metadata(&access_token)
             .ok_or_else(|| {
                 log::warn!("credential request: unknown access token");
-                ServerError::Unauthorized
+                ServerError::Unauthorized("unknown access token".into())
             })?;
 
         // When the access token is DPoP-bound, the resource server MUST validate
@@ -198,7 +198,7 @@ impl Oid4vciServer for Server {
                 .await
                 .map_err(|e| {
                     log::warn!("credential request: DPoP validation failed: {e}");
-                    ServerError::Unauthorized
+                    ServerError::Unauthorized(format!("DPoP proof validation failed: {e}").into())
                 })?;
         }
 
@@ -225,9 +225,13 @@ impl Oid4vciServer for Server {
                         )
                     })?;
                 let mut credentials = config.credentials.iter();
-                let (_, value) = credentials.next().ok_or(ServerError::Unauthorized)?;
+                let (_, value) = credentials.next().ok_or(ServerError::Unauthorized(
+                    "credential configuration has no credentials".into(),
+                ))?;
                 if credentials.next().is_some() {
-                    return Err(ServerError::Unauthorized);
+                    return Err(ServerError::Unauthorized(
+                        "credential configuration has more than one credential".into(),
+                    ));
                 }
 
                 (config, value)

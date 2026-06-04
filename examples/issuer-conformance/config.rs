@@ -21,7 +21,9 @@ use oid4vci::{
     profile::{dc_sd_jwt::DcSdJwtFormatMetadata, StandardCredentialFormatMetadata},
 };
 use open_auth2::{
-    ext::pkce::PkceCodeChallengeMethod, server::metadata::GrantType, ClientId, ScopeBuf,
+    ext::pkce::PkceCodeChallengeMethod,
+    server::metadata::{GrantType, TokenEndpointAuthMethod},
+    ClientId, ScopeBuf,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -151,8 +153,9 @@ impl Config {
         // Attestation-Based Client Authentication (HAIP §4.3): advertise the
         // `attest_jwt_client_auth` token endpoint auth method and the JWS algs
         // supported for the Client Attestation JWT (ATCA-07 §13.3).
-        metadata.token_endpoint_auth_methods_supported =
-            Some(vec!["attest_jwt_client_auth".to_owned()]);
+        metadata.token_endpoint_auth_methods_supported = vec![TokenEndpointAuthMethod::Extension(
+            "attest_jwt_client_auth".to_owned(),
+        )];
         metadata
             .extra
             .client_attestation
