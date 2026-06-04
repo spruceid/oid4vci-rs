@@ -39,7 +39,7 @@ iref = { version = "3.2.2", features = ["macros"] }
 pct-str = "2.0.0"
 langtag = { version = "0.4.0", features = ["serde"] }
 json-ld = "0.21.2"
-ssi = { version = "0.15", features = ["secp256r1"] }
+ssi = { version = "0.16", features = ["secp256r1"] }
 str-newtype = "2.0.0"
 
 # Server only

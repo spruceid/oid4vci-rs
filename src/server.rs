@@ -161,7 +161,10 @@ where
     S: Oid4vciServer,
 {
     let Some(access_token) = extract_access_token(&headers) else {
-        return ServerError::Unauthorized.into_response();
+        return ServerError::Unauthorized(
+            "missing or malformed Bearer/DPoP access token in the Authorization header".into(),
+        )
+        .into_response();
     };
     server
         .credential(headers, access_token, credential_request)
@@ -179,7 +182,10 @@ where
     S: Oid4vciServer,
 {
     let Some(access_token) = extract_access_token(&headers) else {
-        return ServerError::Unauthorized.into_response();
+        return ServerError::Unauthorized(
+            "missing or malformed Bearer/DPoP access token in the Authorization header".into(),
+        )
+        .into_response();
     };
     server
         .deferred_credential(headers, access_token, credential_request.transaction_id)
@@ -197,7 +203,10 @@ where
     S: Oid4vciServer,
 {
     let Some(access_token) = extract_access_token(&headers) else {
-        return ServerError::Unauthorized.into_response();
+        return ServerError::Unauthorized(
+            "missing or malformed Bearer/DPoP access token in the Authorization header".into(),
+        )
+        .into_response();
     };
     server
         .notification(headers, access_token, notification)
@@ -250,8 +259,8 @@ pub enum CredentialErrorCode {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ServerError {
-    #[error("unauthorized")]
-    Unauthorized,
+    #[error("unauthorized: {0}")]
+    Unauthorized(Cow<'static, str>),
 
     /// A Credential Request error (OpenID4VCI §8.3.1.2). Rendered as an HTTP 400
     /// response with a JSON `{ "error", "error_description"? }` body.
@@ -268,40 +277,35 @@ pub enum ServerError {
 impl IntoResponse for ServerError {
     fn into_response(self) -> Response {
         match self {
-            Self::Unauthorized => Response::builder()
-                .status(StatusCode::UNAUTHORIZED)
-                .body(Body::default())
-                .unwrap(),
-            // OpenID4VCI §8.3.1.2: HTTP 400, `application/json`, with the error
-            // code (and optional description) in the body. Never cached.
-            Self::CredentialRequest(error, error_description) => Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::CACHE_CONTROL, "no-store")
-                .body(Body::from(
-                    serde_json::to_vec(&ErrorResponse::new(error, error_description, None))
-                        // UNWRAP SAFETY: A Credential Error Response is always
-                        //                serializable as JSON.
-                        .unwrap(),
-                ))
-                .unwrap(),
-            Self::InvalidNotificationId => Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .body(Body::from(
-                    serde_json::to_vec(&ErrorResponse::new(
-                        NotificationError::InvalidNotificationId,
-                        None,
-                        None,
-                    ))
-                    // UNWRAP SAFETY: A Notification Error Response is always
-                    //                serializable as JSON.
-                    .unwrap(),
-                ))
-                .unwrap(),
-            Self::Other(_) => Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(Body::default())
-                .unwrap(),
+            // RFC 6750 §3: a 401 response to a protected-resource request carries
+            // a `WWW-Authenticate` challenge; the reason is surfaced in
+            // `error_description` to make the rejection easier to debug.
+            Self::Unauthorized(reason) => (
+                StatusCode::UNAUTHORIZED,
+                [(
+                    header::WWW_AUTHENTICATE,
+                    format!("Bearer error=\"invalid_token\", error_description=\"{reason}\""),
+                )],
+            )
+                .into_response(),
+            // OpenID4VCI §8.3.1.2: HTTP 400 with the error code (and optional
+            // description) as a JSON body. A 400 is not cacheable by default
+            // (RFC 9111 §4.2.2), so no explicit `Cache-Control` is needed.
+            Self::CredentialRequest(error, error_description) => (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::new(error, error_description, None)),
+            )
+                .into_response(),
+            Self::InvalidNotificationId => (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::new(
+                    NotificationError::InvalidNotificationId,
+                    None,
+                    None,
+                )),
+            )
+                .into_response(),
+            Self::Other(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         }
     }
 }
