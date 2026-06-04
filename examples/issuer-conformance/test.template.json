@@ -1,0 +1,25 @@
+{
+  "alias": "my-oid4vci-issuer-test",
+  "description": "OID4VCI 1.0 Final issuer conformance",
+  "vci": {
+    "credential_issuer_url": "https://localhost:8080",
+    "credential_configuration_id": "eu.europa.ec.eudi.pid.1",
+    "credential_proof_type_hint": "",
+    "authorization_server": ""
+  },
+  "credential": {
+    "trust_anchor_pem": "",
+    "status_list_trust_anchor_pem": ""
+  },
+  "client": {
+    "client_id": ""
+  },
+  "client2": {
+    "client_id": ""
+  },
+  "client_attestation": {
+    "attester_jwks": {},
+    "issuer": "",
+    "key_attestation_jwks": {}
+  }
+}
