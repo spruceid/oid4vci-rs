@@ -41,6 +41,7 @@ impl Oid4vciServer for Server {
 
     async fn credential(
         &self,
+        _headers: open_auth2::http::HeaderMap,
         access_token: AccessTokenBuf,
         request: ProfileCredentialRequest<Self::Profile>,
     ) -> Result<ProfileCredentialResponse<Self::Profile>, ServerError> {
@@ -96,7 +97,7 @@ impl Oid4vciServer for Server {
 
                 let mut credentials = Vec::with_capacity(keys.len());
 
-                for jwk in keys {
+                for proof in keys {
                     credentials.push(Oid4vciCredential::new(
                         config
                             .sign(
@@ -104,7 +105,7 @@ impl Oid4vciServer for Server {
                                 &self.jwk,
                                 m.client_id.as_deref(),
                                 value,
-                                Some(&jwk),
+                                Some(&proof.key),
                             )
                             .await,
                     ));
