@@ -15,7 +15,7 @@ reqwest = ["open-auth2/reqwest"]
 isomdl = ["dep:isomdl"]
 
 # Axum support.
-axum = ["dep:axum", "dep:axum-extra", "open-auth2/axum"]
+axum = ["dep:axum", "open-auth2/axum"]
 
 # Integer JWT timestamps only.
 #
@@ -44,7 +44,6 @@ str-newtype = "2.0.0"
 
 # Server only
 axum = { version = "0.8.8", optional = true }
-axum-extra = { version = "0.12.5", features = ["typed-header"], optional = true }
 
 # ISO MDL support.
 isomdl = { git = "https://github.com/spruceid/isomdl", rev = "7608053", optional = true }
