@@ -47,23 +47,28 @@ impl Oid4vciServer for Server {
         let m = self
             .oauth2
             .access_token_metadata(&access_token)
-            .ok_or(ServerError::Unauthorized)?;
+            .ok_or(ServerError::Unauthorized("unknown access token".into()))?;
 
         let (config, value) = match request.credential {
-            CredentialOrConfigurationId::Credential(id) => self
-                .config
-                .get_credential(&id)
-                .ok_or(ServerError::Unauthorized)?,
+            CredentialOrConfigurationId::Credential(id) => {
+                self.config
+                    .get_credential(&id)
+                    .ok_or(ServerError::Unauthorized(
+                        "unknown credential identifier".into(),
+                    ))?
+            }
             CredentialOrConfigurationId::Configuration(id) => {
-                let config = self
-                    .config
-                    .credential_configurations
-                    .get(&id)
-                    .ok_or(ServerError::Unauthorized)?;
+                let config = self.config.credential_configurations.get(&id).ok_or(
+                    ServerError::Unauthorized("unknown credential configuration".into()),
+                )?;
                 let mut credentials = config.credentials.iter();
-                let (_, value) = credentials.next().ok_or(ServerError::Unauthorized)?;
+                let (_, value) = credentials.next().ok_or(ServerError::Unauthorized(
+                    "credential configuration has no credentials".into(),
+                ))?;
                 if credentials.next().is_some() {
-                    return Err(ServerError::Unauthorized);
+                    return Err(ServerError::Unauthorized(
+                        "credential configuration has more than one credential".into(),
+                    ));
                 }
 
                 (config, value)
@@ -84,7 +89,7 @@ impl Oid4vciServer for Server {
                         verifier
                             .verify_list(m.client_id.as_deref(), jwts)
                             .await
-                            .map_err(|_| ServerError::Unauthorized)?
+                            .map_err(|_| ServerError::Unauthorized("invalid key proof".into()))?
                     }
                     _ => todo!(),
                 };
