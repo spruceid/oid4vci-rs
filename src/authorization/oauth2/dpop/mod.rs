@@ -44,6 +44,14 @@ pub const DPOP_NONCE: HeaderName = HeaderName::from_static("dpop-nonce");
 /// DPoP Proof JWT `typ` claim value.
 pub const DPOP_JWT_TYP: &str = "dpop+jwt";
 
+/// Clock-skew leeway applied to a DPoP proof's `iat` when accepting a proof
+/// minted slightly in the future.
+///
+/// RFC 9449 §4.3 leaves the acceptable `iat` window to the server; FAPI2
+/// requires tolerating reasonable skew between the client's and server's
+/// clocks, so a proof up to this far in the future is still accepted.
+pub const DPOP_IAT_LEEWAY: Duration = Duration::from_secs(60);
+
 /// DPoP Proof.
 ///
 /// See: <https://www.rfc-editor.org/rfc/rfc9449#section-4.2>
@@ -196,9 +204,13 @@ impl<K, S> ValidateClaims<DpopProofVerificationParams<'_, K>, S> for DpopProof {
         _proof: &S,
     ) -> ClaimsValidity {
         let now = params.date_time();
-        self.iat.verify(now)?;
 
-        // RFC 9449 §4.3: the `iat` must be within an acceptable window.
+        // RFC 9449 §4.3: the `iat` must not be in the future, tolerating up to
+        // `DPOP_IAT_LEEWAY` of clock skew between the client and this server
+        // (required by FAPI2) — hence verifying against `now + DPOP_IAT_LEEWAY`.
+        self.iat.verify(now + DPOP_IAT_LEEWAY)?;
+
+        // When a max age is configured, a proof older than it is also rejected.
         if let Some(max_age) = params.max_age {
             let age = now.timestamp() as f64 - self.iat.0.as_seconds();
             if age > max_age.as_secs_f64() {
