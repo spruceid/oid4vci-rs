@@ -80,7 +80,7 @@ impl Oid4vciServer for Server {
 
         let credentials = match &request.proofs {
             Some(proofs) => {
-                let keys = match proofs {
+                let verified_proofs = match proofs {
                     Proofs::Jwt(jwts) => {
                         let jwk_resolver = VerificationMethodDIDResolver::<_, AnyMethod>::new(
                             AnyDidMethod::default(),
@@ -95,9 +95,9 @@ impl Oid4vciServer for Server {
                     _ => todo!(),
                 };
 
-                let mut credentials = Vec::with_capacity(keys.len());
+                let mut credentials = Vec::with_capacity(verified_proofs.len());
 
-                for proof in keys {
+                for proof in verified_proofs {
                     credentials.push(Oid4vciCredential::new(
                         config
                             .sign(
