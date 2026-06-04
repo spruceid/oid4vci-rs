@@ -526,7 +526,9 @@ impl OAuth2Server for Server {
                 // without one the AS cannot bind the token and rejects the request
                 // rather than issue a bearer token.
                 if proof_jkt.is_none() {
-                    log::warn!("token: missing DPoP proof; FAPI2 requires a holder-of-key (DPoP) proof");
+                    log::warn!(
+                        "token: missing DPoP proof; FAPI2 requires a holder-of-key (DPoP) proof"
+                    );
                     return Err(OAuth2ServerError::InvalidRequest);
                 }
 
