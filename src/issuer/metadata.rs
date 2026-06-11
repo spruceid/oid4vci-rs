@@ -300,6 +300,7 @@ pub struct AnyCredentialFormatConfiguration {
     pub id: String,
 
     /// Any format-specific property.
+    #[serde(flatten)]
     pub properties: IndexMap<String, serde_json::Value>,
 }
 
