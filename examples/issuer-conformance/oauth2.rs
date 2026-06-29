@@ -351,6 +351,7 @@ impl OAuth2Server for Server {
 
     async fn metadata(
         &self,
+        _path: Option<&iref::uri::Path>,
     ) -> Result<Cow<'_, Oid4vciAuthorizationServerMetadata>, OAuth2ServerError> {
         Ok(match &self.config.authorization_server_metadata {
             Some(metadata) => Cow::Borrowed(metadata),
