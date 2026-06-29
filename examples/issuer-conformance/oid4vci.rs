@@ -161,6 +161,7 @@ impl Oid4vciServer for Server {
 
     async fn metadata(
         &self,
+        _path: Option<&iref::uri::Path>,
     ) -> Result<Cow<'_, ProfileCredentialIssuerMetadata<Self::Profile>>, ServerError> {
         Ok(Cow::Owned(self.config.credential_issuer_metadata()))
     }

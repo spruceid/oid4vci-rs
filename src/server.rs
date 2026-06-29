@@ -2,12 +2,13 @@ use std::{borrow::Cow, future::Future, sync::Arc};
 
 use axum::{
     body::Body,
-    extract::State,
+    extract::{Path as PathParam, State},
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json,
 };
+use iref::uri::Path;
 use open_auth2::{server::ErrorResponse, AccessTokenBuf};
 use serde::{Deserialize, Serialize};
 
@@ -26,11 +27,23 @@ use crate::{
 pub trait Oid4vciServer: Sized + Send + Sync + 'static {
     type Profile: Profile;
 
-    /// Credential Issuer Metadata.
+    /// Returns the credential issuer metadata for the given tenant path.
     ///
-    /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-issuer-metadata>
+    /// The `path` argument is the suffix of the well-known metadata URL after
+    /// `/.well-known/openid-credential-issuer`, and identifies the tenant
+    /// issuer as defined in [OpenID4VCI §11.2.2]:
+    ///
+    /// | Request path | `path` argument | Issuer |
+    /// |---|---|---|
+    /// | `/.well-known/openid-credential-issuer` | `None` | `https://example.com` |
+    /// | `/.well-known/openid-credential-issuer/` | `Some("")` | `https://example.com/` |
+    /// | `/.well-known/openid-credential-issuer/tenant` | `Some("tenant")` | `https://example.com/tenant` |
+    /// | `/.well-known/openid-credential-issuer/foo/bar` | `Some("foo/bar")` | `https://example.com/foo/bar` |
+    ///
+    /// [OpenID4VCI §11.2.2]: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-issuer-metadata
     fn metadata(
         &self,
+        path: Option<&Path>,
     ) -> impl Send
            + Future<
         Output = Result<Cow<'_, ProfileCredentialIssuerMetadata<Self::Profile>>, ServerError>,
@@ -101,22 +114,60 @@ pub trait Oid4vciRouter<S: Oid4vciServer> {
 
 impl<S: Oid4vciServer> Oid4vciRouter<S> for axum::Router<Arc<S>> {
     fn oid4vci_routes(self) -> Self {
-        self.route("/.well-known/openid-credential-issuer", get(metadata::<S>))
-            .route("/nonce", post(nonce::<S>))
-            .route("/credential", post(credential::<S>))
-            .route("/deferred_credential", post(deferred_credential::<S>))
-            .route("/notification", post(notification::<S>))
+        self.route(
+            "/.well-known/openid-credential-issuer",
+            get(metadata_none::<S>),
+        )
+        .route(
+            "/.well-known/openid-credential-issuer/",
+            get(metadata_some_empty::<S>),
+        )
+        .route(
+            "/.well-known/openid-credential-issuer/{*tenant}",
+            get(metadata_some_non_empty::<S>),
+        )
+        .route("/nonce", post(nonce::<S>))
+        .route("/credential", post(credential::<S>))
+        .route("/deferred_credential", post(deferred_credential::<S>))
+        .route("/notification", post(notification::<S>))
     }
 }
 
-/// Credential Issuer Metadata Endpoint.
-async fn metadata<S>(State(server): State<Arc<S>>) -> impl IntoResponse
+async fn metadata_none<S>(State(server): State<Arc<S>>) -> impl IntoResponse
 where
     S: Oid4vciServer,
 {
     // TODO support `Accept-Language` header.
     server
-        .metadata()
+        .metadata(None)
+        .await
+        .map(|metadata| metadata.as_ref().into_response())
+}
+
+async fn metadata_some_empty<S>(State(server): State<Arc<S>>) -> impl IntoResponse
+where
+    S: Oid4vciServer,
+{
+    // TODO support `Accept-Language` header.
+    server
+        .metadata(Some(Path::EMPTY_RELATIVE))
+        .await
+        .map(|metadata| metadata.as_ref().into_response())
+}
+
+async fn metadata_some_non_empty<S>(
+    State(server): State<Arc<S>>,
+    PathParam(tenant): PathParam<String>,
+) -> impl IntoResponse
+where
+    S: Oid4vciServer,
+{
+    // TODO support `Accept-Language` header.
+    let path = Path::new(&tenant)
+        // UNWRAP SAFETY: axum wildcard paths are always valid iref paths.
+        .unwrap();
+    server
+        .metadata(Some(path))
         .await
         .map(|metadata| metadata.as_ref().into_response())
 }
@@ -259,6 +310,9 @@ pub enum CredentialErrorCode {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ServerError {
+    #[error("not found")]
+    NotFound,
+
     #[error("unauthorized: {0}")]
     Unauthorized(Cow<'static, str>),
 
@@ -274,9 +328,19 @@ pub enum ServerError {
     Other(String),
 }
 
+impl ServerError {
+    pub fn other(e: impl ToString) -> Self {
+        Self::Other(e.to_string())
+    }
+}
+
 impl IntoResponse for ServerError {
     fn into_response(self) -> Response {
         match self {
+            Self::NotFound => Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::empty())
+                .unwrap(),
             // RFC 6750 §3: a 401 response to a protected-resource request carries
             // a `WWW-Authenticate` challenge; the reason is surfaced in
             // `error_description` to make the rejection easier to debug.

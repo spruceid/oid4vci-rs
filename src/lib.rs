@@ -119,6 +119,7 @@
 //! [`AnyProfile`]: crate::profile::AnyProfile
 //! [`StandardProfile`]: crate::profile::StandardProfile
 //! [Appendix A]: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-format-profiles>
+pub use indexmap;
 pub use iref;
 pub use open_auth2;
 
