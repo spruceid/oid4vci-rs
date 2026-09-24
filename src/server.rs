@@ -46,7 +46,10 @@ pub trait Oid4vciServer: Sized + Send + Sync + 'static {
         path: Option<&Path>,
     ) -> impl Send
            + Future<
-        Output = Result<Cow<'_, ProfileCredentialIssuerMetadata<Self::Profile>>, ServerError>,
+        Output = Result<
+            Cow<'_, ProfileCredentialIssuerMetadata<Self::Profile>>,
+            Oid4vciServerError,
+        >,
     >;
 
     /// Nonce Endpoint.
@@ -55,7 +58,7 @@ pub trait Oid4vciServer: Sized + Send + Sync + 'static {
     /// alphanumeric string.
     ///
     /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-nonce-endpoint>
-    fn nonce(&self) -> impl Send + Future<Output = Result<String, ServerError>> {
+    fn nonce(&self) -> impl Send + Future<Output = Result<String, Oid4vciServerError>> {
         async move {
             let mut rng = rand::rng();
             let nonce: String = rand::Rng::sample_iter(&mut rng, &rand::distr::Alphanumeric)
@@ -74,7 +77,7 @@ pub trait Oid4vciServer: Sized + Send + Sync + 'static {
         headers: HeaderMap,
         access_token: AccessTokenBuf,
         request: ProfileCredentialRequest<Self::Profile>,
-    ) -> impl Send + Future<Output = Result<ProfileCredentialResponse<Self::Profile>, ServerError>>;
+    ) -> impl Send + Future<Output = Result<ProfileCredentialResponse<Self::Profile>, Oid4vciServerError>>;
 
     /// Deferred Credential Endpoint.
     ///
@@ -87,9 +90,9 @@ pub trait Oid4vciServer: Sized + Send + Sync + 'static {
         _headers: HeaderMap,
         _access_token: AccessTokenBuf,
         _transaction_id: String,
-    ) -> impl Send + Future<Output = Result<ProfileCredentialResponse<Self::Profile>, ServerError>>
+    ) -> impl Send + Future<Output = Result<ProfileCredentialResponse<Self::Profile>, Oid4vciServerError>>
     {
-        async move { Err(ServerError::InvalidNotificationId) }
+        async move { Err(Oid4vciServerError::InvalidNotificationId) }
     }
 
     /// Notification Endpoint.
@@ -103,7 +106,7 @@ pub trait Oid4vciServer: Sized + Send + Sync + 'static {
         _headers: HeaderMap,
         _access_token: AccessTokenBuf,
         _notification: NotificationRequest,
-    ) -> impl Send + Future<Output = Result<(), ServerError>> {
+    ) -> impl Send + Future<Output = Result<(), Oid4vciServerError>> {
         async move { Ok(()) }
     }
 }
@@ -212,7 +215,7 @@ where
     S: Oid4vciServer,
 {
     let Some(access_token) = extract_access_token(&headers) else {
-        return ServerError::Unauthorized(
+        return Oid4vciServerError::Unauthorized(
             "missing or malformed Bearer/DPoP access token in the Authorization header".into(),
         )
         .into_response();
@@ -233,7 +236,7 @@ where
     S: Oid4vciServer,
 {
     let Some(access_token) = extract_access_token(&headers) else {
-        return ServerError::Unauthorized(
+        return Oid4vciServerError::Unauthorized(
             "missing or malformed Bearer/DPoP access token in the Authorization header".into(),
         )
         .into_response();
@@ -254,7 +257,7 @@ where
     S: Oid4vciServer,
 {
     let Some(access_token) = extract_access_token(&headers) else {
-        return ServerError::Unauthorized(
+        return Oid4vciServerError::Unauthorized(
             "missing or malformed Bearer/DPoP access token in the Authorization header".into(),
         )
         .into_response();
@@ -309,7 +312,7 @@ pub enum CredentialErrorCode {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum ServerError {
+pub enum Oid4vciServerError {
     #[error("not found")]
     NotFound,
 
@@ -328,13 +331,13 @@ pub enum ServerError {
     Other(String),
 }
 
-impl ServerError {
+impl Oid4vciServerError {
     pub fn other(e: impl ToString) -> Self {
         Self::Other(e.to_string())
     }
 }
 
-impl IntoResponse for ServerError {
+impl IntoResponse for Oid4vciServerError {
     fn into_response(self) -> Response {
         match self {
             Self::NotFound => Response::builder()
