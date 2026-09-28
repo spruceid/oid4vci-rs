@@ -18,7 +18,7 @@ use oid4vci::{
         ProfileCredentialIssuerMetadata, ProfileCredentialRequest, ProfileCredentialResponse,
     },
     proof::{jwt::JwtProofVerifier, Proofs},
-    server::{CredentialErrorCode, Oid4vciServer, ServerError},
+    server::{CredentialErrorCode, Oid4vciServer, Oid4vciServerError},
     CredentialOffer, Oid4vciCredential, StandardProfile,
 };
 use open_auth2::AccessTokenBuf;
@@ -134,10 +134,10 @@ impl Server {
     /// A missing nonce is an `invalid_proof`; an unknown, expired, or already
     /// used nonce is an `invalid_nonce` (OpenID4VCI §8.3.1.2). Consuming on use
     /// makes nonces single-use, rejecting replays.
-    fn consume_nonce(&self, nonce: Option<&str>) -> Result<(), ServerError> {
+    fn consume_nonce(&self, nonce: Option<&str>) -> Result<(), Oid4vciServerError> {
         let nonce = nonce.ok_or_else(|| {
             log::warn!("credential request: key proof is missing the c_nonce");
-            ServerError::CredentialRequest(
+            Oid4vciServerError::CredentialRequest(
                 CredentialErrorCode::InvalidProof,
                 Some("key proof is missing the c_nonce".to_owned()),
             )
@@ -147,7 +147,7 @@ impl Server {
             Some((_, expiry)) if expiry >= UtcDateTime::now() => Ok(()),
             _ => {
                 log::warn!("credential request: c_nonce is unknown, expired, or already used");
-                Err(ServerError::CredentialRequest(
+                Err(Oid4vciServerError::CredentialRequest(
                     CredentialErrorCode::InvalidNonce,
                     Some("the c_nonce is invalid or expired".to_owned()),
                 ))
@@ -162,11 +162,11 @@ impl Oid4vciServer for Server {
     async fn metadata(
         &self,
         _path: Option<&iref::uri::Path>,
-    ) -> Result<Cow<'_, ProfileCredentialIssuerMetadata<Self::Profile>>, ServerError> {
+    ) -> Result<Cow<'_, ProfileCredentialIssuerMetadata<Self::Profile>>, Oid4vciServerError> {
         Ok(Cow::Owned(self.config.credential_issuer_metadata()))
     }
 
-    async fn nonce(&self) -> Result<String, ServerError> {
+    async fn nonce(&self) -> Result<String, Oid4vciServerError> {
         // Generate a fresh `c_nonce` and remember it so the Credential Endpoint
         // can later verify the proof was bound to a nonce we issued.
         let nonce = Alphanumeric.sample_string(&mut rand::rng(), 32);
@@ -181,7 +181,7 @@ impl Oid4vciServer for Server {
         headers: HeaderMap,
         access_token: AccessTokenBuf,
         request: ProfileCredentialRequest<Self::Profile>,
-    ) -> Result<ProfileCredentialResponse<Self::Profile>, ServerError> {
+    ) -> Result<ProfileCredentialResponse<Self::Profile>, Oid4vciServerError> {
         log::debug!("credential request: {request:#?}");
 
         let m = self
@@ -189,7 +189,7 @@ impl Oid4vciServer for Server {
             .access_token_metadata(&access_token)
             .ok_or_else(|| {
                 log::warn!("credential request: unknown access token");
-                ServerError::Unauthorized("unknown access token".into())
+                Oid4vciServerError::Unauthorized("unknown access token".into())
             })?;
 
         // When the access token is DPoP-bound, the resource server MUST validate
@@ -199,7 +199,9 @@ impl Oid4vciServer for Server {
                 .await
                 .map_err(|e| {
                     log::warn!("credential request: DPoP validation failed: {e}");
-                    ServerError::Unauthorized(format!("DPoP proof validation failed: {e}").into())
+                    Oid4vciServerError::Unauthorized(
+                        format!("DPoP proof validation failed: {e}").into(),
+                    )
                 })?;
         }
 
@@ -207,7 +209,7 @@ impl Oid4vciServer for Server {
             CredentialOrConfigurationId::Credential(id) => {
                 self.config.get_credential(&id).ok_or_else(|| {
                     log::warn!("credential request: unknown credential identifier {id:?}");
-                    ServerError::CredentialRequest(
+                    Oid4vciServerError::CredentialRequest(
                         CredentialErrorCode::UnknownCredentialIdentifier,
                         None,
                     )
@@ -220,17 +222,17 @@ impl Oid4vciServer for Server {
                     .get(&id)
                     .ok_or_else(|| {
                         log::warn!("credential request: unknown credential configuration {id:?}");
-                        ServerError::CredentialRequest(
+                        Oid4vciServerError::CredentialRequest(
                             CredentialErrorCode::UnknownCredentialConfiguration,
                             None,
                         )
                     })?;
                 let mut credentials = config.credentials.iter();
-                let (_, value) = credentials.next().ok_or(ServerError::Unauthorized(
+                let (_, value) = credentials.next().ok_or(Oid4vciServerError::Unauthorized(
                     "credential configuration has no credentials".into(),
                 ))?;
                 if credentials.next().is_some() {
-                    return Err(ServerError::Unauthorized(
+                    return Err(Oid4vciServerError::Unauthorized(
                         "credential configuration has more than one credential".into(),
                     ));
                 }
@@ -255,7 +257,7 @@ impl Oid4vciServer for Server {
                             .await
                             .map_err(|e| {
                                 log::warn!("credential request: proof verification failed: {e}");
-                                ServerError::CredentialRequest(
+                                Oid4vciServerError::CredentialRequest(
                                     CredentialErrorCode::InvalidProof,
                                     None,
                                 )
@@ -292,7 +294,7 @@ impl Oid4vciServer for Server {
                 // (OpenID4VCI §8.2). A request without `proofs` is an
                 // `invalid_proof` error (§8.3.1.2).
                 log::warn!("credential request: missing required proofs");
-                return Err(ServerError::CredentialRequest(
+                return Err(Oid4vciServerError::CredentialRequest(
                     CredentialErrorCode::InvalidProof,
                     Some("the credential configuration requires a key proof".to_owned()),
                 ));

@@ -767,7 +767,7 @@ pub async fn authorize_decision(
             } = pa.request;
             // RFC 6749 §4.1.2.1: the resource owner denying the request is
             // reported to the client as `access_denied`.
-            let error = ErrorResponse::new("access_denied".to_owned(), None, None);
+            let error = ErrorResponse::new(ErrorCode::AccessDenied, None, None);
             match request.deny(state, error, None) {
                 Some(uri) => Redirect(uri).into_response(),
                 None => Error::MissingRedirectUrl.into_response(),
