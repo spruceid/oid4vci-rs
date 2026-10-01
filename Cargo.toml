@@ -35,7 +35,7 @@ time = { version = "0.3.29", features = ["serde"] }
 thiserror = "1.0.49"
 serde_urlencoded = "0.7.1"
 indexmap = "2.13.0"
-iref = "4.1"
+iref = "4.3"
 pct-str = "2.0.0"
 langtag = { version = "0.4.0", features = ["serde"] }
 json-ld = "0.21.2"

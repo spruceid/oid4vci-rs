@@ -6,8 +6,9 @@
 use std::str::FromStr;
 
 use iref::{
-    uri::{Query, QueryBuf, SchemeBuf},
-    Uri, UriBuf,
+    scheme,
+    uri::{Authority, Query, QueryBuf},
+    Scheme, Uri, UriBuf,
 };
 use open_auth2::{
     client::OAuth2ClientError,
@@ -54,7 +55,7 @@ impl CredentialOffer {
     /// Scheme of a URI encoded credential offer.
     ///
     /// See: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-openid-credential-offer>
-    pub const SCHEME: &str = "openid-credential-offer";
+    pub const SCHEME: &Scheme = scheme!("openid-credential-offer");
 
     /// Decodes a URI-encoded Credential Offer.
     ///
@@ -77,23 +78,15 @@ impl CredentialOffer {
             EncodedCredentialOffer::Value {
                 credential_offer: params,
             } => Ok(CredentialOffer::Value(
-                serde_json::from_str(
-                    &params, // &percent_encoding::percent_decode_str(&params)
-                            // .decode_utf8()
-                            // .context("could not percent decode credential offer JSON")?,
-                )
-                .map_err(|e| CredentialOfferError::Decoding(e.to_string()))?,
+                serde_json::from_str(&params)
+                    .map_err(|e| CredentialOfferError::Decoding(e.to_string()))?,
             )),
         }
     }
 
     /// Creates a URI-encoded credential offer.
     pub fn to_uri(&self) -> UriBuf {
-        let mut result = UriBuf::from_scheme(
-            SchemeBuf::new(Self::SCHEME.to_owned().into_bytes())
-                // SAFETY: `Self::SCHEME` is a valid scheme.
-                .unwrap(),
-        );
+        let mut result = UriBuf::from_scheme(Self::SCHEME.to_owned());
 
         let query = match self {
             Self::Value(params) => {
@@ -117,6 +110,7 @@ impl CredentialOffer {
             }
         };
 
+        result.set_authority(Some(Authority::EMPTY));
         result.set_query(Some(&query));
         result
     }
@@ -251,8 +245,21 @@ mod test {
 
     #[test]
     fn from_uri() {
-        let uri = Uri::new(b"openid-credential-offer:?credential_offer_uri=http%3A%2F%2F127.0.0.1%3A3000%2Foffer%2FW6FFMNcNkPbw0fcqsOjS8wyon5LqJQ").unwrap();
+        let uri = Uri::new(b"openid-credential-offer://?credential_offer_uri=http%3A%2F%2F127.0.0.1%3A3000%2Foffer%2FW6FFMNcNkPbw0fcqsOjS8wyon5LqJQ").unwrap();
         CredentialOffer::from_uri(uri).unwrap();
+    }
+
+    #[test]
+    fn to_uri() {
+        let offer = CredentialOffer::Reference(
+            UriBuf::new(b"http://127.0.0.1:3000/offer/W6FFMNcNkPbw0fcqsOjS8wyon5LqJQ".to_vec())
+                .unwrap(),
+        );
+
+        assert_eq!(
+            offer.to_uri().as_str(),
+            "openid-credential-offer://?credential_offer_uri=http%3A%2F%2F127.0.0.1%3A3000%2Foffer%2FW6FFMNcNkPbw0fcqsOjS8wyon5LqJQ"
+        );
     }
 
     #[test]
