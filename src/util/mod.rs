@@ -1,5 +1,10 @@
 use std::ops::Deref;
 
+#[cfg(feature = "rand")]
+use rand::{
+    distr::{Alphanumeric, SampleString},
+    rng,
+};
 use ssi::claims::jwt::IssuedAt;
 use ssi::claims::{
     chrono::{DateTime, Utc},
@@ -19,6 +24,13 @@ pub fn non_empty<T, A: Deref<Target = [T]>>(array: A) -> Option<A> {
     } else {
         Some(array)
     }
+}
+
+/// Generates a random `jti` (JWT ID), suitable for Client Attestation PoP
+/// and DPoP proofs.
+#[cfg(feature = "rand")]
+pub fn generate_jti() -> String {
+    Alphanumeric.sample_string(&mut rng(), 30)
 }
 
 pub fn jwt_iat_now() -> IssuedAt {

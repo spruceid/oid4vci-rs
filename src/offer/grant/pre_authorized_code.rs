@@ -1,7 +1,8 @@
 use iref::UriBuf;
+#[cfg(feature = "rand")]
 use rand::{
     distr::{Alphanumeric, SampleString},
-    thread_rng, CryptoRng,
+    rng, CryptoRng,
 };
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
@@ -27,6 +28,7 @@ impl PreAuthorizedCodeGrant {
     }
 }
 
+#[cfg(feature = "rand")]
 const NUMERIC: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Default)]
@@ -40,6 +42,7 @@ pub enum InputMode {
 }
 
 impl InputMode {
+    #[cfg(feature = "rand")]
     pub fn generate_with(&self, rng: &mut impl CryptoRng, len: usize) -> String {
         match self {
             Self::Numeric => rand::distr::slice::Choose::new(NUMERIC)
@@ -71,8 +74,9 @@ impl TxCodeDefinition {
         }
     }
 
+    #[cfg(feature = "rand")]
     pub fn generate(&self) -> String {
-        let mut rng = thread_rng();
+        let mut rng = rng();
         let len = self.length.unwrap_or(6);
         self.input_mode
             .unwrap_or(InputMode::Text)

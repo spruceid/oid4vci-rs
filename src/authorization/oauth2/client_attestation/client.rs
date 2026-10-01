@@ -7,11 +7,10 @@ use open_auth2::{
     server::AuthorizationServerMetadata,
     transport::HttpClient,
 };
-use rand::{
-    distr::{Alphanumeric, SampleString},
-    rng,
+use ssi::claims::{
+    jws::{JwsPayload, JwsSigner},
+    Jws, JwsBuf, SignatureError,
 };
-use ssi::claims::{jws::JwsSigner, Jws, JwsBuf, JwsPayload, SignatureError};
 
 use crate::authorization::oauth2::client_attestation::{
     ClientAttestationAndPopRef, ClientAttestationServerMetadata, ClientAttestationServerParams,
@@ -29,36 +28,71 @@ pub trait AttestedOAuth2Client: OAuth2Client {
     /// Client Attestation PoP signer.
     fn attestation_pop_signer(&self) -> &Self::Signer;
 
+    /// Generates and signs a Client Attestation PoP JWT with the given `jti`.
+    #[allow(async_fn_in_trait)]
+    async fn generate_attestation_pop_with(
+        &self,
+        aud: String,
+        challenge: Option<String>,
+        jti: String,
+    ) -> Result<JwsBuf, SignatureError> {
+        ClientAttestationPop::new(self.client_id().to_owned(), aud, jti, challenge)
+            .sign(self.attestation_pop_signer())
+            .await
+    }
+
+    /// Generates and signs a fresh Client Attestation PoP JWT, with a
+    /// random `jti` (requires the `rand` feature). See
+    /// [`Self::generate_attestation_pop_with`] for a version that doesn't
+    /// need one.
+    #[cfg(feature = "rand")]
     #[allow(async_fn_in_trait)]
     async fn generate_attestation_pop(
         &self,
         aud: String,
         challenge: Option<String>,
     ) -> Result<JwsBuf, SignatureError> {
-        ClientAttestationPop::new(
-            self.client_id().to_owned(),
-            aud,
-            Alphanumeric.sample_string(&mut rng(), 30),
-            challenge,
-        )
-        .sign(self.attestation_pop_signer())
-        .await
+        self.generate_attestation_pop_with(aud, challenge, crate::util::generate_jti())
+            .await
     }
 }
 
 pub struct WithClientAttestation<'a, M, T> {
     pub authorization_server_metadata: &'a AuthorizationServerMetadata<M>,
     pub value: T,
+
+    /// Generates the Client Attestation PoP's `jti`, called at most once,
+    /// and only if the client actually has an attestation configured.
+    jti: Box<dyn Fn() -> String + Send>,
 }
 
 impl<'a, M, T> WithClientAttestation<'a, M, T> {
+    /// Creates a new instance with a random `jti` generator (requires the
+    /// `rand` feature). See [`Self::new_with`] for a version that doesn't
+    /// need one.
+    #[cfg(feature = "rand")]
     pub fn new(
         value: T,
         authorization_server_metadata: &'a AuthorizationServerMetadata<M>,
     ) -> Self {
+        Self::new_with(
+            value,
+            authorization_server_metadata,
+            crate::util::generate_jti,
+        )
+    }
+
+    /// Creates a new instance, generating the Client Attestation PoP's
+    /// `jti` by calling `jti`.
+    pub fn new_with(
+        value: T,
+        authorization_server_metadata: &'a AuthorizationServerMetadata<M>,
+        jti: impl Fn() -> String + Send + 'static,
+    ) -> Self {
         Self {
             value,
             authorization_server_metadata,
+            jti: Box::new(jti),
         }
     }
 }
@@ -94,10 +128,28 @@ where
 pub trait AddClientAttestation<'a, M> {
     type Output;
 
+    /// Wraps request building, generating the Client Attestation PoP's
+    /// `jti` by calling `jti` — at most once, and only when needed.
+    fn with_client_attestation_with(
+        self,
+        authorization_server_metadata: &'a AuthorizationServerMetadata<M>,
+        jti: impl Fn() -> String + Send + 'static,
+    ) -> Self::Output;
+
+    /// Wraps request building, generating the Client Attestation PoP's
+    /// `jti` randomly (requires the `rand` feature). See
+    /// [`Self::with_client_attestation_with`] for a version that doesn't
+    /// need one.
+    #[cfg(feature = "rand")]
     fn with_client_attestation(
         self,
         authorization_server_metadata: &'a AuthorizationServerMetadata<M>,
-    ) -> Self::Output;
+    ) -> Self::Output
+    where
+        Self: Sized,
+    {
+        self.with_client_attestation_with(authorization_server_metadata, crate::util::generate_jti)
+    }
 }
 
 impl<'a, E, M, T> AddClientAttestation<'a, M> for RequestBuilder<E, T>
@@ -106,11 +158,12 @@ where
 {
     type Output = RequestBuilder<E, WithClientAttestation<'a, M, T>>;
 
-    fn with_client_attestation(
+    fn with_client_attestation_with(
         self,
         authorization_server_metadata: &'a AuthorizationServerMetadata<M>,
+        jti: impl Fn() -> String + Send + 'static,
     ) -> Self::Output {
-        self.map(|value| WithClientAttestation::new(value, authorization_server_metadata))
+        self.map(|value| WithClientAttestation::new_with(value, authorization_server_metadata, jti))
     }
 }
 
@@ -143,12 +196,13 @@ where
 
             let pop = endpoint
                 .client()
-                .generate_attestation_pop(
+                .generate_attestation_pop_with(
                     self.authorization_server_metadata
                         .issuer
                         .as_str()
                         .to_owned(),
                     challenge,
+                    (self.jti)(),
                 )
                 .await
                 .map_err(OAuth2ClientError::request)?;

@@ -61,7 +61,7 @@ pub trait Oid4vciServer: Sized + Send + Sync + 'static {
     fn nonce(&self) -> impl Send + Future<Output = Result<String, Oid4vciServerError>> {
         async move {
             let mut rng = rand::rng();
-            let nonce: String = rand::Rng::sample_iter(&mut rng, &rand::distr::Alphanumeric)
+            let nonce: String = rand::RngExt::sample_iter(&mut rng, &rand::distr::Alphanumeric)
                 .take(32)
                 .map(char::from)
                 .collect();

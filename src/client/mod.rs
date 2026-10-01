@@ -146,12 +146,15 @@ pub trait Oid4vciClient:
         })
     }
 
-    /// Process a credential offer.
+    /// Process a credential offer, generating the Client Attestation PoP's
+    /// and DPoP proof's `jti` by calling `jti` — at most once each, and
+    /// only when needed.
     #[allow(async_fn_in_trait)]
-    async fn accept_offer(
+    async fn accept_offer_with(
         &self,
         http_client: &impl HttpClient,
         credential_offer: ResolvedCredentialOffer<Self::Profile>,
+        jti: impl Fn() -> String + Send + Clone + 'static,
     ) -> Result<CredentialTokenState<Self>, ClientError> {
         log::debug!("selecting grant");
         match self.select_grant(&credential_offer.params)? {
@@ -228,8 +231,11 @@ pub trait Oid4vciClient:
                         let response = token_endpoint
                             .exchange_pre_authorized_code(grant.pre_authorized_code.clone(), None)
                             .with_authorization_details(&authorization_details)
-                            .with_client_attestation(&authorization_server_metadata)
-                            .with_dpop(None, None)
+                            .with_client_attestation_with(
+                                &authorization_server_metadata,
+                                jti.clone(),
+                            )
+                            .with_dpop_with(None, None, jti)
                             .send(http_client)
                             .await
                             .map_err(ClientError::authorization)?;
@@ -244,6 +250,20 @@ pub trait Oid4vciClient:
                 }
             }
         }
+    }
+
+    /// Process a credential offer, generating the Client Attestation PoP's
+    /// and DPoP proof's `jti` randomly (requires the `rand` feature). See
+    /// [`Self::accept_offer_with`] for a version that doesn't need one.
+    #[cfg(feature = "rand")]
+    #[allow(async_fn_in_trait)]
+    async fn accept_offer(
+        &self,
+        http_client: &impl HttpClient,
+        credential_offer: ResolvedCredentialOffer<Self::Profile>,
+    ) -> Result<CredentialTokenState<Self>, ClientError> {
+        self.accept_offer_with(http_client, credential_offer, crate::util::generate_jti)
+            .await
     }
 
     #[allow(async_fn_in_trait)]
@@ -262,6 +282,7 @@ pub trait Oid4vciClient:
         }
     }
 
+    #[cfg(feature = "rand")]
     #[allow(async_fn_in_trait)]
     async fn exchange_credential(
         &self,
@@ -273,45 +294,20 @@ pub trait Oid4vciClient:
     where
         <Self::Profile as Profile>::RequestParams: Default,
     {
-        self.exchange_credential_with(http_client, token, credential, proofs, Default::default())
-            .await
+        self.exchange_credential_with(
+            http_client,
+            token,
+            credential,
+            proofs,
+            Default::default(),
+            crate::util::generate_jti,
+        )
+        .await
     }
 
-    /// Polls the Deferred Credential Endpoint with a `transaction_id`.
-    ///
-    /// Used when a previous Credential Request (or Deferred Credential Request)
-    /// returned a [`CredentialResponse::Deferred`]. The caller is responsible
-    /// for waiting the `interval` returned in the deferred response before
-    /// calling this method.
-    ///
-    /// [`CredentialResponse::Deferred`]: crate::endpoints::credential::CredentialResponse::Deferred
-    #[allow(async_fn_in_trait)]
-    async fn exchange_deferred_credential(
-        &self,
-        http_client: &impl HttpClient,
-        token: &CredentialToken<Self::Profile>,
-        transaction_id: String,
-    ) -> Result<ProfileCredentialResponse<Self::Profile>, ClientError> {
-        let deferred_endpoint = DeferredCredentialEndpoint::new(
-            self,
-            token
-                .credential_offer
-                .issuer_metadata
-                .deferred_credential_endpoint
-                .as_deref()
-                .ok_or(ClientError::MissingDeferredCredentialEndpoint)?,
-        );
-
-        let credential = deferred_endpoint
-            .exchange_deferred_credential(transaction_id)
-            .with_access_token(&token.response.token_type, &token.response.access_token)
-            .with_dpop(Some(&token.response.access_token), None)
-            .send(http_client)
-            .await?;
-
-        Ok(credential)
-    }
-
+    /// Generates the DPoP proof's `jti` by calling `jti`, instead of
+    /// randomly. See [`Self::exchange_credential`] for a version that
+    /// doesn't need one.
     #[allow(async_fn_in_trait)]
     async fn exchange_credential_with(
         &self,
@@ -320,6 +316,7 @@ pub trait Oid4vciClient:
         credential: CredentialOrConfigurationId,
         proofs: Option<Proofs>,
         params: <Self::Profile as Profile>::RequestParams,
+        jti: impl Fn() -> String + Send + 'static,
     ) -> Result<ProfileCredentialResponse<Self::Profile>, ClientError> {
         let credential_endpoint = CredentialEndpoint::new(
             self,
@@ -332,7 +329,7 @@ pub trait Oid4vciClient:
                 params,
             )
             .with_access_token(&token.response.token_type, &token.response.access_token)
-            .with_dpop(Some(&token.response.access_token), None)
+            .with_dpop_with(Some(&token.response.access_token), None, jti)
             .send(http_client)
             .await?;
 
@@ -373,6 +370,67 @@ pub trait Oid4vciClient:
         // }
 
         Ok(credential)
+    }
+
+    /// Polls the Deferred Credential Endpoint with a `transaction_id`.
+    ///
+    /// Used when a previous Credential Request (or Deferred Credential Request)
+    /// returned a [`CredentialResponse::Deferred`]. The caller is responsible
+    /// for waiting the `interval` returned in the deferred response before
+    /// calling this method.
+    ///
+    /// Generates the DPoP proof's `jti` by calling `jti`, instead of
+    /// randomly. See [`Self::exchange_deferred_credential`] for a version
+    /// that doesn't need one.
+    ///
+    /// [`CredentialResponse::Deferred`]: crate::endpoints::credential::CredentialResponse::Deferred
+    #[allow(async_fn_in_trait)]
+    async fn exchange_deferred_credential_with(
+        &self,
+        http_client: &impl HttpClient,
+        token: &CredentialToken<Self::Profile>,
+        transaction_id: String,
+        jti: impl Fn() -> String + Send + 'static,
+    ) -> Result<ProfileCredentialResponse<Self::Profile>, ClientError> {
+        let deferred_endpoint = DeferredCredentialEndpoint::new(
+            self,
+            token
+                .credential_offer
+                .issuer_metadata
+                .deferred_credential_endpoint
+                .as_deref()
+                .ok_or(ClientError::MissingDeferredCredentialEndpoint)?,
+        );
+
+        let credential = deferred_endpoint
+            .exchange_deferred_credential(transaction_id)
+            .with_access_token(&token.response.token_type, &token.response.access_token)
+            .with_dpop_with(Some(&token.response.access_token), None, jti)
+            .send(http_client)
+            .await?;
+
+        Ok(credential)
+    }
+
+    /// Polls the Deferred Credential Endpoint with a `transaction_id`,
+    /// generating the DPoP proof's `jti` randomly (requires the `rand`
+    /// feature). See [`Self::exchange_deferred_credential_with`] for a
+    /// version that doesn't need one.
+    #[cfg(feature = "rand")]
+    #[allow(async_fn_in_trait)]
+    async fn exchange_deferred_credential(
+        &self,
+        http_client: &impl HttpClient,
+        token: &CredentialToken<Self::Profile>,
+        transaction_id: String,
+    ) -> Result<ProfileCredentialResponse<Self::Profile>, ClientError> {
+        self.exchange_deferred_credential_with(
+            http_client,
+            token,
+            transaction_id,
+            crate::util::generate_jti,
+        )
+        .await
     }
 }
 

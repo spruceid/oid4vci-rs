@@ -38,11 +38,73 @@ impl<'a> OAuth2DpopOptions<'a> {
 pub struct WithDpop<'a, T> {
     pub dpop: OAuth2DpopOptions<'a>,
     pub value: T,
+
+    /// Generates the DPoP proof's `jti`, called at most once per request
+    /// attempt, and only if the client has a DPoP public JWK configured.
+    jti: Box<dyn Fn() -> String + Send>,
 }
 
 impl<'a, T> WithDpop<'a, T> {
+    /// Creates a new instance with a random `jti` generator (requires the
+    /// `rand` feature). See [`Self::new_with`] for a version that doesn't
+    /// need one.
+    #[cfg(feature = "rand")]
     pub fn new(value: T, dpop: OAuth2DpopOptions<'a>) -> Self {
-        Self { value, dpop }
+        Self::new_with(value, dpop, crate::util::generate_jti)
+    }
+
+    /// Creates a new instance, generating the DPoP proof's `jti` by calling
+    /// `jti`.
+    pub fn new_with(
+        value: T,
+        dpop: OAuth2DpopOptions<'a>,
+        jti: impl Fn() -> String + Send + 'static,
+    ) -> Self {
+        Self {
+            value,
+            dpop,
+            jti: Box::new(jti),
+        }
+    }
+
+    /// Builds the inner request, attaching a DPoP proof if the client has
+    /// a DPoP public JWK configured.
+    ///
+    /// `nonce` is taken separately, rather than read from `self.dpop.nonce`,
+    /// so a retry can supply the nonce the server just handed back instead.
+    async fn build_request<'b, E>(
+        &'b self,
+        endpoint: &E,
+        http_client: &impl HttpClient,
+        nonce: Option<&str>,
+    ) -> Result<http::Request<T::RequestBody<'b>>, OAuth2ClientError>
+    where
+        E: Endpoint<Client: OAuth2DpopClient>,
+        T: HttpRequest<E>,
+    {
+        let mut request = self.value.build_request(endpoint, http_client).await?;
+
+        if let Some(public_jwk) = endpoint.client().dpop_public_jwk() {
+            let htm = request.method().to_string();
+            let mut htu = UriBuf::new(request.uri().to_string().into_bytes()).unwrap();
+            htu.set_query(None);
+            htu.set_fragment(None);
+
+            let dpop = DpopProof::new_with(
+                htm,
+                htu,
+                self.dpop.ath.clone(),
+                nonce.map(ToOwned::to_owned),
+                (self.jti)(),
+            )
+            .sign(DpopSigner::new(endpoint.client().dpop_signer(), public_jwk))
+            .await
+            .map_err(OAuth2ClientError::request)?;
+
+            request.insert_dpop(dpop);
+        }
+
+        Ok(request)
     }
 }
 
@@ -74,50 +136,39 @@ impl<'a, T: RedirectRequest> RedirectRequest for WithDpop<'a, T> {
 pub trait AddDpop<'a> {
     type Output;
 
-    fn with_dpop(self, ath: Option<&AccessToken>, nonce: Option<&'a str>) -> Self::Output;
+    /// Wraps request building, generating the DPoP proof's `jti` by
+    /// calling `jti` — at most once per request attempt, and only when
+    /// needed.
+    fn with_dpop_with(
+        self,
+        ath: Option<&AccessToken>,
+        nonce: Option<&'a str>,
+        jti: impl Fn() -> String + Send + 'static,
+    ) -> Self::Output;
+
+    /// Wraps request building, generating the DPoP proof's `jti` randomly
+    /// (requires the `rand` feature). See [`Self::with_dpop_with`] for a
+    /// version that doesn't need one.
+    #[cfg(feature = "rand")]
+    fn with_dpop(self, ath: Option<&AccessToken>, nonce: Option<&'a str>) -> Self::Output
+    where
+        Self: Sized,
+    {
+        self.with_dpop_with(ath, nonce, crate::util::generate_jti)
+    }
 }
 
 impl<'a, E, T> AddDpop<'a> for RequestBuilder<E, T> {
     type Output = RequestBuilder<E, WithDpop<'a, T>>;
 
-    fn with_dpop(self, ath: Option<&AccessToken>, nonce: Option<&'a str>) -> Self::Output {
-        self.map(|value| WithDpop::new(value, OAuth2DpopOptions::new(ath, nonce)))
+    fn with_dpop_with(
+        self,
+        ath: Option<&AccessToken>,
+        nonce: Option<&'a str>,
+        jti: impl Fn() -> String + Send + 'static,
+    ) -> Self::Output {
+        self.map(|value| WithDpop::new_with(value, OAuth2DpopOptions::new(ath, nonce), jti))
     }
-}
-
-async fn build_request<'b, E, T>(
-    endpoint: &E,
-    http_client: &impl HttpClient,
-    value: &'b T,
-    ath: Option<&str>,
-    nonce: Option<&str>,
-) -> Result<http::Request<T::RequestBody<'b>>, OAuth2ClientError>
-where
-    E: Endpoint<Client: OAuth2DpopClient>,
-    T: HttpRequest<E>,
-{
-    let mut request = value.build_request(endpoint, http_client).await?;
-
-    if let Some(public_jwk) = endpoint.client().dpop_public_jwk() {
-        let htm = request.method().to_string();
-        let mut htu = UriBuf::new(request.uri().to_string().into_bytes()).unwrap();
-        htu.set_query(None);
-        htu.set_fragment(None);
-
-        let dpop = DpopProof::new(
-            htm,
-            htu,
-            ath.map(ToOwned::to_owned),
-            nonce.map(ToOwned::to_owned),
-        )
-        .sign(DpopSigner::new(endpoint.client().dpop_signer(), public_jwk))
-        .await
-        .map_err(OAuth2ClientError::request)?;
-
-        request.insert_dpop(dpop);
-    }
-
-    Ok(request)
 }
 
 impl<'a, E, T> HttpRequest<E> for WithDpop<'a, T>
@@ -138,14 +189,8 @@ where
         endpoint: &E,
         http_client: &impl HttpClient,
     ) -> Result<http::Request<Self::RequestBody<'_>>, OAuth2ClientError> {
-        build_request(
-            endpoint,
-            http_client,
-            &self.value,
-            self.dpop.ath.as_deref(),
-            self.dpop.nonce,
-        )
-        .await
+        self.build_request(endpoint, http_client, self.dpop.nonce)
+            .await
     }
 
     fn decode_response(
@@ -207,14 +252,9 @@ where
 
                 // Try again, with a nonce.
                 log::debug!("trying again with a nonce");
-                let mut request = build_request(
-                    endpoint,
-                    http_client,
-                    &self.value,
-                    self.dpop.ath.as_deref(),
-                    Some(nonce),
-                )
-                .await?;
+                let mut request = self
+                    .build_request(endpoint, http_client, Some(nonce))
+                    .await?;
 
                 if let Some(content_type) = Self::ContentType::VALUE {
                     request
