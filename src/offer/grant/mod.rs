@@ -32,3 +32,15 @@ impl CredentialOfferGrants {
         self.authorization_code.is_none() && self.pre_authorized_code.is_none()
     }
 }
+
+impl From<AuthorizationCodeGrant> for CredentialOfferGrants {
+    fn from(value: AuthorizationCodeGrant) -> Self {
+        Self::new(Some(value), None)
+    }
+}
+
+impl From<PreAuthorizedCodeGrant> for CredentialOfferGrants {
+    fn from(value: PreAuthorizedCodeGrant) -> Self {
+        Self::new(None, Some(value))
+    }
+}
