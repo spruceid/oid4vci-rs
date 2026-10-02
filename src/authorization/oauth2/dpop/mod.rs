@@ -5,10 +5,6 @@ use std::{borrow::Cow, time::Duration};
 
 use iref::{Uri, UriBuf};
 use open_auth2::http::{self, HeaderName, HeaderValue};
-use rand::{
-    distr::{Alphanumeric, SampleString},
-    rng,
-};
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use ssi::{
@@ -97,9 +93,29 @@ pub struct DpopProof {
 }
 
 impl DpopProof {
+    /// Creates a new DPoP proof with a random `jti` (requires the `rand`
+    /// feature). See [`Self::new_with`] for a version that doesn't need
+    /// one.
+    #[cfg(feature = "rand")]
     pub fn new(htm: String, htu: UriBuf, ath: Option<String>, nonce: Option<String>) -> Self {
+        Self::new_with(htm, htu, ath, nonce, crate::util::generate_jti())
+    }
+
+    /// Creates a new DPoP proof with the given `jti`.
+    ///
+    /// The caller is responsible for `jti`'s uniqueness: it must be assigned
+    /// such that there is a negligible probability that the same value will
+    /// be assigned to any other DPoP proof used in the same context during
+    /// the time window of validity (see [`Self::jti`]).
+    pub fn new_with(
+        htm: String,
+        htu: UriBuf,
+        ath: Option<String>,
+        nonce: Option<String>,
+        jti: String,
+    ) -> Self {
         Self {
-            jti: Alphanumeric.sample_string(&mut rng(), 30),
+            jti,
             htm,
             htu,
             iat: jwt_iat_now(),

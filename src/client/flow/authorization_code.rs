@@ -58,10 +58,14 @@ impl<C: Oid4vciClient> AuthorizationCodeRequired<C> {
         }
     }
 
-    pub async fn proceed(
+    /// Generates the Client Attestation PoP's and DPoP proof's `jti` by
+    /// calling `jti` — at most once each, and only when needed. See
+    /// [`Self::proceed`] for a version that generates them randomly.
+    pub async fn proceed_with(
         self,
         http_client: &impl HttpClient,
         client_redirect_url: UriBuf,
+        jti: impl Fn() -> String + Send + Clone + 'static,
     ) -> Result<WaitingForAuthorizationCode<C>, ClientError> {
         let (pkce_code_challenge, pkce_code_verifier) =
             PkceCodeChallengeAndMethod::new_random_sha256();
@@ -103,8 +107,8 @@ impl<C: Oid4vciClient> AuthorizationCodeRequired<C> {
                     .with_issuer_state(self.issuer_state.as_deref())
                     .with_authorization_details(&configuration.authorization_details)
                     .with_pkce_challenge(pkce_code_challenge)
-                    .with_client_attestation(&self.authorization_server_metadata)
-                    .with_dpop(None, None)
+                    .with_client_attestation_with(&self.authorization_server_metadata, jti.clone())
+                    .with_dpop_with(None, None, jti.clone())
                     .send(http_client)
                     .await?
                     .for_endpoint(&authorization_endpoint)
@@ -118,8 +122,8 @@ impl<C: Oid4vciClient> AuthorizationCodeRequired<C> {
                 .with_issuer_state(self.issuer_state.as_deref())
                 .with_authorization_details(&configuration.authorization_details)
                 .with_pkce_challenge(pkce_code_challenge)
-                .with_client_attestation(&self.authorization_server_metadata)
-                .with_dpop(None, None)
+                .with_client_attestation_with(&self.authorization_server_metadata, jti.clone())
+                .with_dpop_with(None, None, jti.clone())
                 .into_redirect_uri(),
         };
 
@@ -133,6 +137,19 @@ impl<C: Oid4vciClient> AuthorizationCodeRequired<C> {
             server_redirect_url,
             state,
         })
+    }
+
+    /// Generates the Client Attestation PoP's and DPoP proof's `jti`
+    /// randomly (requires the `rand` feature). See [`Self::proceed_with`]
+    /// for a version that doesn't need one.
+    #[cfg(feature = "rand")]
+    pub async fn proceed(
+        self,
+        http_client: &impl HttpClient,
+        client_redirect_url: UriBuf,
+    ) -> Result<WaitingForAuthorizationCode<C>, ClientError> {
+        self.proceed_with(http_client, client_redirect_url, crate::util::generate_jti)
+            .await
     }
 }
 
@@ -160,10 +177,14 @@ impl<C: Oid4vciClient> WaitingForAuthorizationCode<C> {
         &self.state
     }
 
-    pub async fn proceed(
+    /// Generates the Client Attestation PoP's and DPoP proof's `jti` by
+    /// calling `jti` — at most once each, and only when needed. See
+    /// [`Self::proceed`] for a version that generates them randomly.
+    pub async fn proceed_with(
         self,
         http_client: &impl HttpClient,
         authorization_code: CodeBuf,
+        jti: impl Fn() -> String + Send + Clone + 'static,
     ) -> Result<CredentialToken<C::Profile>, ClientError> {
         let mut authorization_details = self
             .client
@@ -186,8 +207,8 @@ impl<C: Oid4vciClient> WaitingForAuthorizationCode<C> {
             .exchange_code(authorization_code, self.client_redirect_url)
             .with_authorization_details(&authorization_details)
             .with_pkce_verifier(&self.pkce_code_verifier)
-            .with_client_attestation(&self.authorization_server_metadata)
-            .with_dpop(None, None)
+            .with_client_attestation_with(&self.authorization_server_metadata, jti.clone())
+            .with_dpop_with(None, None, jti)
             .send(&http_client)
             .await?;
 
@@ -197,5 +218,18 @@ impl<C: Oid4vciClient> WaitingForAuthorizationCode<C> {
             requested_scope: self.requested_scope,
             response,
         })
+    }
+
+    /// Generates the Client Attestation PoP's and DPoP proof's `jti`
+    /// randomly (requires the `rand` feature). See [`Self::proceed_with`]
+    /// for a version that doesn't need one.
+    #[cfg(feature = "rand")]
+    pub async fn proceed(
+        self,
+        http_client: &impl HttpClient,
+        authorization_code: CodeBuf,
+    ) -> Result<CredentialToken<C::Profile>, ClientError> {
+        self.proceed_with(http_client, authorization_code, crate::util::generate_jti)
+            .await
     }
 }
