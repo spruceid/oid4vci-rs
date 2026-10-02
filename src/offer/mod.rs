@@ -205,12 +205,12 @@ impl CredentialOfferParameters {
     pub fn new(
         credential_issuer: UriBuf,
         credential_configuration_ids: Vec<String>,
-        grants: CredentialOfferGrants,
+        grants: impl Into<CredentialOfferGrants>,
     ) -> Self {
         Self {
             credential_issuer,
             credential_configuration_ids,
-            grants,
+            grants: grants.into(),
         }
     }
 }
